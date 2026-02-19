@@ -7,14 +7,74 @@ const DIAGNOSTICS_ENABLED = false;
 const CLAMP_TO_WORK_AREA = true;
 const DRAG_LOG_SAMPLE_EVERY = 8;
 const MAX_LOG_FILE_BYTES = 5 * 1024 * 1024;
+const VELOCITY_SAMPLE_WINDOW_MS = 120;
+const MAX_DRAG_SAMPLES = 12;
+
+const FLING_PRESETS = Object.freeze({
+  default: Object.freeze({
+    enabled: true,
+    minSpeedPxS: 120,
+    maxSpeedPxS: 3600,
+    dampingPerSec: 2.2,
+    bounceRestitution: 0.78,
+    stopSpeedPxS: 12,
+    stepMs: 8,
+  }),
+  floaty: Object.freeze({
+    enabled: true,
+    minSpeedPxS: 70,
+    maxSpeedPxS: 5200,
+    dampingPerSec: 1.0,
+    bounceRestitution: 0.9,
+    stopSpeedPxS: 6,
+    stepMs: 8,
+  }),
+  heavy: Object.freeze({
+    enabled: true,
+    minSpeedPxS: 220,
+    maxSpeedPxS: 2000,
+    dampingPerSec: 6.4,
+    bounceRestitution: 0.35,
+    stopSpeedPxS: 28,
+    stepMs: 8,
+  }),
+  off: Object.freeze({
+    enabled: false,
+    minSpeedPxS: 0,
+    maxSpeedPxS: 0,
+    dampingPerSec: 0,
+    bounceRestitution: 0,
+    stopSpeedPxS: 0,
+    stepMs: 16,
+  }),
+});
+
+// Set this to one of: default, floaty, heavy, off
+const FLING_PRESET = "default";
+const ACTIVE_FLING_PRESET = Object.prototype.hasOwnProperty.call(FLING_PRESETS, FLING_PRESET)
+  ? FLING_PRESET
+  : "default";
+const FLING_CONFIG = FLING_PRESETS[ACTIVE_FLING_PRESET];
 
 let win;
 let dragging = false;
 let dragOffset = { x: 0, y: 0 };
 let dragDisplayId = null;
 let dragTick = 0;
+let dragSamples = [];
+let flingTick = 0;
 let logLineCount = 0;
 let diagnosticsLogStream = null;
+let physicsTimer = null;
+
+const flingState = {
+  active: false,
+  vx: 0,
+  vy: 0,
+  lastStepMs: 0,
+  x: 0,
+  y: 0,
+};
 
 const WINDOW_SIZE = Object.freeze({
   width: 320,
@@ -92,6 +152,202 @@ function applyWindowBounds(targetX, targetY) {
     contentAfter: summarizeBounds(contentAfter),
     sizeCorrected,
   };
+}
+
+function recordDragSample(x, y, tMs = Date.now()) {
+  dragSamples.push({ tMs, x: Math.round(x), y: Math.round(y) });
+
+  const minTime = tMs - VELOCITY_SAMPLE_WINDOW_MS;
+  dragSamples = dragSamples.filter((sample) => sample.tMs >= minTime);
+
+  if (dragSamples.length > MAX_DRAG_SAMPLES) {
+    dragSamples = dragSamples.slice(-MAX_DRAG_SAMPLES);
+  }
+}
+
+function clearDragSamples() {
+  dragSamples = [];
+}
+
+function cancelFling(reason = "cancelled") {
+  const wasActive = flingState.active;
+
+  flingState.active = false;
+  flingState.vx = 0;
+  flingState.vy = 0;
+  flingState.lastStepMs = 0;
+  flingState.x = 0;
+  flingState.y = 0;
+  flingTick = 0;
+
+  if (wasActive) {
+    const payload = { kind: "flingCancel", reason };
+    logDiagnostics("fling-cancel", payload);
+    emitDiagnostics(payload);
+  }
+}
+
+function maybeStartFlingFromSamples() {
+  if (!FLING_CONFIG.enabled) {
+    const payload = { kind: "flingSkip", reason: "presetOff", preset: ACTIVE_FLING_PRESET };
+    logDiagnostics("fling-skip", payload);
+    emitDiagnostics(payload);
+    return;
+  }
+
+  if (dragSamples.length < 2) {
+    const payload = { kind: "flingSkip", reason: "insufficientSamples", sampleCount: dragSamples.length };
+    logDiagnostics("fling-skip", payload);
+    emitDiagnostics(payload);
+    return;
+  }
+
+  const latest = dragSamples[dragSamples.length - 1];
+  const oldest = dragSamples[0];
+  const dtSec = (latest.tMs - oldest.tMs) / 1000;
+
+  if (dtSec <= 0) {
+    const payload = { kind: "flingSkip", reason: "invalidSampleWindow", dtSec };
+    logDiagnostics("fling-skip", payload);
+    emitDiagnostics(payload);
+    return;
+  }
+
+  let vx = (latest.x - oldest.x) / dtSec;
+  let vy = (latest.y - oldest.y) / dtSec;
+  const rawSpeed = Math.hypot(vx, vy);
+
+  if (rawSpeed > FLING_CONFIG.maxSpeedPxS) {
+    const scale = FLING_CONFIG.maxSpeedPxS / rawSpeed;
+    vx *= scale;
+    vy *= scale;
+  }
+
+  const speed = Math.hypot(vx, vy);
+  if (speed < FLING_CONFIG.minSpeedPxS) {
+    const payload = {
+      kind: "flingSkip",
+      reason: "belowMinSpeed",
+      speed,
+      minSpeed: FLING_CONFIG.minSpeedPxS,
+      sampleCount: dragSamples.length,
+      dtSec,
+      preset: ACTIVE_FLING_PRESET,
+    };
+    logDiagnostics("fling-skip", payload);
+    emitDiagnostics(payload);
+    return;
+  }
+
+  flingState.active = true;
+  flingState.vx = vx;
+  flingState.vy = vy;
+  flingState.lastStepMs = Date.now();
+  const [winX, winY] = win.getPosition();
+  flingState.x = winX;
+  flingState.y = winY;
+  flingTick = 0;
+
+  const payload = {
+    kind: "flingStart",
+    vx,
+    vy,
+    speed,
+    sampleCount: dragSamples.length,
+    dtSec,
+    preset: ACTIVE_FLING_PRESET,
+  };
+  logDiagnostics("fling-start", payload);
+  emitDiagnostics(payload);
+}
+
+function stepFling() {
+  if (!win || win.isDestroyed()) return;
+  if (!FLING_CONFIG.enabled) {
+    cancelFling("presetOff");
+    return;
+  }
+  if (!flingState.active || dragging) return;
+
+  const nowMs = Date.now();
+  const elapsedMs = nowMs - flingState.lastStepMs;
+  if (elapsedMs <= 0) return;
+
+  const dtSec = Math.min(elapsedMs / 1000, 0.05);
+  flingState.lastStepMs = nowMs;
+  flingTick += 1;
+
+  // Keep subpixel position state for smoother motion than integer window coordinates.
+  if (!Number.isFinite(flingState.x) || !Number.isFinite(flingState.y)) {
+    const [winX, winY] = win.getPosition();
+    flingState.x = winX;
+    flingState.y = winY;
+  }
+
+  const targetX = flingState.x + flingState.vx * dtSec;
+  const targetY = flingState.y + flingState.vy * dtSec;
+
+  const targetCenter = {
+    x: Math.round(targetX + WINDOW_SIZE.width / 2),
+    y: Math.round(targetY + WINDOW_SIZE.height / 2),
+  };
+  const display = screen.getDisplayNearestPoint(targetCenter);
+  const clampArea = getClampArea(display);
+  const clamped = clampWindowPosition(targetX, targetY, clampArea);
+  const collidedX = Math.abs(clamped.x - targetX) > 0.001;
+  const collidedY = Math.abs(clamped.y - targetY) > 0.001;
+
+  applyWindowBounds(clamped.x, clamped.y);
+  flingState.x = clamped.x;
+  flingState.y = clamped.y;
+
+  if (collidedX) {
+    const oldVx = flingState.vx;
+    flingState.vx = -flingState.vx * FLING_CONFIG.bounceRestitution;
+    const payload = { kind: "flingBounce", axis: "x", before: oldVx, after: flingState.vx };
+    logDiagnostics("fling-bounce", payload);
+    emitDiagnostics(payload);
+  }
+
+  if (collidedY) {
+    const oldVy = flingState.vy;
+    flingState.vy = -flingState.vy * FLING_CONFIG.bounceRestitution;
+    const payload = { kind: "flingBounce", axis: "y", before: oldVy, after: flingState.vy };
+    logDiagnostics("fling-bounce", payload);
+    emitDiagnostics(payload);
+  }
+
+  const damping = Math.exp(-FLING_CONFIG.dampingPerSec * dtSec);
+  flingState.vx *= damping;
+  flingState.vy *= damping;
+
+  const speed = Math.hypot(flingState.vx, flingState.vy);
+  if (speed < FLING_CONFIG.stopSpeedPxS) {
+    const payload = { kind: "flingStop", reason: "belowStopSpeed", speed };
+    logDiagnostics("fling-stop", payload);
+    emitDiagnostics(payload);
+    cancelFling("belowStopSpeed");
+    return;
+  }
+
+  if (flingTick % DRAG_LOG_SAMPLE_EVERY === 0 || collidedX || collidedY) {
+    const payload = {
+      kind: "flingStep",
+      tick: flingTick,
+      dtSec,
+      speed,
+      vx: flingState.vx,
+      vy: flingState.vy,
+      clamped,
+      collidedX,
+      collidedY,
+      clampAreaType: CLAMP_TO_WORK_AREA ? "workArea" : "bounds",
+      clampArea: summarizeBounds(clampArea),
+      activeDisplay: summarizeDisplay(display),
+    };
+    logDiagnostics("fling-step", payload);
+    emitDiagnostics(payload);
+  }
 }
 
 function getLogFilePath() {
@@ -212,8 +468,8 @@ function clampWindowPosition(targetX, targetY, displayBounds) {
   );
 
   return {
-    x: Math.max(minX, Math.min(maxX, Math.round(targetX))),
-    y: Math.max(minY, Math.min(maxY, Math.round(targetY))),
+    x: Math.max(minX, Math.min(maxX, targetX)),
+    y: Math.max(minY, Math.min(maxY, targetY)),
   };
 }
 
@@ -245,6 +501,8 @@ function createWindow() {
     windowSize: WINDOW_SIZE,
     petVisualBounds: PET_VISUAL_BOUNDS,
     clampAreaType: CLAMP_TO_WORK_AREA ? "workArea" : "bounds",
+    flingPreset: ACTIVE_FLING_PRESET,
+    flingConfig: FLING_CONFIG,
     displays: summarizeDisplays(),
   });
 }
@@ -264,6 +522,9 @@ ipcMain.on("pet:setPosition", (_event, x, y) => {
 ipcMain.on("pet:beginDrag", () => {
   if (!win) return;
 
+  cancelFling("grabbed");
+  clearDragSamples();
+
   const cursor = screen.getCursorScreenPoint();
   const [winX, winY] = win.getPosition();
   const windowBounds = win.getBounds();
@@ -275,6 +536,7 @@ ipcMain.on("pet:beginDrag", () => {
   };
   dragTick = 0;
   dragging = true;
+  recordDragSample(winX, winY);
 
   const payload = {
     kind: "beginDrag",
@@ -300,6 +562,9 @@ ipcMain.on("pet:endDrag", () => {
   const payload = { kind: "endDrag" };
   logDiagnostics("end-drag", payload);
   emitDiagnostics(payload);
+
+  maybeStartFlingFromSamples();
+  clearDragSamples();
 });
 
 ipcMain.on("pet:drag", () => {
@@ -318,6 +583,7 @@ ipcMain.on("pet:drag", () => {
   const clampedX = clamped.x !== roundedTarget.x;
   const clampedY = clamped.y !== roundedTarget.y;
   const boundsResult = applyWindowBounds(clamped.x, clamped.y);
+  recordDragSample(boundsResult.contentAfter?.x ?? clamped.x, boundsResult.contentAfter?.y ?? clamped.y);
 
   const payload = {
     kind: "drag",
@@ -360,12 +626,16 @@ ipcMain.handle("pet:getConfig", () => {
   return {
     diagnosticsEnabled: DIAGNOSTICS_ENABLED,
     clampToWorkArea: CLAMP_TO_WORK_AREA,
+    flingPreset: ACTIVE_FLING_PRESET,
+    flingEnabled: FLING_CONFIG.enabled,
+    availableFlingPresets: Object.keys(FLING_PRESETS),
   };
 });
 
 app.whenReady().then(() => {
   initializeDiagnosticsLog();
   createWindow();
+  physicsTimer = setInterval(stepFling, FLING_CONFIG.stepMs);
 
   if (!DIAGNOSTICS_ENABLED) return;
 
@@ -386,5 +656,10 @@ app.whenReady().then(() => {
 });
 
 app.on("before-quit", () => {
+  if (physicsTimer) {
+    clearInterval(physicsTimer);
+    physicsTimer = null;
+  }
+  cancelFling("appQuit");
   closeDiagnosticsLog();
 });
