@@ -4,7 +4,10 @@
   "main": "main.js",
   "private": true,
   "scripts": {
-    "start": "electron ."
+    "start": "electron .",
+    "check:syntax": "node --check main.js && node --check renderer.js && node --check preload.js && node --check pet-layout.js",
+    "check:layout": "node scripts/check-layout.js",
+    "check": "npm run check:syntax && npm run check:layout"
   },
   "devDependencies": {
     "electron": "^30.0.0"

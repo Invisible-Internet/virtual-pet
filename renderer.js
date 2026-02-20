@@ -1,21 +1,6 @@
 ﻿const canvas = document.getElementById("c");
 const ctx = canvas.getContext("2d");
-
-const DEFAULT_LAYOUT = Object.freeze({
-  scale: 2,
-  base: Object.freeze({
-    windowSize: Object.freeze({
-      width: 320,
-      height: 320,
-    }),
-    visualBounds: Object.freeze({
-      x: 50,
-      y: 50,
-      width: 220,
-      height: 220,
-    }),
-  }),
-});
+const visibleBoundsMath = window.PetVisibleBoundsMath || null;
 
 const MAX_FX_PARTICLES = 32;
 const IMPACT_STATE_MIN_MS = 100;
@@ -58,6 +43,8 @@ const RIG_ROTATION_FLY_RESPONSE = 2.8;
 const RIG_ROTATION_RELEASE_RESPONSE = 0.9;
 const RIG_ROTATION_FLING_HOLD_MS = 700;
 const RIG_ROTATION_FLING_RELEASE_BLEND_MS = 1100;
+const VISIBLE_BOUNDS_EMIT_INTERVAL_MS = 33;
+const VISIBLE_BOUNDS_DELTA_THRESHOLD_PX = 2;
 const TAIL_STYLES = Object.freeze({
   ribbon: "ribbon",
   segmented: "segmented",
@@ -156,7 +143,7 @@ let latestCursorScreen = null;
 let gazeSource = "idle";
 let mousePassthrough = null;
 let globalGazeReleaseUntilMs = 0;
-let petLayout = DEFAULT_LAYOUT;
+let petLayout = createRuntimeLayoutFallback();
 let lastRenderScale = 1;
 let rigRotation = 0;
 let rigRotationTargetFiltered = 0;
@@ -165,12 +152,40 @@ let rigInversionSign = 1;
 let rigFlingHoldAngle = 0;
 let rigFlingHoldUntilMs = 0;
 let lastRotationState = "idle";
+let lastVisibleBoundsSent = null;
+let lastVisibleBoundsSentMs = 0;
+let latestVisibleBounds = null;
+let interactivityRafPending = false;
+let pendingInteractivityClient = null;
+let lastSyncedCursorPx = null;
+let lastSyncedDragging = false;
+const tempRigPoint = { x: 0, y: 0 };
 const tailRope = {
   points: [],
   prevPoints: [],
   segmentLength: 0,
   segmentCount: 0,
 };
+
+function createRuntimeLayoutFallback() {
+  const cssWidth = Math.max(1, Math.floor(canvas?.clientWidth || window.innerWidth || 320));
+  const cssHeight = Math.max(1, Math.floor(canvas?.clientHeight || window.innerHeight || 320));
+  return {
+    scale: 1,
+    base: {
+      windowSize: {
+        width: cssWidth,
+        height: cssHeight,
+      },
+      visualBounds: {
+        x: 0,
+        y: 0,
+        width: cssWidth,
+        height: cssHeight,
+      },
+    },
+  };
+}
 
 async function loadRuntimeConfig() {
   if (typeof window.petAPI.getConfig !== "function") return;
@@ -183,7 +198,7 @@ async function loadRuntimeConfig() {
     }
   } catch {
     diagnosticsEnabled = false;
-    petLayout = DEFAULT_LAYOUT;
+    petLayout = createRuntimeLayoutFallback();
   }
 }
 
@@ -192,10 +207,11 @@ function asPositiveNumber(value, fallback) {
 }
 
 function normalizeLayout(layout) {
-  const defaultBaseWindow = DEFAULT_LAYOUT.base.windowSize;
-  const defaultBaseVisual = DEFAULT_LAYOUT.base.visualBounds;
+  const fallbackLayout = petLayout;
+  const defaultBaseWindow = fallbackLayout.base.windowSize;
+  const defaultBaseVisual = fallbackLayout.base.visualBounds;
 
-  const scale = asPositiveNumber(layout?.scale, DEFAULT_LAYOUT.scale);
+  const scale = asPositiveNumber(layout?.scale, fallbackLayout.scale);
   const baseWindowSize = {
     width: asPositiveNumber(layout?.base?.windowSize?.width, defaultBaseWindow.width),
     height: asPositiveNumber(layout?.base?.windowSize?.height, defaultBaseWindow.height),
@@ -221,15 +237,15 @@ function normalizeLayout(layout) {
 }
 
 function getLayoutScale() {
-  return asPositiveNumber(petLayout?.scale, 1);
+  return asPositiveNumber(petLayout.scale, 1);
 }
 
 function getDesignWindowSize() {
-  return petLayout?.base?.windowSize || DEFAULT_LAYOUT.base.windowSize;
+  return petLayout.base.windowSize;
 }
 
 function getDesignVisualBounds() {
-  return petLayout?.base?.visualBounds || DEFAULT_LAYOUT.base.visualBounds;
+  return petLayout.base.visualBounds;
 }
 
 function toDesignPoint(x, y) {
@@ -346,19 +362,21 @@ function pointNearPolyline(px, py, points, halfWidth) {
   return minDistance <= halfWidth;
 }
 
-function rotatePointAround(px, py, cx, cy, angleRad) {
+function rotatePointAround(px, py, cx, cy, angleRad, out = null) {
+  const target = out || { x: 0, y: 0 };
   if (!Number.isFinite(angleRad) || Math.abs(angleRad) < 0.00001) {
-    return { x: px, y: py };
+    target.x = px;
+    target.y = py;
+    return target;
   }
 
   const s = Math.sin(angleRad);
   const c = Math.cos(angleRad);
   const dx = px - cx;
   const dy = py - cy;
-  return {
-    x: cx + dx * c - dy * s,
-    y: cy + dx * s + dy * c,
-  };
+  target.x = cx + dx * c - dy * s;
+  target.y = cy + dx * s + dy * c;
+  return target;
 }
 
 function toRigLocalPoint(px, py) {
@@ -367,7 +385,7 @@ function toRigLocalPoint(px, py) {
     return { x: px, y: py };
   }
 
-  return rotatePointAround(px, py, global.anchorX, global.anchorY, -global.rotation);
+  return rotatePointAround(px, py, global.anchorX, global.anchorY, -global.rotation, tempRigPoint);
 }
 
 function normalizeAngleRad(angle) {
@@ -380,6 +398,57 @@ function normalizeAngleRad(angle) {
 
 function shortestAngleDeltaRad(from, to) {
   return normalizeAngleRad(to - from);
+}
+
+function computeVisibleBoundsForFrame(layerTransforms, windowWidth, windowHeight) {
+  const fallbackBounds = getDesignVisualBounds();
+  if (!visibleBoundsMath || typeof visibleBoundsMath.computeVisiblePetBounds !== "function") {
+    return {
+      x: fallbackBounds.x,
+      y: fallbackBounds.y,
+      width: fallbackBounds.width,
+      height: fallbackBounds.height,
+    };
+  }
+
+  return visibleBoundsMath.computeVisiblePetBounds(
+    layerTransforms,
+    windowWidth,
+    windowHeight,
+    fallbackBounds
+  );
+}
+
+function maybeEmitVisibleBounds(visibleBounds, nowMs) {
+  if (typeof window.petAPI.setVisibleBounds !== "function") return;
+  if (nowMs - lastVisibleBoundsSentMs < VISIBLE_BOUNDS_EMIT_INTERVAL_MS) return;
+  if (!visibleBounds) return;
+
+  const scale = getLayoutScale();
+  const nextBounds = {
+    x: Math.round(visibleBounds.x * scale),
+    y: Math.round(visibleBounds.y * scale),
+    width: Math.max(1, Math.round(visibleBounds.width * scale)),
+    height: Math.max(1, Math.round(visibleBounds.height * scale)),
+    tMs: Date.now(),
+  };
+
+  const unchanged =
+    lastVisibleBoundsSent &&
+    Math.abs(lastVisibleBoundsSent.x - nextBounds.x) < VISIBLE_BOUNDS_DELTA_THRESHOLD_PX &&
+    Math.abs(lastVisibleBoundsSent.y - nextBounds.y) < VISIBLE_BOUNDS_DELTA_THRESHOLD_PX &&
+    Math.abs(lastVisibleBoundsSent.width - nextBounds.width) < VISIBLE_BOUNDS_DELTA_THRESHOLD_PX &&
+    Math.abs(lastVisibleBoundsSent.height - nextBounds.height) < VISIBLE_BOUNDS_DELTA_THRESHOLD_PX;
+
+  if (unchanged) return;
+  lastVisibleBoundsSent = {
+    x: nextBounds.x,
+    y: nextBounds.y,
+    width: nextBounds.width,
+    height: nextBounds.height,
+  };
+  lastVisibleBoundsSentMs = nowMs;
+  window.petAPI.setVisibleBounds(nextBounds);
 }
 
 function isPointOnVisiblePet(px, py) {
@@ -469,6 +538,19 @@ function updateMouseInteractivity(clientX, clientY) {
 
   const hitVisiblePet = isPointOnVisiblePet(designPoint.x, designPoint.y);
   setMousePassthrough(!hitVisiblePet);
+}
+
+function requestMouseInteractivityUpdate(clientX, clientY) {
+  pendingInteractivityClient = { x: clientX, y: clientY };
+  if (interactivityRafPending) return;
+  interactivityRafPending = true;
+  requestAnimationFrame(() => {
+    interactivityRafPending = false;
+    if (!pendingInteractivityClient) return;
+    const next = pendingInteractivityClient;
+    pendingInteractivityClient = null;
+    updateMouseInteractivity(next.x, next.y);
+  });
 }
 
 function formatPoint(point) {
@@ -632,9 +714,21 @@ function syncMouseInteractivityFromGlobalCursor() {
   if (!cursor) {
     if (!dragging) setMousePassthrough(true);
     pointerInCanvas = false;
+    lastSyncedCursorPx = null;
+    lastSyncedDragging = dragging;
     return;
   }
 
+  const unchangedCursor =
+    lastSyncedCursorPx &&
+    Math.abs(lastSyncedCursorPx.x - cursor.x) < 0.5 &&
+    Math.abs(lastSyncedCursorPx.y - cursor.y) < 0.5;
+  if (unchangedCursor && lastSyncedDragging === dragging) {
+    return;
+  }
+
+  lastSyncedCursorPx = { x: cursor.x, y: cursor.y };
+  lastSyncedDragging = dragging;
   updateMouseInteractivity(cursor.x, cursor.y);
 }
 
@@ -1476,6 +1570,7 @@ function drawFxLayer(context) {
 function drawDebugOverlay(w, h) {
   if (!diagnosticsEnabled) return;
   const visualBounds = getDesignVisualBounds();
+  const visibleHitBounds = latestVisibleBounds;
 
   ctx.save();
   ctx.fillStyle = "rgba(255, 100, 40, 0.08)";
@@ -1495,6 +1590,18 @@ function drawDebugOverlay(w, h) {
   );
   ctx.setLineDash([]);
 
+  if (visibleHitBounds) {
+    ctx.setLineDash([4, 3]);
+    ctx.strokeStyle = "rgba(120, 255, 145, 0.95)";
+    ctx.strokeRect(
+      visibleHitBounds.x + 0.5,
+      visibleHitBounds.y + 0.5,
+      visibleHitBounds.width,
+      visibleHitBounds.height
+    );
+    ctx.setLineDash([]);
+  }
+
   const d = latestDiagnostics;
   const lines = [
     `state: ${currentRenderState}`,
@@ -1508,6 +1615,11 @@ function drawDebugOverlay(w, h) {
     ).toFixed(2)}`,
     `fx count: ${fxParticles.length}`,
     `rig rot: ${(rigRotation * (180 / Math.PI)).toFixed(1)}deg`,
+    `visible hitbox: ${
+      visibleHitBounds
+        ? `${visibleHitBounds.x.toFixed(0)},${visibleHitBounds.y.toFixed(0)} ${visibleHitBounds.width.toFixed(0)}x${visibleHitBounds.height.toFixed(0)}`
+        : "n/a"
+    }`,
     `viewport: ${w}x${h}`,
   ];
 
@@ -1571,6 +1683,8 @@ function draw() {
   updateFx(dtSec);
   const layerTransforms = getLayerTransforms(nowMs, dtSec);
   latestRigState = layerTransforms;
+  latestVisibleBounds = computeVisibleBoundsForFrame(layerTransforms, w, h);
+  maybeEmitVisibleBounds(latestVisibleBounds, nowMs);
 
   ctx.clearRect(0, 0, w, h);
 
@@ -1682,13 +1796,13 @@ canvas.addEventListener("pointerdown", (e) => {
 });
 
 canvas.addEventListener("pointermove", (e) => {
-  updateMouseInteractivity(e.clientX, e.clientY);
+  requestMouseInteractivityUpdate(e.clientX, e.clientY);
   if (!dragging) return;
   window.petAPI.drag();
 });
 
 canvas.addEventListener("pointerenter", (e) => {
-  updateMouseInteractivity(e.clientX, e.clientY);
+  requestMouseInteractivityUpdate(e.clientX, e.clientY);
 });
 
 canvas.addEventListener("pointerleave", () => {
@@ -1697,7 +1811,7 @@ canvas.addEventListener("pointerleave", () => {
 });
 
 window.addEventListener("mousemove", (e) => {
-  updateMouseInteractivity(e.clientX, e.clientY);
+  requestMouseInteractivityUpdate(e.clientX, e.clientY);
 });
 
 window.addEventListener("mouseleave", () => {

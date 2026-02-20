@@ -2,6 +2,12 @@ const { app, BrowserWindow, ipcMain, screen } = require("electron");
 const fs = require("fs");
 const path = require("path");
 const { BASE_LAYOUT, computePetLayout } = require("./pet-layout");
+const {
+  normalizePetBounds,
+  clampWindowPosition,
+  createDragClampLatch,
+  applyDragClampHysteresis,
+} = require("./main-clamp");
 
 // Master diagnostics toggle: controls console logs, file logs, and renderer overlay.
 const DIAGNOSTICS_ENABLED = false;
@@ -11,11 +17,10 @@ const MAX_LOG_FILE_BYTES = 5 * 1024 * 1024;
 const VELOCITY_SAMPLE_WINDOW_MS = 120;
 const MAX_DRAG_SAMPLES = 12;
 const CURSOR_EMIT_INTERVAL_MS = 33;
-const ROTATION_CLAMP_MARGIN_MAX_PX = 82;
-const ROTATION_SIDE_MAX_RAD = Math.PI * (34 / 180);
-const ROTATION_DOWN_THRESHOLD = 180;
-const ROTATION_DOWN_SPEED = 1250;
-const ROTATION_FLY_MAX_RAD = Math.PI * (20 / 180);
+const PET_BOUNDS_STALE_MS = 250;
+const DRAG_CLAMP_HYSTERESIS_PX = 2;
+const MOTION_POSITION_EPSILON = 0.25;
+const MOTION_VELOCITY_EPSILON = 0.5;
 
 const FLING_PRESETS = Object.freeze({
   default: Object.freeze({
@@ -75,7 +80,9 @@ let diagnosticsLogStream = null;
 let physicsTimer = null;
 let lastMotionSample = null;
 let cursorTimer = null;
-let lastDragCursorSample = null;
+let dragClampLatch = createDragClampLatch();
+let activePetBoundsUpdatedAtMs = 0;
+let lastMotionPayload = null;
 
 const flingState = {
   active: false,
@@ -90,6 +97,7 @@ const PET_LAYOUT = computePetLayout(BASE_LAYOUT);
 const WINDOW_SIZE = PET_LAYOUT.windowSize;
 // These bounds describe the visible pet shape inside the transparent window.
 const PET_VISUAL_BOUNDS = PET_LAYOUT.visualBounds;
+let activePetVisualBounds = { ...PET_VISUAL_BOUNDS };
 
 function summarizeDisplay(display) {
   return {
@@ -118,6 +126,15 @@ function summarizeBounds(bounds) {
   };
 }
 
+function getActivePetVisualBounds(nowMs = Date.now()) {
+  const stale =
+    activePetBoundsUpdatedAtMs > 0 &&
+    nowMs - activePetBoundsUpdatedAtMs > PET_BOUNDS_STALE_MS &&
+    (dragging || flingState.active);
+  if (stale) return PET_VISUAL_BOUNDS;
+  return activePetVisualBounds || PET_VISUAL_BOUNDS;
+}
+
 function emitToRenderer(channel, payload) {
   if (!win || win.isDestroyed()) return;
   win.webContents.send(channel, payload);
@@ -127,6 +144,35 @@ function resetMotionSampleFromWindow() {
   if (!win || win.isDestroyed()) return;
   const [x, y] = win.getPosition();
   lastMotionSample = { tMs: Date.now(), x, y };
+}
+
+function shouldEmitMotionPayload(nextPayload) {
+  if (!lastMotionPayload) return true;
+  if (nextPayload.dragging !== lastMotionPayload.dragging) return true;
+  if (nextPayload.flinging !== lastMotionPayload.flinging) return true;
+  if (nextPayload.preset !== lastMotionPayload.preset) return true;
+  if (nextPayload.collided.x !== lastMotionPayload.collided.x) return true;
+  if (nextPayload.collided.y !== lastMotionPayload.collided.y) return true;
+  if (nextPayload.impact.triggered !== lastMotionPayload.impact.triggered) return true;
+  if (
+    Math.abs(nextPayload.impact.strength - lastMotionPayload.impact.strength) > MOTION_VELOCITY_EPSILON
+  ) {
+    return true;
+  }
+  if (
+    Math.abs(nextPayload.position.x - lastMotionPayload.position.x) > MOTION_POSITION_EPSILON ||
+    Math.abs(nextPayload.position.y - lastMotionPayload.position.y) > MOTION_POSITION_EPSILON
+  ) {
+    return true;
+  }
+  if (
+    Math.abs(nextPayload.velocity.vx - lastMotionPayload.velocity.vx) > MOTION_VELOCITY_EPSILON ||
+    Math.abs(nextPayload.velocity.vy - lastMotionPayload.velocity.vy) > MOTION_VELOCITY_EPSILON ||
+    Math.abs(nextPayload.velocity.speed - lastMotionPayload.velocity.speed) > MOTION_VELOCITY_EPSILON
+  ) {
+    return true;
+  }
+  return false;
 }
 
 function emitMotionState({ collided, impact, velocityOverride } = {}) {
@@ -156,7 +202,7 @@ function emitMotionState({ collided, impact, velocityOverride } = {}) {
   const speed = Math.hypot(vx, vy);
   lastMotionSample = { tMs: nowMs, x, y };
 
-  emitToRenderer("pet:motion", {
+  const payload = {
     tMs: nowMs,
     dragging,
     flinging: flingState.active,
@@ -173,7 +219,11 @@ function emitMotionState({ collided, impact, velocityOverride } = {}) {
         : 0,
     },
     preset: ACTIVE_FLING_PRESET,
-  });
+  };
+  if (!shouldEmitMotionPayload(payload)) return;
+
+  lastMotionPayload = payload;
+  emitToRenderer("pet:motion", payload);
 }
 
 function emitCursorState() {
@@ -186,6 +236,25 @@ function emitCursorState() {
 
 function applyWindowBounds(targetX, targetY) {
   if (!win) {
+    return {
+      windowBefore: null,
+      windowAfter: null,
+      contentBefore: null,
+      contentAfter: null,
+      sizeCorrected: false,
+    };
+  }
+
+  if (!DIAGNOSTICS_ENABLED) {
+    win.setContentBounds(
+      {
+        x: Math.round(targetX),
+        y: Math.round(targetY),
+        width: WINDOW_SIZE.width,
+        height: WINDOW_SIZE.height,
+      },
+      false
+    );
     return {
       windowBefore: null,
       windowAfter: null,
@@ -371,8 +440,8 @@ function stepFling() {
   };
   const display = screen.getDisplayNearestPoint(targetCenter);
   const clampArea = getClampArea(display);
-  const rotationClampMargin = computeRotationClampMargin(flingState.vx, flingState.vy, "flying");
-  const clamped = clampWindowPosition(targetX, targetY, clampArea, rotationClampMargin);
+  const petBounds = getActivePetVisualBounds(nowMs);
+  const clamped = clampWindowPosition(targetX, targetY, clampArea, petBounds);
   const collidedX = Math.abs(clamped.x - targetX) > 0.001;
   const collidedY = Math.abs(clamped.y - targetY) > 0.001;
   let impactStrength = 0;
@@ -424,7 +493,7 @@ function stepFling() {
     impact: { triggered: collidedX || collidedY, strength: impactStrength },
   });
 
-  if (flingTick % DRAG_LOG_SAMPLE_EVERY === 0 || collidedX || collidedY) {
+  if (DIAGNOSTICS_ENABLED && (flingTick % DRAG_LOG_SAMPLE_EVERY === 0 || collidedX || collidedY)) {
     const payload = {
       kind: "flingStep",
       tick: flingTick,
@@ -435,7 +504,6 @@ function stepFling() {
       clamped,
       collidedX,
       collidedY,
-      rotationClampMargin,
       clampAreaType: CLAMP_TO_WORK_AREA ? "workArea" : "bounds",
       clampArea: summarizeBounds(clampArea),
       activeDisplay: summarizeDisplay(display),
@@ -551,60 +619,10 @@ function resolveDragDisplay(cursor) {
   return { display: nearestDisplay, source: "nearestFallback" };
 }
 
-function estimateRigRotationTarget(vx, vy, mode) {
-  if (mode === "dragging") {
-    const sideTilt = Math.max(-1, Math.min(1, vx / 1050)) * ROTATION_SIDE_MAX_RAD;
-    const downAmount = Math.max(
-      0,
-      Math.min(1, (vy - ROTATION_DOWN_THRESHOLD) / Math.max(1, ROTATION_DOWN_SPEED))
-    );
-    const inversionTarget = sideTilt >= 0 ? Math.PI : -Math.PI;
-    return sideTilt * (1 - downAmount) + inversionTarget * downAmount;
-  }
-
-  if (mode === "flying" || mode === "impact") {
-    return Math.max(-1, Math.min(1, vx / 1200)) * ROTATION_FLY_MAX_RAD;
-  }
-
-  return 0;
-}
-
-function computeRotationClampMargin(vx, vy, mode) {
-  const angle = estimateRigRotationTarget(vx, vy, mode);
-  const amount = Math.max(0, Math.min(1, Math.abs(angle) / Math.PI));
-  return Math.round(ROTATION_CLAMP_MARGIN_MAX_PX * amount);
-}
-
-function clampWindowPosition(targetX, targetY, displayBounds, rotationMargin = 0) {
-  const margin = Math.max(0, Math.round(rotationMargin));
-  let minX = Math.round(displayBounds.x - PET_VISUAL_BOUNDS.x + margin);
-  let maxX = Math.round(
-    displayBounds.x + displayBounds.width - (PET_VISUAL_BOUNDS.x + PET_VISUAL_BOUNDS.width) - margin
-  );
-  let minY = Math.round(displayBounds.y - PET_VISUAL_BOUNDS.y + margin);
-  let maxY = Math.round(
-    displayBounds.y + displayBounds.height - (PET_VISUAL_BOUNDS.y + PET_VISUAL_BOUNDS.height) - margin
-  );
-
-  if (minX > maxX) {
-    const midX = Math.round((minX + maxX) / 2);
-    minX = midX;
-    maxX = midX;
-  }
-
-  if (minY > maxY) {
-    const midY = Math.round((minY + maxY) / 2);
-    minY = midY;
-    maxY = midY;
-  }
-
-  return {
-    x: Math.max(minX, Math.min(maxX, targetX)),
-    y: Math.max(minY, Math.min(maxY, targetY)),
-  };
-}
-
 function createWindow() {
+  activePetVisualBounds = { ...PET_VISUAL_BOUNDS };
+  activePetBoundsUpdatedAtMs = 0;
+
   win = new BrowserWindow({
     width: WINDOW_SIZE.width,
     height: WINDOW_SIZE.height,
@@ -640,6 +658,8 @@ function createWindow() {
   logDiagnostics("window-created", {
     windowSize: WINDOW_SIZE,
     petVisualBounds: PET_VISUAL_BOUNDS,
+    activePetVisualBounds,
+    petBoundsStaleMs: PET_BOUNDS_STALE_MS,
     clampAreaType: CLAMP_TO_WORK_AREA ? "workArea" : "bounds",
     flingPreset: ACTIVE_FLING_PRESET,
     flingConfig: FLING_CONFIG,
@@ -655,7 +675,8 @@ ipcMain.on("pet:setPosition", (_event, x, y) => {
     y: Math.round(y + WINDOW_SIZE.height / 2),
   };
   const display = screen.getDisplayNearestPoint(targetPoint);
-  const clamped = clampWindowPosition(x, y, getClampArea(display));
+  const petBounds = getActivePetVisualBounds(Date.now());
+  const clamped = clampWindowPosition(x, y, getClampArea(display), petBounds);
   applyWindowBounds(clamped.x, clamped.y);
   emitMotionState({
     collided: { x: false, y: false },
@@ -680,24 +701,25 @@ ipcMain.on("pet:beginDrag", () => {
   };
   dragTick = 0;
   dragging = true;
-  lastDragCursorSample = { x: cursor.x, y: cursor.y, tMs: Date.now() };
+  dragClampLatch = createDragClampLatch();
   recordDragSample(winX, winY);
+  if (DIAGNOSTICS_ENABLED) {
+    const payload = {
+      kind: "beginDrag",
+      cursor,
+      windowPosition: { x: winX, y: winY },
+      windowBounds: summarizeBounds(windowBounds),
+      clampAreaType: CLAMP_TO_WORK_AREA ? "workArea" : "bounds",
+      clampArea: summarizeBounds(getClampArea(displayDecision.display)),
+      dragOffset,
+      displaySource: displayDecision.source,
+      activeDisplay: summarizeDisplay(displayDecision.display),
+      displays: summarizeDisplays(),
+    };
 
-  const payload = {
-    kind: "beginDrag",
-    cursor,
-    windowPosition: { x: winX, y: winY },
-    windowBounds: summarizeBounds(windowBounds),
-    clampAreaType: CLAMP_TO_WORK_AREA ? "workArea" : "bounds",
-    clampArea: summarizeBounds(getClampArea(displayDecision.display)),
-    dragOffset,
-    displaySource: displayDecision.source,
-    activeDisplay: summarizeDisplay(displayDecision.display),
-    displays: summarizeDisplays(),
-  };
-
-  logDiagnostics("begin-drag", payload);
-  emitDiagnostics(payload);
+    logDiagnostics("begin-drag", payload);
+    emitDiagnostics(payload);
+  }
   emitMotionState({
     velocityOverride: { vx: 0, vy: 0 },
     collided: { x: false, y: false },
@@ -708,11 +730,12 @@ ipcMain.on("pet:beginDrag", () => {
 ipcMain.on("pet:endDrag", () => {
   dragging = false;
   dragDisplayId = null;
-  lastDragCursorSample = null;
-
-  const payload = { kind: "endDrag" };
-  logDiagnostics("end-drag", payload);
-  emitDiagnostics(payload);
+  dragClampLatch = createDragClampLatch();
+  if (DIAGNOSTICS_ENABLED) {
+    const payload = { kind: "endDrag" };
+    logDiagnostics("end-drag", payload);
+    emitDiagnostics(payload);
+  }
 
   maybeStartFlingFromSamples();
   if (!flingState.active) {
@@ -730,68 +753,80 @@ ipcMain.on("pet:drag", () => {
 
   dragTick += 1;
 
+  const nowMs = Date.now();
   const cursor = screen.getCursorScreenPoint();
   const [winX, winY] = win.getPosition();
-  const nowMs = Date.now();
-  let dragVx = 0;
-  let dragVy = 0;
-
-  if (lastDragCursorSample) {
-    const dtSec = (nowMs - lastDragCursorSample.tMs) / 1000;
-    if (dtSec > 0) {
-      dragVx = (cursor.x - lastDragCursorSample.x) / dtSec;
-      dragVy = (cursor.y - lastDragCursorSample.y) / dtSec;
-    }
-  }
-  lastDragCursorSample = { x: cursor.x, y: cursor.y, tMs: nowMs };
-
   const targetX = cursor.x - dragOffset.x;
   const targetY = cursor.y - dragOffset.y;
   const displayDecision = resolveDragDisplay(cursor);
   const clampArea = getClampArea(displayDecision.display);
-  const rotationClampMargin = computeRotationClampMargin(dragVx, dragVy, "dragging");
-  const clamped = clampWindowPosition(targetX, targetY, clampArea, rotationClampMargin);
+  const petBounds = getActivePetVisualBounds(nowMs);
+  const rawClamp = clampWindowPosition(targetX, targetY, clampArea, petBounds);
+  const clamped = applyDragClampHysteresis({
+    targetX,
+    targetY,
+    rawClampedX: rawClamp.x,
+    rawClampedY: rawClamp.y,
+    range: rawClamp.range,
+    latch: dragClampLatch,
+    hysteresisPx: DRAG_CLAMP_HYSTERESIS_PX,
+  });
+  dragClampLatch = clamped.latch;
   const roundedTarget = { x: Math.round(targetX), y: Math.round(targetY) };
   const clampedX = clamped.x !== roundedTarget.x;
   const clampedY = clamped.y !== roundedTarget.y;
   const boundsResult = applyWindowBounds(clamped.x, clamped.y);
   recordDragSample(boundsResult.contentAfter?.x ?? clamped.x, boundsResult.contentAfter?.y ?? clamped.y);
 
-  const payload = {
-    kind: "drag",
-    tick: dragTick,
-    cursor,
-    windowPositionBefore: { x: winX, y: winY },
-    target: roundedTarget,
-    clamped,
-    clampHit: { x: clampedX, y: clampedY },
-    dragVelocity: { vx: dragVx, vy: dragVy },
-    rotationClampMargin,
-    clampAreaType: CLAMP_TO_WORK_AREA ? "workArea" : "bounds",
-    clampArea: summarizeBounds(clampArea),
-    windowBoundsBefore: boundsResult.windowBefore,
-    windowBoundsAfter: boundsResult.windowAfter,
-    contentBoundsBefore: boundsResult.contentBefore,
-    contentBoundsAfter: boundsResult.contentAfter,
-    sizeCorrected: boundsResult.sizeCorrected,
-    dragOffset,
-    displaySource: displayDecision.source,
-    activeDisplay: summarizeDisplay(displayDecision.display),
-  };
+  if (DIAGNOSTICS_ENABLED) {
+    const payload = {
+      kind: "drag",
+      tick: dragTick,
+      cursor,
+      windowPositionBefore: { x: winX, y: winY },
+      target: roundedTarget,
+      clamped: { x: clamped.x, y: clamped.y },
+      rawClamped: { x: rawClamp.x, y: rawClamp.y },
+      clampHit: { x: clampedX, y: clampedY },
+      clampLatch: dragClampLatch,
+      activePetBounds: petBounds,
+      clampAreaType: CLAMP_TO_WORK_AREA ? "workArea" : "bounds",
+      clampArea: summarizeBounds(clampArea),
+      windowBoundsBefore: boundsResult.windowBefore,
+      windowBoundsAfter: boundsResult.windowAfter,
+      contentBoundsBefore: boundsResult.contentBefore,
+      contentBoundsAfter: boundsResult.contentAfter,
+      sizeCorrected: boundsResult.sizeCorrected,
+      dragOffset,
+      displaySource: displayDecision.source,
+      activeDisplay: summarizeDisplay(displayDecision.display),
+    };
 
-  emitDiagnostics(payload);
+    emitDiagnostics(payload);
+    if (dragTick % DRAG_LOG_SAMPLE_EVERY === 0 || clampedX || clampedY) {
+      logDiagnostics("drag", payload);
+    }
+    if (boundsResult.sizeCorrected) {
+      logDiagnostics("size-corrected", payload);
+    }
+  }
+
   emitMotionState({
     collided: { x: clampedX, y: clampedY },
     impact: { triggered: false, strength: 0 },
   });
+});
 
-  if (dragTick % DRAG_LOG_SAMPLE_EVERY === 0 || clampedX || clampedY) {
-    logDiagnostics("drag", payload);
-  }
-
-  if (boundsResult.sizeCorrected) {
-    logDiagnostics("size-corrected", payload);
-  }
+ipcMain.on("pet:setVisibleBounds", (_event, bounds) => {
+  const normalized = normalizePetBounds(bounds, WINDOW_SIZE);
+  if (!normalized) return;
+  activePetVisualBounds = {
+    x: normalized.x,
+    y: normalized.y,
+    width: normalized.width,
+    height: normalized.height,
+  };
+  activePetBoundsUpdatedAtMs = Math.max(0, normalized.tMs);
 });
 
 ipcMain.on("pet:setIgnoreMouseEvents", (_event, payload) => {
