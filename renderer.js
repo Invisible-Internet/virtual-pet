@@ -42,6 +42,22 @@ const TAIL_WEIGHT_FACTOR = 1.38;
 const TAIL_DISTAL_MOTION_START = 0.5;
 const TAIL_DISTAL_MOTION_BOOST = 0.18;
 const TAIL_DISTAL_INERTIA_BOOST = 0.08;
+const RIG_ROTATION_SIDE_MAX_RAD = Math.PI * (34 / 180);
+const RIG_ROTATION_DOWN_THRESHOLD = 180;
+const RIG_ROTATION_DOWN_SPEED = 1250;
+const RIG_ROTATION_FLY_MAX_RAD = Math.PI * (20 / 180);
+const RIG_ROTATION_INPUT_FILTER_DRAG = 8.5;
+const RIG_ROTATION_INPUT_FILTER_FLY = 4.8;
+const RIG_ROTATION_INPUT_FILTER_IDLE = 2.4;
+const RIG_ROTATION_TARGET_FILTER_DRAG = 5.2;
+const RIG_ROTATION_TARGET_FILTER_FLY = 3.1;
+const RIG_ROTATION_TARGET_FILTER_IDLE = 1.7;
+const RIG_ROTATION_DRAG_DEADBAND_RAD = Math.PI * (0.85 / 180);
+const RIG_ROTATION_DRAG_RESPONSE = 5.3;
+const RIG_ROTATION_FLY_RESPONSE = 2.8;
+const RIG_ROTATION_RELEASE_RESPONSE = 0.9;
+const RIG_ROTATION_FLING_HOLD_MS = 700;
+const RIG_ROTATION_FLING_RELEASE_BLEND_MS = 1100;
 const TAIL_STYLES = Object.freeze({
   ribbon: "ribbon",
   segmented: "segmented",
@@ -142,6 +158,13 @@ let mousePassthrough = null;
 let globalGazeReleaseUntilMs = 0;
 let petLayout = DEFAULT_LAYOUT;
 let lastRenderScale = 1;
+let rigRotation = 0;
+let rigRotationTargetFiltered = 0;
+let rigFilteredVelocity = { vx: 0, vy: 0 };
+let rigInversionSign = 1;
+let rigFlingHoldAngle = 0;
+let rigFlingHoldUntilMs = 0;
+let lastRotationState = "idle";
 const tailRope = {
   points: [],
   prevPoints: [],
@@ -323,11 +346,50 @@ function pointNearPolyline(px, py, points, halfWidth) {
   return minDistance <= halfWidth;
 }
 
+function rotatePointAround(px, py, cx, cy, angleRad) {
+  if (!Number.isFinite(angleRad) || Math.abs(angleRad) < 0.00001) {
+    return { x: px, y: py };
+  }
+
+  const s = Math.sin(angleRad);
+  const c = Math.cos(angleRad);
+  const dx = px - cx;
+  const dy = py - cy;
+  return {
+    x: cx + dx * c - dy * s,
+    y: cy + dx * s + dy * c,
+  };
+}
+
+function toRigLocalPoint(px, py) {
+  const global = latestRigState?.global;
+  if (!global || !Number.isFinite(global.rotation) || Math.abs(global.rotation) < 0.00001) {
+    return { x: px, y: py };
+  }
+
+  return rotatePointAround(px, py, global.anchorX, global.anchorY, -global.rotation);
+}
+
+function normalizeAngleRad(angle) {
+  if (!Number.isFinite(angle)) return 0;
+  let normalized = angle;
+  while (normalized <= -Math.PI) normalized += Math.PI * 2;
+  while (normalized > Math.PI) normalized -= Math.PI * 2;
+  return normalized;
+}
+
+function shortestAngleDeltaRad(from, to) {
+  return normalizeAngleRad(to - from);
+}
+
 function isPointOnVisiblePet(px, py) {
   if (!latestRigState?.body || !latestRigState?.tail) return false;
+  const localPoint = toRigLocalPoint(px, py);
+  const testX = localPoint.x;
+  const testY = localPoint.y;
 
   const body = latestRigState.body;
-  if (pointInCircle(px, py, body.x, body.y, body.radius + 1)) {
+  if (pointInCircle(testX, testY, body.x, body.y, body.radius + 1)) {
     return true;
   }
 
@@ -350,11 +412,11 @@ function isPointOnVisiblePet(px, py) {
           : 12;
 
   if (Array.isArray(tail.points) && tail.points.length > 1) {
-    if (pointNearPolyline(px, py, tail.points, halfWidth)) {
+    if (pointNearPolyline(testX, testY, tail.points, halfWidth)) {
       return true;
     }
     const tipPoint = tail.points[tail.points.length - 1];
-    return pointInCircle(px, py, tipPoint.x, tipPoint.y, tipRadius);
+    return pointInCircle(testX, testY, tipPoint.x, tipPoint.y, tipRadius);
   }
 
   const p0 = { x: tail.rootX, y: tail.rootY };
@@ -366,17 +428,17 @@ function isPointOnVisiblePet(px, py) {
     const segmentT = [0.18, 0.4, 0.66, 0.92];
     for (let i = 0; i < segmentT.length; i += 1) {
       const point = pointOnQuadratic(segmentT[i], p0, p1, p2);
-      if (pointInCircle(px, py, point.x, point.y, segmentRadii[i] + 2)) {
+      if (pointInCircle(testX, testY, point.x, point.y, segmentRadii[i] + 2)) {
         return true;
       }
     }
   }
 
-  if (pointNearQuadraticStroke(px, py, p0, p1, p2, halfWidth)) {
+  if (pointNearQuadraticStroke(testX, testY, p0, p1, p2, halfWidth)) {
     return true;
   }
 
-  return pointInCircle(px, py, tail.tipX, tail.tipY, tipRadius);
+  return pointInCircle(testX, testY, tail.tipX, tail.tipY, tipRadius);
 }
 
 function setMousePassthrough(ignore) {
@@ -424,6 +486,24 @@ function deriveRenderState(nowMs) {
   if (latestMotion.dragging) return "dragging";
   if (latestMotion.flinging) return "flying";
   return "idle";
+}
+
+function computeRigRotationTarget(state, vx, vy) {
+  if (state === "dragging") {
+    if (Math.abs(vx) > 65) {
+      rigInversionSign = vx >= 0 ? 1 : -1;
+    }
+    const sideTilt = clamp(vx / 1050, -1, 1) * RIG_ROTATION_SIDE_MAX_RAD;
+    const downAmount = clamp01((vy - RIG_ROTATION_DOWN_THRESHOLD) / RIG_ROTATION_DOWN_SPEED);
+    const inversionTarget = rigInversionSign >= 0 ? Math.PI : -Math.PI;
+    return sideTilt * (1 - downAmount) + inversionTarget * downAmount;
+  }
+
+  if (state === "flying" || state === "impact") {
+    return clamp(vx / 1200, -1, 1) * RIG_ROTATION_FLY_MAX_RAD;
+  }
+
+  return 0;
 }
 
 function scheduleNextBlink(nowMs) {
@@ -794,6 +874,79 @@ function getLayerTransforms(nowMs, dtSec) {
   const vy = latestMotion.velocity?.vy ?? 0;
   const speed = latestMotion.velocity?.speed ?? 0;
 
+  if (currentRenderState !== lastRotationState) {
+    if (currentRenderState === "flying") {
+      rigFlingHoldAngle = rigRotation;
+      rigFlingHoldUntilMs = nowMs + RIG_ROTATION_FLING_HOLD_MS;
+    }
+    if (currentRenderState === "dragging") {
+      rigFlingHoldUntilMs = 0;
+    }
+    lastRotationState = currentRenderState;
+  }
+
+  const motionFilterResponse =
+    currentRenderState === "dragging"
+      ? RIG_ROTATION_INPUT_FILTER_DRAG
+      : currentRenderState === "flying" || currentRenderState === "impact"
+        ? RIG_ROTATION_INPUT_FILTER_FLY
+        : RIG_ROTATION_INPUT_FILTER_IDLE;
+  const motionBlend = 1 - Math.exp(-motionFilterResponse * dtSec);
+  rigFilteredVelocity.vx += (vx - rigFilteredVelocity.vx) * motionBlend;
+  rigFilteredVelocity.vy += (vy - rigFilteredVelocity.vy) * motionBlend;
+
+  let rigRotationTarget = computeRigRotationTarget(
+    currentRenderState,
+    rigFilteredVelocity.vx,
+    rigFilteredVelocity.vy
+  );
+  if (
+    (currentRenderState === "flying" || currentRenderState === "impact") &&
+    rigFlingHoldUntilMs > 0
+  ) {
+    if (nowMs < rigFlingHoldUntilMs) {
+      rigRotationTarget = rigFlingHoldAngle;
+    } else {
+      const releaseT = clamp01(
+        (nowMs - rigFlingHoldUntilMs) / Math.max(1, RIG_ROTATION_FLING_RELEASE_BLEND_MS)
+      );
+      rigRotationTarget = normalizeAngleRad(
+        rigFlingHoldAngle +
+          shortestAngleDeltaRad(rigFlingHoldAngle, rigRotationTarget) * releaseT
+      );
+    }
+  }
+
+  const targetFilterResponse =
+    currentRenderState === "dragging"
+      ? RIG_ROTATION_TARGET_FILTER_DRAG
+      : currentRenderState === "flying" || currentRenderState === "impact"
+        ? RIG_ROTATION_TARGET_FILTER_FLY
+        : RIG_ROTATION_TARGET_FILTER_IDLE;
+  const targetFilterBlend = 1 - Math.exp(-targetFilterResponse * dtSec);
+  const targetFilterDelta = shortestAngleDeltaRad(rigRotationTargetFiltered, rigRotationTarget);
+  const filteredDelta =
+    currentRenderState === "dragging" && Math.abs(targetFilterDelta) < RIG_ROTATION_DRAG_DEADBAND_RAD
+      ? 0
+      : targetFilterDelta;
+  rigRotationTargetFiltered = normalizeAngleRad(
+    rigRotationTargetFiltered + filteredDelta * targetFilterBlend
+  );
+
+  const rigRotationResponse =
+    currentRenderState === "dragging"
+      ? RIG_ROTATION_DRAG_RESPONSE
+      : currentRenderState === "flying" || currentRenderState === "impact"
+        ? RIG_ROTATION_FLY_RESPONSE
+        : RIG_ROTATION_RELEASE_RESPONSE;
+  const rotationBlend = 1 - Math.exp(-rigRotationResponse * dtSec);
+  const rotationDelta = shortestAngleDeltaRad(rigRotation, rigRotationTargetFiltered);
+  rigRotation = normalizeAngleRad(rigRotation + rotationDelta * rotationBlend);
+  if (currentRenderState === "idle" && Math.abs(rigRotation) < 0.0006) {
+    rigRotation = 0;
+    rigRotationTargetFiltered = 0;
+  }
+
   const stateScale = {
     idle: 0.1,
     dragging: 1.4,
@@ -896,6 +1049,11 @@ function getLayerTransforms(nowMs, dtSec) {
   updateGaze(nowMs, dtSec, bodyX, bodyY);
 
   return {
+    global: {
+      rotation: rigRotation,
+      anchorX: bodyX,
+      anchorY: bodyY,
+    },
     body: {
       x: bodyX,
       y: bodyY,
@@ -1124,7 +1282,7 @@ function drawBodyLayer(context, transform, layer) {
 
   context.fillStyle = layer.style.highlight;
   context.beginPath();
-  context.ellipse(-28 * unit, -38 * unit, 26 * unit, 17 * unit, -0.3, 0, Math.PI * 2);
+  context.ellipse(-28 * unit, -60 * unit, 26 * unit, 17 * unit, -0.3, 0, Math.PI * 2);
   context.fill();
   context.restore();
 }
@@ -1349,6 +1507,7 @@ function drawDebugOverlay(w, h) {
       latestMotion.impact?.strength || 0
     ).toFixed(2)}`,
     `fx count: ${fxParticles.length}`,
+    `rig rot: ${(rigRotation * (180 / Math.PI)).toFixed(1)}deg`,
     `viewport: ${w}x${h}`,
   ];
 
@@ -1415,10 +1574,23 @@ function draw() {
 
   ctx.clearRect(0, 0, w, h);
 
+  const globalTransform = layerTransforms.global || {};
+  const rotation = Number.isFinite(globalTransform.rotation) ? globalTransform.rotation : 0;
+  const anchorX = Number.isFinite(globalTransform.anchorX) ? globalTransform.anchorX : w * 0.5;
+  const anchorY = Number.isFinite(globalTransform.anchorY) ? globalTransform.anchorY : h * 0.5;
+
+  ctx.save();
+  if (Math.abs(rotation) > 0.00001) {
+    ctx.translate(anchorX, anchorY);
+    ctx.rotate(rotation);
+    ctx.translate(-anchorX, -anchorY);
+  }
+
   for (const layer of RIG_LAYERS) {
     const transform = layerTransforms[layer.id] || {};
     layer.draw(ctx, transform, layer);
   }
+  ctx.restore();
 
   drawDebugOverlay(w, h);
   requestAnimationFrame(draw);

@@ -11,6 +11,11 @@ const MAX_LOG_FILE_BYTES = 5 * 1024 * 1024;
 const VELOCITY_SAMPLE_WINDOW_MS = 120;
 const MAX_DRAG_SAMPLES = 12;
 const CURSOR_EMIT_INTERVAL_MS = 33;
+const ROTATION_CLAMP_MARGIN_MAX_PX = 82;
+const ROTATION_SIDE_MAX_RAD = Math.PI * (34 / 180);
+const ROTATION_DOWN_THRESHOLD = 180;
+const ROTATION_DOWN_SPEED = 1250;
+const ROTATION_FLY_MAX_RAD = Math.PI * (20 / 180);
 
 const FLING_PRESETS = Object.freeze({
   default: Object.freeze({
@@ -70,6 +75,7 @@ let diagnosticsLogStream = null;
 let physicsTimer = null;
 let lastMotionSample = null;
 let cursorTimer = null;
+let lastDragCursorSample = null;
 
 const flingState = {
   active: false,
@@ -365,7 +371,8 @@ function stepFling() {
   };
   const display = screen.getDisplayNearestPoint(targetCenter);
   const clampArea = getClampArea(display);
-  const clamped = clampWindowPosition(targetX, targetY, clampArea);
+  const rotationClampMargin = computeRotationClampMargin(flingState.vx, flingState.vy, "flying");
+  const clamped = clampWindowPosition(targetX, targetY, clampArea, rotationClampMargin);
   const collidedX = Math.abs(clamped.x - targetX) > 0.001;
   const collidedY = Math.abs(clamped.y - targetY) > 0.001;
   let impactStrength = 0;
@@ -428,6 +435,7 @@ function stepFling() {
       clamped,
       collidedX,
       collidedY,
+      rotationClampMargin,
       clampAreaType: CLAMP_TO_WORK_AREA ? "workArea" : "bounds",
       clampArea: summarizeBounds(clampArea),
       activeDisplay: summarizeDisplay(display),
@@ -543,15 +551,52 @@ function resolveDragDisplay(cursor) {
   return { display: nearestDisplay, source: "nearestFallback" };
 }
 
-function clampWindowPosition(targetX, targetY, displayBounds) {
-  const minX = Math.round(displayBounds.x - PET_VISUAL_BOUNDS.x);
-  const maxX = Math.round(
-    displayBounds.x + displayBounds.width - (PET_VISUAL_BOUNDS.x + PET_VISUAL_BOUNDS.width)
+function estimateRigRotationTarget(vx, vy, mode) {
+  if (mode === "dragging") {
+    const sideTilt = Math.max(-1, Math.min(1, vx / 1050)) * ROTATION_SIDE_MAX_RAD;
+    const downAmount = Math.max(
+      0,
+      Math.min(1, (vy - ROTATION_DOWN_THRESHOLD) / Math.max(1, ROTATION_DOWN_SPEED))
+    );
+    const inversionTarget = sideTilt >= 0 ? Math.PI : -Math.PI;
+    return sideTilt * (1 - downAmount) + inversionTarget * downAmount;
+  }
+
+  if (mode === "flying" || mode === "impact") {
+    return Math.max(-1, Math.min(1, vx / 1200)) * ROTATION_FLY_MAX_RAD;
+  }
+
+  return 0;
+}
+
+function computeRotationClampMargin(vx, vy, mode) {
+  const angle = estimateRigRotationTarget(vx, vy, mode);
+  const amount = Math.max(0, Math.min(1, Math.abs(angle) / Math.PI));
+  return Math.round(ROTATION_CLAMP_MARGIN_MAX_PX * amount);
+}
+
+function clampWindowPosition(targetX, targetY, displayBounds, rotationMargin = 0) {
+  const margin = Math.max(0, Math.round(rotationMargin));
+  let minX = Math.round(displayBounds.x - PET_VISUAL_BOUNDS.x + margin);
+  let maxX = Math.round(
+    displayBounds.x + displayBounds.width - (PET_VISUAL_BOUNDS.x + PET_VISUAL_BOUNDS.width) - margin
   );
-  const minY = Math.round(displayBounds.y - PET_VISUAL_BOUNDS.y);
-  const maxY = Math.round(
-    displayBounds.y + displayBounds.height - (PET_VISUAL_BOUNDS.y + PET_VISUAL_BOUNDS.height)
+  let minY = Math.round(displayBounds.y - PET_VISUAL_BOUNDS.y + margin);
+  let maxY = Math.round(
+    displayBounds.y + displayBounds.height - (PET_VISUAL_BOUNDS.y + PET_VISUAL_BOUNDS.height) - margin
   );
+
+  if (minX > maxX) {
+    const midX = Math.round((minX + maxX) / 2);
+    minX = midX;
+    maxX = midX;
+  }
+
+  if (minY > maxY) {
+    const midY = Math.round((minY + maxY) / 2);
+    minY = midY;
+    maxY = midY;
+  }
 
   return {
     x: Math.max(minX, Math.min(maxX, targetX)),
@@ -635,6 +680,7 @@ ipcMain.on("pet:beginDrag", () => {
   };
   dragTick = 0;
   dragging = true;
+  lastDragCursorSample = { x: cursor.x, y: cursor.y, tMs: Date.now() };
   recordDragSample(winX, winY);
 
   const payload = {
@@ -662,6 +708,7 @@ ipcMain.on("pet:beginDrag", () => {
 ipcMain.on("pet:endDrag", () => {
   dragging = false;
   dragDisplayId = null;
+  lastDragCursorSample = null;
 
   const payload = { kind: "endDrag" };
   logDiagnostics("end-drag", payload);
@@ -685,11 +732,25 @@ ipcMain.on("pet:drag", () => {
 
   const cursor = screen.getCursorScreenPoint();
   const [winX, winY] = win.getPosition();
+  const nowMs = Date.now();
+  let dragVx = 0;
+  let dragVy = 0;
+
+  if (lastDragCursorSample) {
+    const dtSec = (nowMs - lastDragCursorSample.tMs) / 1000;
+    if (dtSec > 0) {
+      dragVx = (cursor.x - lastDragCursorSample.x) / dtSec;
+      dragVy = (cursor.y - lastDragCursorSample.y) / dtSec;
+    }
+  }
+  lastDragCursorSample = { x: cursor.x, y: cursor.y, tMs: nowMs };
+
   const targetX = cursor.x - dragOffset.x;
   const targetY = cursor.y - dragOffset.y;
   const displayDecision = resolveDragDisplay(cursor);
   const clampArea = getClampArea(displayDecision.display);
-  const clamped = clampWindowPosition(targetX, targetY, clampArea);
+  const rotationClampMargin = computeRotationClampMargin(dragVx, dragVy, "dragging");
+  const clamped = clampWindowPosition(targetX, targetY, clampArea, rotationClampMargin);
   const roundedTarget = { x: Math.round(targetX), y: Math.round(targetY) };
   const clampedX = clamped.x !== roundedTarget.x;
   const clampedY = clamped.y !== roundedTarget.y;
@@ -704,6 +765,8 @@ ipcMain.on("pet:drag", () => {
     target: roundedTarget,
     clamped,
     clampHit: { x: clampedX, y: clampedY },
+    dragVelocity: { vx: dragVx, vy: dragVy },
+    rotationClampMargin,
     clampAreaType: CLAMP_TO_WORK_AREA ? "workArea" : "bounds",
     clampArea: summarizeBounds(clampArea),
     windowBoundsBefore: boundsResult.windowBefore,
