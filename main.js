@@ -1,6 +1,7 @@
 const { app, BrowserWindow, ipcMain, screen } = require("electron");
 const fs = require("fs");
 const path = require("path");
+const { BASE_LAYOUT, computePetLayout } = require("./pet-layout");
 
 // Master diagnostics toggle: controls console logs, file logs, and renderer overlay.
 const DIAGNOSTICS_ENABLED = false;
@@ -9,6 +10,7 @@ const DRAG_LOG_SAMPLE_EVERY = 8;
 const MAX_LOG_FILE_BYTES = 5 * 1024 * 1024;
 const VELOCITY_SAMPLE_WINDOW_MS = 120;
 const MAX_DRAG_SAMPLES = 12;
+const CURSOR_EMIT_INTERVAL_MS = 33;
 
 const FLING_PRESETS = Object.freeze({
   default: Object.freeze({
@@ -66,6 +68,8 @@ let flingTick = 0;
 let logLineCount = 0;
 let diagnosticsLogStream = null;
 let physicsTimer = null;
+let lastMotionSample = null;
+let cursorTimer = null;
 
 const flingState = {
   active: false,
@@ -76,18 +80,10 @@ const flingState = {
   y: 0,
 };
 
-const WINDOW_SIZE = Object.freeze({
-  width: 320,
-  height: 320,
-});
-
+const PET_LAYOUT = computePetLayout(BASE_LAYOUT);
+const WINDOW_SIZE = PET_LAYOUT.windowSize;
 // These bounds describe the visible pet shape inside the transparent window.
-const PET_VISUAL_BOUNDS = Object.freeze({
-  x: 50,
-  y: 50,
-  width: 220,
-  height: 220,
-});
+const PET_VISUAL_BOUNDS = PET_LAYOUT.visualBounds;
 
 function summarizeDisplay(display) {
   return {
@@ -114,6 +110,72 @@ function summarizeBounds(bounds) {
     width: bounds.width,
     height: bounds.height,
   };
+}
+
+function emitToRenderer(channel, payload) {
+  if (!win || win.isDestroyed()) return;
+  win.webContents.send(channel, payload);
+}
+
+function resetMotionSampleFromWindow() {
+  if (!win || win.isDestroyed()) return;
+  const [x, y] = win.getPosition();
+  lastMotionSample = { tMs: Date.now(), x, y };
+}
+
+function emitMotionState({ collided, impact, velocityOverride } = {}) {
+  if (!win || win.isDestroyed()) return;
+
+  const nowMs = Date.now();
+  const [x, y] = win.getPosition();
+
+  let vx = 0;
+  let vy = 0;
+
+  if (
+    velocityOverride &&
+    Number.isFinite(velocityOverride.vx) &&
+    Number.isFinite(velocityOverride.vy)
+  ) {
+    vx = velocityOverride.vx;
+    vy = velocityOverride.vy;
+  } else if (lastMotionSample) {
+    const dtSec = (nowMs - lastMotionSample.tMs) / 1000;
+    if (dtSec > 0) {
+      vx = (x - lastMotionSample.x) / dtSec;
+      vy = (y - lastMotionSample.y) / dtSec;
+    }
+  }
+
+  const speed = Math.hypot(vx, vy);
+  lastMotionSample = { tMs: nowMs, x, y };
+
+  emitToRenderer("pet:motion", {
+    tMs: nowMs,
+    dragging,
+    flinging: flingState.active,
+    position: { x, y },
+    velocity: { vx, vy, speed },
+    collided: {
+      x: Boolean(collided?.x),
+      y: Boolean(collided?.y),
+    },
+    impact: {
+      triggered: Boolean(impact?.triggered),
+      strength: Number.isFinite(impact?.strength)
+        ? Math.max(0, Math.min(1, impact.strength))
+        : 0,
+    },
+    preset: ACTIVE_FLING_PRESET,
+  });
+}
+
+function emitCursorState() {
+  if (!win || win.isDestroyed()) return;
+  emitToRenderer("pet:cursor", {
+    tMs: Date.now(),
+    cursor: screen.getCursorScreenPoint(),
+  });
 }
 
 function applyWindowBounds(targetX, targetY) {
@@ -184,6 +246,11 @@ function cancelFling(reason = "cancelled") {
     const payload = { kind: "flingCancel", reason };
     logDiagnostics("fling-cancel", payload);
     emitDiagnostics(payload);
+    emitMotionState({
+      velocityOverride: { vx: 0, vy: 0 },
+      collided: { x: false, y: false },
+      impact: { triggered: false, strength: 0 },
+    });
   }
 }
 
@@ -259,6 +326,11 @@ function maybeStartFlingFromSamples() {
   };
   logDiagnostics("fling-start", payload);
   emitDiagnostics(payload);
+  emitMotionState({
+    velocityOverride: { vx, vy },
+    collided: { x: false, y: false },
+    impact: { triggered: false, strength: 0 },
+  });
 }
 
 function stepFling() {
@@ -296,6 +368,7 @@ function stepFling() {
   const clamped = clampWindowPosition(targetX, targetY, clampArea);
   const collidedX = Math.abs(clamped.x - targetX) > 0.001;
   const collidedY = Math.abs(clamped.y - targetY) > 0.001;
+  let impactStrength = 0;
 
   applyWindowBounds(clamped.x, clamped.y);
   flingState.x = clamped.x;
@@ -303,6 +376,10 @@ function stepFling() {
 
   if (collidedX) {
     const oldVx = flingState.vx;
+    impactStrength = Math.max(
+      impactStrength,
+      Math.abs(oldVx) / Math.max(1, FLING_CONFIG.maxSpeedPxS)
+    );
     flingState.vx = -flingState.vx * FLING_CONFIG.bounceRestitution;
     const payload = { kind: "flingBounce", axis: "x", before: oldVx, after: flingState.vx };
     logDiagnostics("fling-bounce", payload);
@@ -311,6 +388,10 @@ function stepFling() {
 
   if (collidedY) {
     const oldVy = flingState.vy;
+    impactStrength = Math.max(
+      impactStrength,
+      Math.abs(oldVy) / Math.max(1, FLING_CONFIG.maxSpeedPxS)
+    );
     flingState.vy = -flingState.vy * FLING_CONFIG.bounceRestitution;
     const payload = { kind: "flingBounce", axis: "y", before: oldVy, after: flingState.vy };
     logDiagnostics("fling-bounce", payload);
@@ -329,6 +410,12 @@ function stepFling() {
     cancelFling("belowStopSpeed");
     return;
   }
+
+  emitMotionState({
+    velocityOverride: { vx: flingState.vx, vy: flingState.vy },
+    collided: { x: collidedX, y: collidedY },
+    impact: { triggered: collidedX || collidedY, strength: impactStrength },
+  });
 
   if (flingTick % DRAG_LOG_SAMPLE_EVERY === 0 || collidedX || collidedY) {
     const payload = {
@@ -408,8 +495,7 @@ function closeDiagnosticsLog() {
 
 function emitDiagnostics(payload) {
   if (!DIAGNOSTICS_ENABLED) return;
-  if (!win || win.isDestroyed()) return;
-  win.webContents.send("pet:diagnostics", payload);
+  emitToRenderer("pet:diagnostics", payload);
 }
 
 function logDiagnostics(label, payload) {
@@ -496,6 +582,15 @@ function createWindow() {
   win.setMaximumSize(WINDOW_SIZE.width, WINDOW_SIZE.height);
 
   win.loadFile("index.html");
+  win.webContents.once("did-finish-load", () => {
+    resetMotionSampleFromWindow();
+    emitMotionState({
+      velocityOverride: { vx: 0, vy: 0 },
+      collided: { x: false, y: false },
+      impact: { triggered: false, strength: 0 },
+    });
+    emitCursorState();
+  });
 
   logDiagnostics("window-created", {
     windowSize: WINDOW_SIZE,
@@ -517,6 +612,10 @@ ipcMain.on("pet:setPosition", (_event, x, y) => {
   const display = screen.getDisplayNearestPoint(targetPoint);
   const clamped = clampWindowPosition(x, y, getClampArea(display));
   applyWindowBounds(clamped.x, clamped.y);
+  emitMotionState({
+    collided: { x: false, y: false },
+    impact: { triggered: false, strength: 0 },
+  });
 });
 
 ipcMain.on("pet:beginDrag", () => {
@@ -553,6 +652,11 @@ ipcMain.on("pet:beginDrag", () => {
 
   logDiagnostics("begin-drag", payload);
   emitDiagnostics(payload);
+  emitMotionState({
+    velocityOverride: { vx: 0, vy: 0 },
+    collided: { x: false, y: false },
+    impact: { triggered: false, strength: 0 },
+  });
 });
 
 ipcMain.on("pet:endDrag", () => {
@@ -564,6 +668,13 @@ ipcMain.on("pet:endDrag", () => {
   emitDiagnostics(payload);
 
   maybeStartFlingFromSamples();
+  if (!flingState.active) {
+    emitMotionState({
+      velocityOverride: { vx: 0, vy: 0 },
+      collided: { x: false, y: false },
+      impact: { triggered: false, strength: 0 },
+    });
+  }
   clearDragSamples();
 });
 
@@ -606,6 +717,10 @@ ipcMain.on("pet:drag", () => {
   };
 
   emitDiagnostics(payload);
+  emitMotionState({
+    collided: { x: clampedX, y: clampedY },
+    impact: { triggered: false, strength: 0 },
+  });
 
   if (dragTick % DRAG_LOG_SAMPLE_EVERY === 0 || clampedX || clampedY) {
     logDiagnostics("drag", payload);
@@ -614,6 +729,20 @@ ipcMain.on("pet:drag", () => {
   if (boundsResult.sizeCorrected) {
     logDiagnostics("size-corrected", payload);
   }
+});
+
+ipcMain.on("pet:setIgnoreMouseEvents", (_event, payload) => {
+  if (!win || win.isDestroyed()) return;
+
+  const ignore = Boolean(payload?.ignore);
+  const forward = Boolean(payload?.forward);
+
+  if (ignore) {
+    win.setIgnoreMouseEvents(true, forward ? { forward: true } : undefined);
+    return;
+  }
+
+  win.setIgnoreMouseEvents(false);
 });
 
 ipcMain.handle("pet:getPosition", () => {
@@ -629,6 +758,7 @@ ipcMain.handle("pet:getConfig", () => {
     flingPreset: ACTIVE_FLING_PRESET,
     flingEnabled: FLING_CONFIG.enabled,
     availableFlingPresets: Object.keys(FLING_PRESETS),
+    layout: PET_LAYOUT,
   };
 });
 
@@ -636,6 +766,7 @@ app.whenReady().then(() => {
   initializeDiagnosticsLog();
   createWindow();
   physicsTimer = setInterval(stepFling, FLING_CONFIG.stepMs);
+  cursorTimer = setInterval(emitCursorState, CURSOR_EMIT_INTERVAL_MS);
 
   if (!DIAGNOSTICS_ENABLED) return;
 
@@ -659,6 +790,10 @@ app.on("before-quit", () => {
   if (physicsTimer) {
     clearInterval(physicsTimer);
     physicsTimer = null;
+  }
+  if (cursorTimer) {
+    clearInterval(cursorTimer);
+    cursorTimer = null;
   }
   cancelFling("appQuit");
   closeDiagnosticsLog();
