@@ -5,9 +5,10 @@
   "private": true,
   "scripts": {
     "start": "electron .",
-    "check:syntax": "node --check main.js && node --check renderer.js && node --check preload.js && node --check pet-layout.js",
+    "check:syntax": "node --check main.js && node --check renderer.js && node --check renderer-sprite-runtime.js && node --check preload.js && node --check pet-layout.js",
     "check:layout": "node scripts/check-layout.js",
-    "check": "npm run check:syntax && npm run check:layout"
+    "check:assets": "node scripts/check-assets.js",
+    "check": "npm run check:syntax && npm run check:layout && npm run check:assets"
   },
   "devDependencies": {
     "electron": "^30.0.0"

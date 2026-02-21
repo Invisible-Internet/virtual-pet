@@ -1,0 +1,120 @@
+{
+  "version": 1,
+  "characterId": "girl",
+  "directions": [
+    "Down",
+    "DownRight",
+    "Right",
+    "UpRight",
+    "Up",
+    "UpLeft",
+    "Left",
+    "DownLeft"
+  ],
+  "cell": {
+    "width": 256,
+    "height": 256
+  },
+  "pivotPx": {
+    "x": 128,
+    "y": 220
+  },
+  "display": {
+    "targetHeightPx": 220
+  },
+  "states": {
+    "IdleReady": {
+      "sheetPattern": "Girl_IdleReady_{dir}.png",
+      "columns": 4,
+      "frameCount": 9,
+      "fps": 8,
+      "loop": true,
+      "hitboxPx": {
+        "x": 74,
+        "y": 34,
+        "width": 108,
+        "height": 194
+      }
+    },
+    "Walk": {
+      "sheetPattern": "Girl_Walk_{dir}.png",
+      "columns": 4,
+      "frameCount": 9,
+      "fps": 10,
+      "loop": true,
+      "hitboxPx": {
+        "x": 72,
+        "y": 32,
+        "width": 112,
+        "height": 196
+      }
+    },
+    "Run": {
+      "sheetPattern": "Girl_Run_{dir}.png",
+      "columns": 4,
+      "frameCount": 5,
+      "fps": 14,
+      "loop": true,
+      "hitboxPx": {
+        "x": 68,
+        "y": 34,
+        "width": 120,
+        "height": 194
+      }
+    },
+    "Jump": {
+      "sheetPattern": "Girl_Jump_{dir}.png",
+      "columns": 4,
+      "frameCount": 11,
+      "fps": 12,
+      "loop": false,
+      "nextState": "IdleReady",
+      "hitboxPx": {
+        "x": 70,
+        "y": 30,
+        "width": 116,
+        "height": 198
+      }
+    },
+    "RunningJump": {
+      "sheetPattern": "Girl_RunningJump_{dir}.png",
+      "columns": 4,
+      "frameCount": 8,
+      "fps": 12,
+      "loop": false,
+      "nextState": "Run",
+      "hitboxPx": {
+        "x": 66,
+        "y": 28,
+        "width": 124,
+        "height": 200
+      }
+    },
+    "Roll": {
+      "sheetPattern": "Girl_Roll_{dir}.png",
+      "columns": 4,
+      "frameCount": 10,
+      "fps": 14,
+      "loop": true,
+      "hitboxPx": {
+        "x": 66,
+        "y": 28,
+        "width": 124,
+        "height": 200
+      }
+    },
+    "Grabbed": {
+      "sheetPattern": "Girl_Grabbed_{dir}.png",
+      "columns": 4,
+      "frameCount": 5,
+      "fps": 7,
+      "loop": true,
+      "hitboxPx": {
+        "x": 72,
+        "y": 32,
+        "width": 112,
+        "height": 196
+      }
+    }
+  }
+}

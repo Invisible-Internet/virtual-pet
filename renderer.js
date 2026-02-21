@@ -1,6 +1,25 @@
 ﻿const canvas = document.getElementById("c");
 const ctx = canvas.getContext("2d");
 const visibleBoundsMath = window.PetVisibleBoundsMath || null;
+const spriteRuntimeApi = window.PetSpriteRuntime || null;
+
+const RENDER_MODES = Object.freeze({
+  procedural: "procedural",
+  sprite: "sprite",
+});
+const SPRITE_CHARACTER_ID = "girl";
+const SPRITE_DRAG_ROTATION_MAX_RAD = Math.PI * (34 / 180);
+const SPRITE_DRAG_ROTATION_VX_FOR_MAX = 420;
+const SPRITE_DRAG_ROTATION_MIN_VX = 2;
+const SPRITE_DRAG_PIVOT_TOP_RATIO = 0.05;
+const SPRITE_DRAG_ROTATION_STIFFNESS_DRAG = 150;
+const SPRITE_DRAG_ROTATION_DAMPING_DRAG = 18;
+const SPRITE_DRAG_STOP_SPEED = 65;
+const SPRITE_DRAG_ROTATION_STIFFNESS_SNAP = 360;
+const SPRITE_DRAG_ROTATION_DAMPING_SNAP = 10;
+const SPRITE_DRAG_ROTATION_STIFFNESS_RELEASE = 170;
+const SPRITE_DRAG_ROTATION_DAMPING_RELEASE = 16;
+const SPRITE_DRAG_ROTATION_SNAP_KICK = 14;
 
 const MAX_FX_PARTICLES = 32;
 const IMPACT_STATE_MIN_MS = 100;
@@ -118,6 +137,14 @@ const lag = {
   tail: { x: 0, y: 0, vx: 0, vy: 0 },
 };
 
+const movementKeys = {
+  up: false,
+  down: false,
+  left: false,
+  right: false,
+  run: false,
+};
+
 let lastDevicePixelRatio = window.devicePixelRatio || 1;
 let latestDiagnostics = null;
 let diagnosticsEnabled = false;
@@ -155,6 +182,15 @@ let lastRotationState = "idle";
 let lastVisibleBoundsSent = null;
 let lastVisibleBoundsSentMs = 0;
 let latestVisibleBounds = null;
+let latestSpriteFrame = null;
+let latestSpriteHitRect = null;
+let spriteRuntime = null;
+let spriteManifest = null;
+let spriteJumpQueued = false;
+let spriteDragRotation = 0;
+let spriteDragRotationVel = 0;
+let spriteWasDragDriving = false;
+let activeRenderMode = RENDER_MODES.sprite;
 let interactivityRafPending = false;
 let pendingInteractivityClient = null;
 let lastSyncedCursorPx = null;
@@ -451,7 +487,302 @@ function maybeEmitVisibleBounds(visibleBounds, nowMs) {
   window.petAPI.setVisibleBounds(nextBounds);
 }
 
+function pointInRect(px, py, rect) {
+  if (!rect) return false;
+  return px >= rect.x && py >= rect.y && px <= rect.x + rect.width && py <= rect.y + rect.height;
+}
+
+function getSpriteInputState() {
+  const moveX = (movementKeys.right ? 1 : 0) - (movementKeys.left ? 1 : 0);
+  const moveY = (movementKeys.down ? 1 : 0) - (movementKeys.up ? 1 : 0);
+  const jumpPressed = spriteJumpQueued;
+  spriteJumpQueued = false;
+  return {
+    moveX,
+    moveY,
+    running: movementKeys.run,
+    jumpPressed,
+    dragging: Boolean(latestMotion.dragging),
+    flinging: Boolean(latestMotion.flinging),
+    dragVX: latestMotion.velocity?.vx || 0,
+    dragVY: latestMotion.velocity?.vy || 0,
+    motionVX: latestMotion.velocity?.vx || 0,
+    motionVY: latestMotion.velocity?.vy || 0,
+    motionSpeed: latestMotion.velocity?.speed || 0,
+  };
+}
+
+function onMovementKeyDown(event) {
+  if (!event || typeof event.key !== "string") return;
+  const key = event.key.toLowerCase();
+  if (key === "w" || key === "arrowup") movementKeys.up = true;
+  else if (key === "s" || key === "arrowdown") movementKeys.down = true;
+  else if (key === "a" || key === "arrowleft") movementKeys.left = true;
+  else if (key === "d" || key === "arrowright") movementKeys.right = true;
+  else if (key === "shift") movementKeys.run = true;
+  else if (key === " " || key === "spacebar") {
+    if (!event.repeat) spriteJumpQueued = true;
+  } else {
+    return;
+  }
+  event.preventDefault();
+}
+
+function onMovementKeyUp(event) {
+  if (!event || typeof event.key !== "string") return;
+  const key = event.key.toLowerCase();
+  if (key === "w" || key === "arrowup") movementKeys.up = false;
+  else if (key === "s" || key === "arrowdown") movementKeys.down = false;
+  else if (key === "a" || key === "arrowleft") movementKeys.left = false;
+  else if (key === "d" || key === "arrowright") movementKeys.right = false;
+  else if (key === "shift") movementKeys.run = false;
+  else return;
+  event.preventDefault();
+}
+
+function clearMovementKeys() {
+  movementKeys.up = false;
+  movementKeys.down = false;
+  movementKeys.left = false;
+  movementKeys.right = false;
+  movementKeys.run = false;
+  spriteJumpQueued = false;
+}
+
+async function loadSpriteRuntime(characterId) {
+  if (
+    !spriteRuntimeApi ||
+    typeof spriteRuntimeApi.createSpriteRuntime !== "function" ||
+    typeof window.petAPI.getAnimationManifest !== "function"
+  ) {
+    activeRenderMode = RENDER_MODES.procedural;
+    return;
+  }
+
+  try {
+    const payload = await window.petAPI.getAnimationManifest(characterId);
+    spriteRuntime = spriteRuntimeApi.createSpriteRuntime(payload);
+    spriteManifest = spriteRuntime.getManifest();
+    activeRenderMode = RENDER_MODES.sprite;
+    spriteDragRotation = 0;
+    spriteDragRotationVel = 0;
+    spriteWasDragDriving = false;
+    fxParticles = [];
+  } catch (error) {
+    console.warn("[sprite] failed to load sprite runtime:", error);
+    spriteRuntime = null;
+    spriteManifest = null;
+    spriteDragRotation = 0;
+    spriteDragRotationVel = 0;
+    spriteWasDragDriving = false;
+    activeRenderMode = RENDER_MODES.procedural;
+  }
+}
+
+function updateSpriteDragRotation(dtSec) {
+  const vx = latestMotion.velocity?.vx ?? 0;
+  const dragging = Boolean(latestMotion.dragging);
+  const drivingDrag =
+    dragging &&
+    Math.abs(vx) >= SPRITE_DRAG_STOP_SPEED &&
+    Math.abs(vx) >= SPRITE_DRAG_ROTATION_MIN_VX;
+  const target =
+    drivingDrag
+      ? clamp(vx / SPRITE_DRAG_ROTATION_VX_FOR_MAX, -1, 1) * SPRITE_DRAG_ROTATION_MAX_RAD
+      : 0;
+  const safeDt = Math.min(0.04, Math.max(0.001, dtSec));
+
+  if (!drivingDrag && spriteWasDragDriving) {
+    const snapKick =
+      -Math.sign(spriteDragRotation || vx || 1) *
+      Math.min(9, Math.abs(spriteDragRotation) * SPRITE_DRAG_ROTATION_SNAP_KICK);
+    spriteDragRotationVel += snapKick;
+  }
+  spriteWasDragDriving = drivingDrag;
+
+  let stiffness = SPRITE_DRAG_ROTATION_STIFFNESS_RELEASE;
+  let damping = SPRITE_DRAG_ROTATION_DAMPING_RELEASE;
+  if (drivingDrag) {
+    stiffness = SPRITE_DRAG_ROTATION_STIFFNESS_DRAG;
+    damping = SPRITE_DRAG_ROTATION_DAMPING_DRAG;
+  } else if (dragging) {
+    stiffness = SPRITE_DRAG_ROTATION_STIFFNESS_SNAP;
+    damping = SPRITE_DRAG_ROTATION_DAMPING_SNAP;
+  }
+
+  const acceleration =
+    (target - spriteDragRotation) * stiffness - spriteDragRotationVel * damping;
+  spriteDragRotationVel += acceleration * safeDt;
+  spriteDragRotation += spriteDragRotationVel * safeDt;
+  spriteDragRotation = clamp(
+    spriteDragRotation,
+    -SPRITE_DRAG_ROTATION_MAX_RAD * 1.35,
+    SPRITE_DRAG_ROTATION_MAX_RAD * 1.35
+  );
+
+  if (
+    !dragging &&
+    Math.abs(spriteDragRotation) < 0.0008 &&
+    Math.abs(spriteDragRotationVel) < 0.02
+  ) {
+    spriteDragRotation = 0;
+    spriteDragRotationVel = 0;
+    spriteWasDragDriving = false;
+  }
+}
+
+function getSpriteLayerTransforms() {
+  const visualBounds = getDesignVisualBounds();
+  const cell = spriteManifest?.cell || { width: 256, height: 256 };
+  const targetHeightPx = Math.max(1, spriteManifest?.display?.targetHeightPx || 220);
+  const scale = targetHeightPx / Math.max(1, cell.height);
+  const drawWidth = cell.width * scale;
+  const drawHeight = cell.height * scale;
+  const drawX = visualBounds.x + (visualBounds.width - drawWidth) * 0.5;
+  const drawY = visualBounds.y + (visualBounds.height - drawHeight) * 0.5;
+  const anchorX = drawX + drawWidth * 0.5;
+  const anchorY = drawY + drawHeight * SPRITE_DRAG_PIVOT_TOP_RATIO;
+
+  return {
+    global: {
+      rotation: spriteDragRotation,
+      anchorX,
+      anchorY,
+    },
+    spriteDrawRect: {
+      x: drawX,
+      y: drawY,
+      width: drawWidth,
+      height: drawHeight,
+    },
+    fx: {},
+  };
+}
+
+function computeSpriteFrameTransform(frame, layerTransforms) {
+  const globalTransform = layerTransforms?.global;
+  if (!frame || !globalTransform) return null;
+  const cell = frame.cell || { width: 256, height: 256 };
+  const targetHeightPx = Math.max(1, frame.targetHeightPx || 220);
+  const scale = targetHeightPx / Math.max(1, cell.height);
+
+  const drawRect =
+    layerTransforms?.spriteDrawRect ||
+    (() => {
+      const pivot = frame.pivotPx || { x: cell.width / 2, y: cell.height };
+      return {
+        x: globalTransform.anchorX - pivot.x * scale,
+        y: globalTransform.anchorY - pivot.y * scale,
+        width: cell.width * scale,
+        height: cell.height * scale,
+      };
+    })();
+
+  const hitboxSource = frame.hitboxPx || { x: 0, y: 0, width: cell.width, height: cell.height };
+  const hitRect = {
+    x: drawRect.x + hitboxSource.x * scale,
+    y: drawRect.y + hitboxSource.y * scale,
+    width: Math.max(1, hitboxSource.width * scale),
+    height: Math.max(1, hitboxSource.height * scale),
+  };
+
+  return {
+    drawRect,
+    hitRect,
+  };
+}
+
+function computeRotatedAabb(rect, anchorX, anchorY, angleRad) {
+  const corners = [
+    rotatePointAround(rect.x, rect.y, anchorX, anchorY, angleRad),
+    rotatePointAround(rect.x + rect.width, rect.y, anchorX, anchorY, angleRad),
+    rotatePointAround(rect.x + rect.width, rect.y + rect.height, anchorX, anchorY, angleRad),
+    rotatePointAround(rect.x, rect.y + rect.height, anchorX, anchorY, angleRad),
+  ];
+
+  let minX = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+  for (const corner of corners) {
+    minX = Math.min(minX, corner.x);
+    maxX = Math.max(maxX, corner.x);
+    minY = Math.min(minY, corner.y);
+    maxY = Math.max(maxY, corner.y);
+  }
+
+  return {
+    x: minX,
+    y: minY,
+    width: Math.max(1, maxX - minX),
+    height: Math.max(1, maxY - minY),
+  };
+}
+
+function computeSpriteVisibleBounds(frameTransform, globalTransform, windowWidth, windowHeight) {
+  if (!frameTransform || !globalTransform) return null;
+  const rotated = computeRotatedAabb(
+    frameTransform.hitRect,
+    globalTransform.anchorX,
+    globalTransform.anchorY,
+    globalTransform.rotation || 0
+  );
+  return {
+    x: clamp(rotated.x, -windowWidth, windowWidth * 2),
+    y: clamp(rotated.y, -windowHeight, windowHeight * 2),
+    width: clamp(rotated.width, 1, windowWidth * 3),
+    height: clamp(rotated.height, 1, windowHeight * 3),
+  };
+}
+
+function updateSpriteFrame(nowMs, dtSec, layerTransforms) {
+  if (!spriteRuntime || activeRenderMode !== RENDER_MODES.sprite) {
+    latestSpriteFrame = null;
+    latestSpriteHitRect = null;
+    return null;
+  }
+
+  const input = getSpriteInputState();
+  const nextFrame = spriteRuntime.update(dtSec * 1000, input);
+  latestSpriteFrame = nextFrame;
+
+  const frameTransform = computeSpriteFrameTransform(nextFrame, layerTransforms);
+  latestSpriteHitRect = frameTransform?.hitRect || null;
+
+  return {
+    frame: nextFrame,
+    transform: frameTransform,
+    global: layerTransforms?.global,
+  };
+}
+
+function drawSpriteFrame(context, spriteFrame) {
+  if (!spriteFrame?.frame || !spriteFrame?.transform) return false;
+  const frame = spriteFrame.frame;
+  if (!frame.imageLoaded || !frame.image || frame.imageFailed) return false;
+
+  const src = frame.srcRect;
+  const dest = spriteFrame.transform.drawRect;
+  context.drawImage(
+    frame.image,
+    src.x,
+    src.y,
+    src.width,
+    src.height,
+    dest.x,
+    dest.y,
+    dest.width,
+    dest.height
+  );
+  return true;
+}
+
 function isPointOnVisiblePet(px, py) {
+  if (activeRenderMode === RENDER_MODES.sprite && latestSpriteHitRect && latestRigState?.global) {
+    const localPoint = toRigLocalPoint(px, py);
+    return pointInRect(localPoint.x, localPoint.y, latestSpriteHitRect);
+  }
+
   if (!latestRigState?.body || !latestRigState?.tail) return false;
   const localPoint = toRigLocalPoint(px, py);
   const testX = localPoint.x;
@@ -1571,6 +1902,7 @@ function drawDebugOverlay(w, h) {
   if (!diagnosticsEnabled) return;
   const visualBounds = getDesignVisualBounds();
   const visibleHitBounds = latestVisibleBounds;
+  const displayedRotation = activeRenderMode === RENDER_MODES.sprite ? spriteDragRotation : rigRotation;
 
   ctx.save();
   ctx.fillStyle = "rgba(255, 100, 40, 0.08)";
@@ -1603,9 +1935,25 @@ function drawDebugOverlay(w, h) {
   }
 
   const d = latestDiagnostics;
+  const spriteCacheStats = spriteRuntime?.getCacheStats ? spriteRuntime.getCacheStats() : null;
   const lines = [
+    `render mode: ${activeRenderMode}`,
     `state: ${currentRenderState}`,
     `motion preset: ${latestMotion.preset || "n/a"}`,
+    `sprite: ${
+      latestSpriteFrame
+        ? `${latestSpriteFrame.state}/${latestSpriteFrame.direction} frame ${latestSpriteFrame.frameIndex + 1}/${latestSpriteFrame.frameCount}`
+        : "n/a"
+    }`,
+    `sprite fps: ${
+      latestSpriteFrame
+        ? `${latestSpriteFrame.fps.toFixed(1)}${Number.isFinite(latestSpriteFrame.baseFps) ? ` (base ${latestSpriteFrame.baseFps})` : ""}`
+        : "n/a"
+    }`,
+    `sheet: ${latestSpriteFrame?.imageLoaded ? "ready" : latestSpriteFrame?.imageFailed ? "error" : "loading"}`,
+    `sprite cache: ${
+      spriteCacheStats ? `${spriteCacheStats.loaded}/${spriteCacheStats.total} loaded` : "n/a"
+    }`,
     `tail style: ${ACTIVE_TAIL_STYLE}`,
     `gaze: ${gazeOffset.x.toFixed(1)}, ${gazeOffset.y.toFixed(1)} (${gazeSource})`,
     `blink: ${blinkAmount.toFixed(2)}`,
@@ -1614,7 +1962,7 @@ function drawDebugOverlay(w, h) {
       latestMotion.impact?.strength || 0
     ).toFixed(2)}`,
     `fx count: ${fxParticles.length}`,
-    `rig rot: ${(rigRotation * (180 / Math.PI)).toFixed(1)}deg`,
+    `rig rot: ${(displayedRotation * (180 / Math.PI)).toFixed(1)}deg`,
     `visible hitbox: ${
       visibleHitBounds
         ? `${visibleHitBounds.x.toFixed(0)},${visibleHitBounds.y.toFixed(0)} ${visibleHitBounds.width.toFixed(0)}x${visibleHitBounds.height.toFixed(0)}`
@@ -1680,10 +2028,27 @@ function draw() {
   const h = windowSize.height;
 
   syncMouseInteractivityFromGlobalCursor();
-  updateFx(dtSec);
-  const layerTransforms = getLayerTransforms(nowMs, dtSec);
-  latestRigState = layerTransforms;
-  latestVisibleBounds = computeVisibleBoundsForFrame(layerTransforms, w, h);
+
+  let layerTransforms;
+  let spriteFrame = null;
+  if (activeRenderMode === RENDER_MODES.sprite && spriteRuntime) {
+    updateSpriteDragRotation(dtSec);
+    layerTransforms = getSpriteLayerTransforms();
+    latestRigState = layerTransforms;
+    spriteFrame = updateSpriteFrame(nowMs, dtSec, layerTransforms);
+    latestVisibleBounds = spriteFrame
+      ? computeSpriteVisibleBounds(spriteFrame.transform, spriteFrame.global, w, h)
+      : getDesignVisualBounds();
+  } else {
+    spriteDragRotation = 0;
+    spriteDragRotationVel = 0;
+    spriteWasDragDriving = false;
+    updateFx(dtSec);
+    layerTransforms = getLayerTransforms(nowMs, dtSec);
+    latestRigState = layerTransforms;
+    latestVisibleBounds = computeVisibleBoundsForFrame(layerTransforms, w, h);
+  }
+
   maybeEmitVisibleBounds(latestVisibleBounds, nowMs);
 
   ctx.clearRect(0, 0, w, h);
@@ -1700,9 +2065,16 @@ function draw() {
     ctx.translate(-anchorX, -anchorY);
   }
 
-  for (const layer of RIG_LAYERS) {
-    const transform = layerTransforms[layer.id] || {};
-    layer.draw(ctx, transform, layer);
+  let drewSprite = false;
+  if (activeRenderMode === RENDER_MODES.sprite && spriteFrame) {
+    drewSprite = drawSpriteFrame(ctx, spriteFrame);
+  }
+
+  if (activeRenderMode !== RENDER_MODES.sprite && !drewSprite) {
+    for (const layer of RIG_LAYERS) {
+      const transform = layerTransforms[layer.id] || {};
+      layer.draw(ctx, transform, layer);
+    }
   }
   ctx.restore();
 
@@ -1712,6 +2084,7 @@ function draw() {
 
 async function init() {
   await loadRuntimeConfig();
+  await loadSpriteRuntime(SPRITE_CHARACTER_ID);
 
   if (typeof window.petAPI.onMotion === "function") {
     window.petAPI.onMotion((payload) => {
@@ -1734,7 +2107,9 @@ async function init() {
           strength,
           tMs: performance.now(),
         };
-        spawnImpactFx(latestMotion);
+        if (activeRenderMode !== RENDER_MODES.sprite) {
+          spawnImpactFx(latestMotion);
+        }
       }
     });
   }
@@ -1754,6 +2129,9 @@ async function init() {
   }
 
   window.addEventListener("resize", resize);
+  window.addEventListener("keydown", onMovementKeyDown);
+  window.addEventListener("keyup", onMovementKeyUp);
+  window.addEventListener("blur", clearMovementKeys);
   setMousePassthrough(true);
   resize();
   draw();

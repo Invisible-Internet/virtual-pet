@@ -21,6 +21,26 @@ const PET_BOUNDS_STALE_MS = 250;
 const DRAG_CLAMP_HYSTERESIS_PX = 2;
 const MOTION_POSITION_EPSILON = 0.25;
 const MOTION_VELOCITY_EPSILON = 0.5;
+const CHARACTER_ASSETS_ROOT = path.join(__dirname, "assets", "characters");
+const REQUIRED_SPRITE_DIRECTIONS = Object.freeze([
+  "Down",
+  "DownRight",
+  "Right",
+  "UpRight",
+  "Up",
+  "UpLeft",
+  "Left",
+  "DownLeft",
+]);
+const REQUIRED_SPRITE_STATES = Object.freeze([
+  "IdleReady",
+  "Walk",
+  "Run",
+  "Jump",
+  "RunningJump",
+  "Roll",
+  "Grabbed",
+]);
 
 const FLING_PRESETS = Object.freeze({
   default: Object.freeze({
@@ -98,6 +118,141 @@ const WINDOW_SIZE = PET_LAYOUT.windowSize;
 // These bounds describe the visible pet shape inside the transparent window.
 const PET_VISUAL_BOUNDS = PET_LAYOUT.visualBounds;
 let activePetVisualBounds = { ...PET_VISUAL_BOUNDS };
+const animationManifestCache = new Map();
+
+function asPositiveInteger(value, fallback) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric <= 0) return fallback;
+  return Math.max(1, Math.round(numeric));
+}
+
+function asFiniteNumber(value, fallback) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : fallback;
+}
+
+function sanitizeHitbox(rawHitbox, cell) {
+  if (!rawHitbox || typeof rawHitbox !== "object") return null;
+  const x = asFiniteNumber(rawHitbox.x, NaN);
+  const y = asFiniteNumber(rawHitbox.y, NaN);
+  const width = asFiniteNumber(rawHitbox.width, NaN);
+  const height = asFiniteNumber(rawHitbox.height, NaN);
+  if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(width) || !Number.isFinite(height)) {
+    return null;
+  }
+  if (width <= 0 || height <= 0) return null;
+
+  const normalizedX = Math.max(0, Math.min(cell.width - 1, Math.round(x)));
+  const normalizedY = Math.max(0, Math.min(cell.height - 1, Math.round(y)));
+  return {
+    x: normalizedX,
+    y: normalizedY,
+    width: Math.max(1, Math.min(cell.width - normalizedX, Math.round(width))),
+    height: Math.max(1, Math.min(cell.height - normalizedY, Math.round(height))),
+  };
+}
+
+function sanitizeStateDefinition(stateName, rawState, cell) {
+  if (!rawState || typeof rawState !== "object") {
+    throw new Error(`Animation state "${stateName}" is missing or invalid.`);
+  }
+  const sheetPattern =
+    typeof rawState.sheetPattern === "string" && rawState.sheetPattern.trim().length > 0
+      ? rawState.sheetPattern.trim()
+      : null;
+  if (!sheetPattern) {
+    throw new Error(`Animation state "${stateName}" is missing "sheetPattern".`);
+  }
+
+  const columns = asPositiveInteger(rawState.columns, 4);
+  const frameCount = asPositiveInteger(rawState.frameCount, 1);
+  const fps = asPositiveInteger(rawState.fps, 10);
+  const loop = typeof rawState.loop === "boolean" ? rawState.loop : true;
+  const nextState =
+    typeof rawState.nextState === "string" && rawState.nextState.trim().length > 0
+      ? rawState.nextState.trim()
+      : "IdleReady";
+
+  return {
+    sheetPattern,
+    columns,
+    frameCount,
+    fps,
+    loop,
+    nextState,
+    hitboxPx: sanitizeHitbox(rawState.hitboxPx, cell),
+  };
+}
+
+function readAnimationManifest(characterId) {
+  if (typeof characterId !== "string" || !/^[a-z0-9_-]+$/i.test(characterId)) {
+    throw new Error(`Invalid character id "${characterId}".`);
+  }
+
+  const cached = animationManifestCache.get(characterId);
+  if (cached) return cached;
+
+  const characterDir = path.join(CHARACTER_ASSETS_ROOT, characterId);
+  const manifestPath = path.join(characterDir, "manifest.json");
+  if (!fs.existsSync(manifestPath)) {
+    throw new Error(`Missing animation manifest: ${manifestPath}`);
+  }
+
+  const raw = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+  const directions = Array.isArray(raw?.directions)
+    ? raw.directions.filter((value) => typeof value === "string" && value.trim().length > 0)
+    : [];
+  if (directions.length !== REQUIRED_SPRITE_DIRECTIONS.length) {
+    throw new Error(`Manifest "${characterId}" directions are incomplete.`);
+  }
+  for (const requiredDirection of REQUIRED_SPRITE_DIRECTIONS) {
+    if (!directions.includes(requiredDirection)) {
+      throw new Error(`Manifest "${characterId}" is missing direction "${requiredDirection}".`);
+    }
+  }
+
+  const cell = {
+    width: asPositiveInteger(raw?.cell?.width, 256),
+    height: asPositiveInteger(raw?.cell?.height, 256),
+  };
+  const normalized = {
+    version: asPositiveInteger(raw?.version, 1),
+    characterId,
+    directions,
+    cell,
+    pivotPx: {
+      x: Math.max(0, Math.min(cell.width, asFiniteNumber(raw?.pivotPx?.x, Math.round(cell.width / 2)))),
+      y: Math.max(0, Math.min(cell.height, asFiniteNumber(raw?.pivotPx?.y, cell.height))),
+    },
+    display: {
+      targetHeightPx: asPositiveInteger(raw?.display?.targetHeightPx, 220),
+    },
+    states: {},
+  };
+
+  if (!raw?.states || typeof raw.states !== "object") {
+    throw new Error(`Manifest "${characterId}" is missing states.`);
+  }
+
+  for (const [stateName, rawState] of Object.entries(raw.states)) {
+    normalized.states[stateName] = sanitizeStateDefinition(stateName, rawState, cell);
+  }
+
+  for (const requiredState of REQUIRED_SPRITE_STATES) {
+    if (!normalized.states[requiredState]) {
+      throw new Error(`Manifest "${characterId}" is missing state "${requiredState}".`);
+    }
+  }
+
+  const payload = {
+    characterId,
+    basePath: path.relative(__dirname, characterDir).split(path.sep).join("/"),
+    manifest: normalized,
+  };
+
+  animationManifestCache.set(characterId, payload);
+  return payload;
+}
 
 function summarizeDisplay(display) {
   return {
@@ -858,6 +1013,10 @@ ipcMain.handle("pet:getConfig", () => {
     availableFlingPresets: Object.keys(FLING_PRESETS),
     layout: PET_LAYOUT,
   };
+});
+
+ipcMain.handle("pet:getAnimationManifest", (_event, characterId) => {
+  return readAnimationManifest(characterId);
 });
 
 app.whenReady().then(() => {

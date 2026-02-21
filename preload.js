@@ -8,6 +8,8 @@ contextBridge.exposeInMainWorld("petAPI", {
     ipcRenderer.send("pet:setIgnoreMouseEvents", { ignore, forward }),
   setVisibleBounds: (bounds) => ipcRenderer.send("pet:setVisibleBounds", bounds),
   getConfig: () => ipcRenderer.invoke("pet:getConfig"),
+  getAnimationManifest: (characterId) =>
+    ipcRenderer.invoke("pet:getAnimationManifest", characterId),
   onMotion: (callback) => {
     if (typeof callback !== "function") {
       return () => {};
