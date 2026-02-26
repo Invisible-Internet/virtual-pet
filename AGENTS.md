@@ -101,7 +101,7 @@ Status schema:
 | Deliverable | Status | File |
 | --- | --- | --- |
 | `00-master-roadmap` | `in_progress` | `docs/plan/00-master-roadmap.md` |
-| `01-gap-analysis-expansion-vs-current` | `in_progress` | `docs/plan/01-gap-analysis-expansion-vs-current.md` |
+| `01-gap-analysis-expansion-vs-current` | `review` | `docs/plan/01-gap-analysis-expansion-vs-current.md` |
 | `02-architecture-capability-registry` | `not_started` | `docs/plan/02-architecture-capability-registry.md` |
 | `02b-extension-framework-and-pack-sdk` | `not_started` | `docs/plan/02b-extension-framework-and-pack-sdk.md` |
 | `03-pet-core-events-intents-suggestions` | `not_started` | `docs/plan/03-pet-core-events-intents-suggestions.md` |
@@ -114,13 +114,14 @@ Status schema:
 
 ### Current Progress Snapshot
 - Current Deliverable: `01-gap-analysis-expansion-vs-current`
-- Current Status: `in_progress`
-- Overall Progress: `0/9 implementation deliverables done` (docs bootstrapped, content in progress)
+- Current Status: `review`
+- Overall Progress: `0/9 implementation deliverables done` (D01 mapped and in review; implementation deliverables not started)
 - Scope Note: roadmap now explicitly tracks roam modes, baseline state set/priority, tray/settings/wardrobe surface, memory/introspection contracts, and visible acceptance tests.
 - Scope Note: roadmap also explicitly tracks conversation UX (chat/voice), speech bubble/dialog fallback, and lip-sync approximation with degraded-mode behavior.
 - Scope Note: roadmap includes proactive pet messaging, explicit introspection payload expectations, music-mode feedback loop, and memory/hobby governance details.
 - Scope Note: roadmap also includes simple/complex custom-state onboarding patterns and read-only pet state context propagation to OpenClaw.
 - Scope Note: roadmap now includes `02b-extension-framework-and-pack-sdk` for extension packs, prop world model, trust/permission policy, arbitration, and OpenClaw context enrichment contracts.
+- Scope Note: D01 now includes full Adopt/Adapt/Defer gap mapping, renderer-baseline lock, extension framework row coverage, and ADR alignment checks; pending final sign-off before marking `done`.
 
 ### Gating Rule
 - Do not advance to the next deliverable until the current deliverable is marked `done` and its verification gate is explicitly marked passed in its file and mirrored in `docs/plan/00-progress-tracker.md`.

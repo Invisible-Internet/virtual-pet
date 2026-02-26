@@ -14,14 +14,14 @@ Allowed values:
 
 ## Current Deliverable
 - Current Deliverable: `01-gap-analysis-expansion-vs-current`
-- Current Status: `in_progress`
-- Overall Progress: `0/9 implementation deliverables done` (docs bootstrapped, content in progress)
+- Current Status: `review`
+- Overall Progress: `0/9 implementation deliverables done` (D01 mapped and under review; implementation deliverables not started)
 
 ## Deliverable Status Table
 | Deliverable | Status | Notes |
 | --- | --- | --- |
 | `00-master-roadmap` | `in_progress` | Initial version seeded |
-| `01-gap-analysis-expansion-vs-current` | `in_progress` | Active working document |
+| `01-gap-analysis-expansion-vs-current` | `review` | Mapping table completed with extension coverage and ADR cross-check; pending sign-off for `done` |
 | `02-architecture-capability-registry` | `not_started` | Waiting on D01 verification |
 | `02b-extension-framework-and-pack-sdk` | `not_started` | Waiting on D02 verification |
 | `03-pet-core-events-intents-suggestions` | `not_started` | Waiting on D02 + D02b |
@@ -33,22 +33,18 @@ Allowed values:
 | `09-decisions-log` | `in_progress` | Seed decisions added |
 
 ## Next 3 Actions
-1. Complete D01 (`01-gap-analysis-expansion-vs-current`) mapping for extension framework rows: pack model, prop world windows, arbitration model, hook trust model, compatibility policy, and OpenClaw state/context propagation.
-2. Finalize D01 renderer strategy mapping as `Adopt current Canvas baseline` and keep migration proposals out of this roadmap scope.
-3. Mark D01 `review` only after tangible acceptance checklist includes extension framework coverage (offline/online context path, prop world behavior, trust/permission visibility) and cross-check against `09-decisions-log.md`.
+1. Run human review pass on D01 mapping completeness and verify every requested feature target resolves to a concrete row and downstream owner.
+2. Resolve any D01 review edits and, if accepted, mark D01 `done` with explicit verification-gate pass text mirrored in this tracker.
+3. Prepare D02 kickoff checklist (capability map skeleton + failure/degraded scenarios) but do not start D02 drafting until D01 is marked `done`.
 
 ## Blockers
 - None currently.
 
 ## Last Session Summary
-- Bootstrapped planning workspace under `docs/plan/`.
-- Seeded roadmap, tracker, deliverable skeletons, and decisions log.
-- Added session handoff/resume protocol to `AGENTS.md`.
-- Expanded roadmap/deliverable scope to include explicit roam/state/shell/memory/introspection targets and visible acceptance test expectations.
-- Added conversation/speech/lip-sync planning scope with degraded-mode fallback requirements and visible acceptance targets.
-- Added deeper specification anchors (introspection payload fields, memory layout/tier details, hobby scoring weights, proactive messaging, and music-mode rating loop).
-- Added explicit coverage for simple/complex custom state onboarding and read-only state-context propagation to OpenClaw.
-- Added deliverable `02b-extension-framework-and-pack-sdk` and mapped dependencies across D03/D04/D07/D08.
+- Completed D01 expansion-to-repo mapping table with explicit `Adopt/Adapt/Defer` decisions across renderer, state, shell, sensor, OpenClaw, memory, hobby, music, and extension framework themes.
+- Added mandatory extension-framework rows to D01: pack model, discovery paths, prop world windows, arbitration model, hook trust/permission model, compatibility policy, and online/offline OpenClaw context propagation.
+- Finalized renderer strategy in D01 as `Adopt` Canvas baseline and `Defer` renderer migration work outside current roadmap scope.
+- Added D01 ADR cross-check against `09-decisions-log.md`, prioritized downstream gap list, and tangible acceptance checklist coverage; moved D01 status to `review`.
 
 ## Documentation Bootstrap Verification Checklist
 - [x] All required files exist in `docs/plan/`.
