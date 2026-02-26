@@ -115,6 +115,8 @@ Status schema:
 - Current Deliverable: `01-gap-analysis-expansion-vs-current`
 - Current Status: `in_progress`
 - Overall Progress: `0/8 implementation deliverables done` (docs bootstrapped, content in progress)
+- Scope Note: roadmap now explicitly tracks roam modes, baseline state set/priority, tray/settings/wardrobe surface, memory/introspection contracts, and visible acceptance tests.
+- Scope Note: roadmap also explicitly tracks conversation UX (chat/voice), speech bubble/dialog fallback, and lip-sync approximation with degraded-mode behavior.
 
 ### Gating Rule
 - Do not advance to the next deliverable until the current deliverable is marked `done` and its verification gate is explicitly marked passed in its file and mirrored in `docs/plan/00-progress-tracker.md`.

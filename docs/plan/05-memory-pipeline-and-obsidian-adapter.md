@@ -17,6 +17,17 @@ Define memory pipeline architecture that can run with or without Obsidian, while
 - Identity promotion guardrails.
 - Adapter model: `local` and `obsidian`.
 - Write-target controls and mutation log.
+- Two-domain memory model:
+  - Domain 1: OpenClaw core workspace docs.
+  - Domain 2: Optional Obsidian vault (`W:\\AI\\PrimeaVault`) structure and adapter mapping.
+- Tiered memory policy:
+  - Tier 1 Observations (append-only frequent logs).
+  - Tier 2 Pattern summaries (daily structured updates).
+  - Tier 3 Identity promotion (rare, threshold-gated, logged).
+- Identity partition model:
+  - Immutable Core (never auto-modified).
+  - Declared Preferences (manual/rare).
+  - Adaptive Preferences (auto-updated under thresholds).
 
 ## Out of Scope
 - Full memory UX in notebook UI.
@@ -37,6 +48,7 @@ Define memory pipeline architecture that can run with or without Obsidian, while
 3. Define promotion thresholds and anti-volatility rules.
 4. Define adapter interfaces and fallback semantics.
 5. Define immutable/protected sections and audit logging.
+6. Define required vault path layout and adapter behavior when folders are missing.
 
 ## Verification Gate
 Pass when all are true:
@@ -44,6 +56,11 @@ Pass when all are true:
 2. Pipeline works in `obsidian` mode when vault path exists.
 3. Invalid adapter/path degrades to local mode without runtime failure.
 4. Promotion writes are threshold-gated and logged.
+5. Identity section protections are explicit, including "never mutate Immutable Core."
+
+## Tangible Acceptance Test (Doc-Level)
+1. Example data flow shows one observation record promoted to summary and either rejected/accepted for adaptive identity by threshold rules.
+2. Reviewer can verify mutation-log format and find required fields (timestamp, source evidence, threshold check outcome).
 
 ## Open Questions
 - Default summary cadence (`daily` vs `manual + daily` hybrid).

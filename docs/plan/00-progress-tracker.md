@@ -32,9 +32,9 @@ Allowed values:
 | `09-decisions-log` | `in_progress` | Seed decisions added |
 
 ## Next 3 Actions
-1. Complete D01 (`01-gap-analysis-expansion-vs-current`) with explicit repo-to-roadmap mapping.
-2. Review D01 against assumptions in `09-decisions-log.md`.
-3. Mark D01 `review` only after D01 verification gate checklist passes.
+1. Complete D01 (`01-gap-analysis-expansion-vs-current`) mapping for roam modes, baseline states/priority, tray/settings/wardrobe, sensor contracts, memory tiers, introspection, conversation/speech/lip-sync, and hobby model.
+2. Finalize D01 renderer strategy mapping as `Adopt current Canvas baseline` and keep migration proposals out of this roadmap scope.
+3. Mark D01 `review` only after tangible acceptance checklist includes conversation offline fallback, speech bubble/chatbox paths, and voice fallback behavior cross-checked against `09-decisions-log.md`.
 
 ## Blockers
 - None currently.
@@ -43,6 +43,8 @@ Allowed values:
 - Bootstrapped planning workspace under `docs/plan/`.
 - Seeded roadmap, tracker, deliverable skeletons, and decisions log.
 - Added session handoff/resume protocol to `AGENTS.md`.
+- Expanded roadmap/deliverable scope to include explicit roam/state/shell/memory/introspection targets and visible acceptance test expectations.
+- Added conversation/speech/lip-sync planning scope with degraded-mode fallback requirements and visible acceptance targets.
 
 ## Documentation Bootstrap Verification Checklist
 - [x] All required files exist in `docs/plan/`.

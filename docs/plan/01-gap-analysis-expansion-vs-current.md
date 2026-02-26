@@ -18,6 +18,16 @@ Map ideas from the expansion conversation to current repository reality and lock
   - `Adapt`
   - `Defer`
 - Document technical reasons and dependency implications.
+- Include explicit mapping for:
+  - Desktop roaming modes (full desktop vs user-defined roam zone).
+  - Baseline states and priority policy (`Idle`, `Roam`, `MusicChill`, `MusicDance`, `WatchMode`, `Sleep`).
+  - Taskbar/tray settings and wardrobe UX surface.
+  - Sensor model (including Windows GSMTC media source assumptions).
+  - Memory domains/tiers and identity-promotion governance.
+  - Introspection behavior modes.
+  - Conversation pathways (voice + text) including offline fallback UX.
+  - Speech presentation (bubble/balloon) and lip-sync approximation behavior.
+  - Hobby stream and scoring model.
 
 ## Out of Scope
 - Implementing feature code.
@@ -31,6 +41,7 @@ Map ideas from the expansion conversation to current repository reality and lock
 - Canvas runtime baseline is retained.
 - OpenClaw is advisory/orchestration, not render-loop authority.
 - Capability registry model is v1 plugin strategy.
+- Renderer migration proposals (DOM/CSS or Pixi) are out of scope for this roadmap and treated as future-only unless ADR-0001 is superseded.
 
 ## Implementation Breakdown
 1. Inventory expansion doc themes (states, memory, OpenClaw, integrations, architecture posture).
@@ -38,6 +49,7 @@ Map ideas from the expansion conversation to current repository reality and lock
 3. Build a mapping table: `Theme -> Current State -> Decision -> Rationale -> Target Deliverable`.
 4. Resolve conflicts with locked decisions.
 5. Publish prioritized gap list for D02-D06.
+6. Add a "visible verification checklist" for each mapped theme so acceptance can be observed unambiguously.
 
 ## Verification Gate
 Pass when all are true:
@@ -45,6 +57,12 @@ Pass when all are true:
 2. No theme is left without a decision state (`Adopt/Adapt/Defer`).
 3. All `Adopt/Adapt` items point to a downstream deliverable.
 4. Locked decisions in D09 are respected.
+5. All requested feature targets (roam modes, states, tray/settings/wardrobe, memory/introspection/hobby, conversation/speech/lip-sync) are present in the mapping table.
+
+## Tangible Acceptance Test (Doc-Level)
+1. Reviewer can point to one row per requested feature target in the mapping table.
+2. Each row has `Adopt/Adapt/Defer`, rationale, and downstream deliverable reference.
+3. Renderer strategy row explicitly confirms `Adopt current Canvas baseline` with no migration work in current roadmap scope.
 
 ## Open Questions
 - None at bootstrap; to be filled during active work.

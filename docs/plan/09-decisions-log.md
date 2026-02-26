@@ -10,6 +10,7 @@ Related:
 - **Rationale:** Current runtime is stable and already supports drag/fling/sprite state behavior. Renderer rewrite would delay high-value integration work.
 - **Alternatives Considered:** DOM/CSS migration now, Pixi migration now.
 - **Impacted Files/Modules:** `renderer.js`, `renderer-sprite-runtime.js`, planning deliverables D01-D08.
+- **Confirmation Note (2026-02-26):** Team reaffirmed no renderer migration in current roadmap scope.
 
 ## ADR-0002: Use Capability Registry (Built-in Modules) for v1
 - **Date:** 2026-02-26
@@ -45,3 +46,10 @@ Related:
 - **Rationale:** Balances extensibility and maintainability while avoiding state-engine sprawl.
 - **Alternatives Considered:** Data-only states, code-only states.
 - **Impacted Files/Modules:** D07 state extension design, state catalog/hook contracts.
+
+## ADR-0007: Conversation UX Is Text-First Resilient with Optional Voice
+- **Date:** 2026-02-26
+- **Decision:** Conversation must remain usable via local chat input/output and bubble UI regardless of OpenClaw/STT/TTS availability; voice is additive, not required for baseline operation.
+- **Rationale:** Keeps interaction dependable in degraded environments and avoids hard dependency on external voice/runtime services.
+- **Alternatives Considered:** Voice-first interaction with no text fallback, OpenClaw-required chat path.
+- **Impacted Files/Modules:** D03 contracts, D04 bridge spec, D07 dialogue visual bindings, D08 acceptance matrix.

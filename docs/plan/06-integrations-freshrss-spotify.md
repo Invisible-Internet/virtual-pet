@@ -16,6 +16,15 @@ Define how FreshRSS and Spotify are integrated through OpenClaw-first orchestrat
 - Skill availability checks.
 - Health/status reporting in capability model.
 - Missing integration fallback behavior.
+- FreshRSS stream partition model:
+  - `Mic/Curated`
+  - `Primea/Demographic`
+  - `Discovery/Trending`
+- Feed scoring contract and reason logging.
+- Spotify/media mode mapping contract:
+  - `MEDIA.playing=true` triggers music-mode evaluation.
+  - Initial focus path for `MusicChill` behavior and optional entry dialogue suggestion.
+- User feedback capture contract (e.g., track rating) for memory pipeline.
 
 ## Out of Scope
 - Provider-specific credential UI details.
@@ -42,6 +51,11 @@ Pass when all are true:
 2. Missing/failed integration behavior is documented and non-fatal.
 3. Health statuses map into capability registry.
 4. Integration outputs feed memory pipeline schemas.
+5. Feed scoring and "why selected" logging fields are explicitly defined.
+
+## Tangible Acceptance Test (Doc-Level)
+1. Example scoring sheet ranks at least 3 sample feed items with explicit score contributions.
+2. Example Spotify/media event trace shows trigger to music-mode contract and resulting log payload.
 
 ## Open Questions
 - Minimum required Spotify actions for v1 (`play/pause/next/volume`) vs extended set.

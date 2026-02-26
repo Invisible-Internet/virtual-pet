@@ -17,6 +17,18 @@ Define the built-in capability registry architecture that makes integrations opt
 - Runtime status model.
 - Enable/disable behavior.
 - Fallback/degraded behavior rules.
+- Capability boundaries for architecture layers:
+  - Renderer runtime boundary (retain Canvas baseline for v2 scope).
+  - Pet brain/state machine boundary (deterministic local authority).
+  - Sensor boundary (main-process normalized event producers).
+  - OpenClaw bridge boundary (advisory/orchestration only).
+- Desktop shell boundary:
+  - Taskbar/tray icon + settings menu capability ownership.
+  - Wardrobe/costume/accessory capability ownership and dependency model.
+- Conversation/speech boundary:
+  - `dialogUi` capability (speech bubble/chatbox input/output).
+  - `voiceIo` capability (STT/TTS adapters with health/degraded status).
+  - `lipSync` capability (audio-activity driven approximation; non-blocking).
 
 ## Out of Scope
 - Dynamic third-party plugin loading.
@@ -37,6 +49,7 @@ Define the built-in capability registry architecture that makes integrations opt
 3. Define intent routing responsibilities.
 4. Define global health and telemetry shape.
 5. Define fallback behavior per capability class.
+6. Define capability map for `renderer`, `brain`, `sensors`, `openclawBridge`, `desktopShell`, `wardrobe`, `dialogUi`, `voiceIo`, `lipSync`.
 
 ## Verification Gate
 Pass when all are true:
@@ -44,6 +57,11 @@ Pass when all are true:
 2. Status transitions are deterministic.
 3. Failures cannot block core pet runtime.
 4. Routing ownership is unambiguous.
+5. Desktop shell, conversation/speech, and wardrobe ownership boundaries are documented with failure fallbacks.
+
+## Tangible Acceptance Test (Doc-Level)
+1. A capability map table exists with one row for each required capability class.
+2. Reviewer can trace one failure scenario per capability and confirm documented degraded behavior.
 
 ## Open Questions
 - Should capability state persist across restarts in v1 or derive from config only?

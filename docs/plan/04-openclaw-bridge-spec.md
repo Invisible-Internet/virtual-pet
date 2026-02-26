@@ -17,6 +17,15 @@ Specify how the app integrates with OpenClaw in an OpenClaw-first orchestration 
 - Retry/backoff behavior.
 - Error/degraded behavior.
 - Security and minimal context payload policy.
+- Introspection query routing model (`what are you thinking/doing/status report`) with safe response modes.
+- Dialogue request routing model for text and optional voice pipelines (STT in, TTS out).
+- Fallback policy for voice features:
+  - If STT unavailable: chat input remains usable.
+  - If TTS unavailable: text + optional canned talk SFX fallback.
+- Non-authority guarantees:
+  - Bridge cannot directly set runtime state.
+  - Bridge cannot control render loop.
+  - Bridge cannot mutate immutable identity sections.
 
 ## Out of Scope
 - Skill implementation internals.
@@ -36,6 +45,7 @@ Specify how the app integrates with OpenClaw in an OpenClaw-first orchestration 
 3. Define streaming event handling contract.
 4. Define timeout/retry/circuit-breaker behavior.
 5. Define fallback semantics when unavailable.
+6. Define dialogue channel behavior (streaming text, optional TTS asset return, interruption/cancel handling).
 
 ## Verification Gate
 Pass when all are true:
@@ -43,6 +53,16 @@ Pass when all are true:
 2. Failure modes have explicit fallback behavior.
 3. No bridge state can block render loop or drag/fling pipeline.
 4. Security assumptions and constraints are documented.
+5. Bridge authority limitations are explicit and testable.
+6. Bridge degradation behavior includes explicit text-only fallback and optional canned SFX talk mode.
+
+## Tangible Acceptance Test (Doc-Level)
+1. Sequence diagram shows an AI timeout case and deterministic local fallback result.
+2. A policy table explicitly marks blocked actions (`set state directly`, `render control`, `immutable identity write`).
+3. Sequence set includes:
+   - Online text dialog with optional TTS.
+   - Offline dialog fallback through local chat/bubble.
+   - TTS-failure fallback to canned talk SFX mode.
 
 ## Open Questions
 - Default reconnect policy tuning for local loopback deployments.
