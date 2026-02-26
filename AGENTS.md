@@ -83,3 +83,44 @@ If diagnostics are enabled, also verify:
   - Clamp math in `main.js`
   - Draw anchor/bounds in `renderer.js`
 - If you centralize shared constants, prefer one source exported through preload-safe config or static JSON to avoid mismatch.
+
+## Planning Workflow And Resume Protocol
+
+This section defines the mandatory session handoff process for roadmap execution.
+
+### Mandatory Startup Sequence
+1. Read `AGENTS.md` first.
+2. Read `docs/plan/00-progress-tracker.md`.
+3. Open the file listed in `Current Deliverable`.
+4. Continue only work relevant to that deliverable unless a blocker requires escalation.
+
+### Deliverable TODO Table
+Status schema:
+- `not_started | in_progress | review | blocked | done`
+
+| Deliverable | Status | File |
+| --- | --- | --- |
+| `00-master-roadmap` | `in_progress` | `docs/plan/00-master-roadmap.md` |
+| `01-gap-analysis-expansion-vs-current` | `in_progress` | `docs/plan/01-gap-analysis-expansion-vs-current.md` |
+| `02-architecture-capability-registry` | `not_started` | `docs/plan/02-architecture-capability-registry.md` |
+| `03-pet-core-events-intents-suggestions` | `not_started` | `docs/plan/03-pet-core-events-intents-suggestions.md` |
+| `04-openclaw-bridge-spec` | `not_started` | `docs/plan/04-openclaw-bridge-spec.md` |
+| `05-memory-pipeline-and-obsidian-adapter` | `not_started` | `docs/plan/05-memory-pipeline-and-obsidian-adapter.md` |
+| `06-integrations-freshrss-spotify` | `not_started` | `docs/plan/06-integrations-freshrss-spotify.md` |
+| `07-state-system-extension-guide` | `not_started` | `docs/plan/07-state-system-extension-guide.md` |
+| `08-test-and-acceptance-matrix` | `not_started` | `docs/plan/08-test-and-acceptance-matrix.md` |
+| `09-decisions-log` | `in_progress` | `docs/plan/09-decisions-log.md` |
+
+### Current Progress Snapshot
+- Current Deliverable: `01-gap-analysis-expansion-vs-current`
+- Current Status: `in_progress`
+- Overall Progress: `0/8 implementation deliverables done` (docs bootstrapped, content in progress)
+
+### Gating Rule
+- Do not advance to the next deliverable until the current deliverable is marked `done` and its verification gate is explicitly marked passed in its file and mirrored in `docs/plan/00-progress-tracker.md`.
+
+### Session-End Update Rule
+- At the end of every working session, update both:
+  - `docs/plan/00-progress-tracker.md`
+  - `AGENTS.md` (Current Progress Snapshot and TODO status rows)
+- Ensure both files point to the same `Current Deliverable` and status before stopping.
