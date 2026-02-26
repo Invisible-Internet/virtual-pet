@@ -1,7 +1,7 @@
 # Deliverable 05: Memory Pipeline and Obsidian Adapter
 
 **Deliverable ID:** `05-memory-pipeline-and-obsidian-adapter`  
-**Status:** `not_started`  
+**Status:** `in_progress`  
 **Owner:** `Mic + Codex`  
 **Last Updated:** `2026-02-26`  
 **Depends On:** `04-openclaw-bridge-spec`  
@@ -114,9 +114,9 @@ Pass when all are true:
 4. Configure missing vault path and confirm graceful fallback to local adapter mode.
 
 ## Gate Status
-- `Doc Gate`: `not_started`
-- `Implementation Gate`: `not_started`
-- `Overall`: `not_started`
+- `Doc Gate`: `in_progress`
+- `Implementation Gate`: `in_progress`
+- `Overall`: `in_progress`
 
 ## Open Questions
 - Default summary cadence (`daily` vs `manual + daily` hybrid).
@@ -124,3 +124,6 @@ Pass when all are true:
 ## Change Log
 - `2026-02-26`: File created and seeded.
 - `2026-02-26`: Updated for `spec + implementation slice` workflow with mandatory implementation/visible outcome sections and dual-gate status.
+- `2026-02-26`: Advanced to `in_progress` after D04 closeout approval.
+- `2026-02-26`: Returned to `not_started` after D04 was reopened for runtime implementation and verification hardening.
+- `2026-02-26`: Returned to `in_progress` after D04 re-closeout and gate pass.

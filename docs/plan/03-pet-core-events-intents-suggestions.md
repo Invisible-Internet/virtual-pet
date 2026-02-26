@@ -1,7 +1,7 @@
 # Deliverable 03: Pet Core Event/Intent/Suggestion Contracts
 
 **Deliverable ID:** `03-pet-core-events-intents-suggestions`  
-**Status:** `in_progress`  
+**Status:** `done`  
 **Owner:** `Mic + Codex`  
 **Last Updated:** `2026-02-26`  
 **Depends On:** `02-architecture-capability-registry`, `02b-extension-framework-and-pack-sdk`  
@@ -335,8 +335,11 @@ Pass when all are true:
 
 ## Gate Status
 - `Doc Gate`: `passed`
-- `Implementation Gate`: `in_progress`
-- `Overall`: `in_progress`
+- `Implementation Gate`: `passed`
+- `Overall`: `done`
+
+## Verification Gate Status
+- `Passed (2026-02-26): D03 contract schema + runtime slice were validated with operator-run evidence for status introspection flow, proactive announcement cooldown skip behavior, and extension interaction routing with end-to-end correlation IDs.`
 
 ## Implementation Progress (This Session)
 - [x] Added contract router module: `pet-contract-router.js`.
@@ -361,7 +364,7 @@ Pass when all are true:
 - [x] Added contract suggestion diagnostics visibility improvements:
   - renderer debug overlay now shows latest suggestion type + correlation ID.
   - main-process logs now emit `PET_ANNOUNCEMENT_SKIPPED` and `PET_RESPONSE` summaries.
-- [ ] Manual runtime verification for D03 slice pending operator run.
+- [x] Manual runtime verification for D03 slice completed with operator-run logs.
 
 ## Automated Verification Evidence (2026-02-26)
 - `npm run check` passed with:
@@ -371,6 +374,18 @@ Pass when all are true:
     - `EXT_PROP_INTERACTED` mapping to `INTENT_PROP_INTERACTION` and `PET_RESPONSE`
   - Correlation ID preservation assertions across all trace stages.
   - Existing layout and asset validation checks.
+
+## Manual Verification Evidence (2026-02-26)
+1. Command introspection path validated:
+   - `USER_COMMAND -> INTENT_INTROSPECTION_STATUS -> PET_RESPONSE`
+   - Correlation ID preserved across event/intent/suggestion logs.
+2. Proactive announcement cooldown validated:
+   - First trigger: `PET_ANNOUNCEMENT`
+   - Immediate retrigger: `PET_ANNOUNCEMENT_SKIPPED` with `skipReason=cooldown_active`
+   - Post-cooldown retrigger: `PET_ANNOUNCEMENT`
+3. Extension interaction routing validated:
+   - `EXT_PROP_INTERACTED -> INTENT_PROP_INTERACTION -> PET_RESPONSE`
+   - Correlation ID preserved across all trace stages.
 
 ## Working Draft (v0.1)
 First D03 runtime slice is command/event-centric and focuses on deterministic routing, traceability, and cooldown behavior:
@@ -400,3 +415,4 @@ Each stage includes:
 - `2026-02-26`: Updated for `spec + implementation slice` workflow with mandatory implementation/visible outcome sections and dual-gate status.
 - `2026-02-26`: Advanced to `in_progress`; added first runtime event-intent-suggestion slice (`pet-contract-router.js`) with correlation IDs, user-command routing, announcement cooldown, extension interaction mapping, and trace IPC wiring.
 - `2026-02-26`: Added contract ownership/schema/evolution/bounded-payload policy details, marked `Doc Gate` as `passed`, and added deterministic contract router verification script coverage while keeping implementation gate pending manual runtime verification.
+- `2026-02-26`: Manual verification evidence captured from operator run (status flow, cooldown skip, extension interaction), verification gate marked `passed`, and deliverable moved to `done`.

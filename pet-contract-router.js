@@ -24,6 +24,12 @@ function normalizeUserCommand(payload) {
   if (raw === "announce-test" || raw === "announce") {
     return "announce-test";
   }
+  if (raw === "bridge-test" || raw === "bridge") {
+    return "bridge-test";
+  }
+  if (raw === "guardrail-test" || raw === "guardrail") {
+    return "guardrail-test";
+  }
   return raw || "unknown";
 }
 
@@ -107,6 +113,24 @@ class PetContractRouter {
               reason: "manual_test",
               text: "Manual announcement test from USER_COMMAND.",
               priority: "low",
+            },
+          },
+        ];
+      }
+
+      if (normalizedCommand === "bridge-test" || normalizedCommand === "guardrail-test") {
+        return [
+          {
+            type: "INTENT_BRIDGE_DIALOG",
+            reason: "user_command_bridge_dialog",
+            correlationId: event.correlationId,
+            ts: this._now(),
+            payload: {
+              command: normalizedCommand,
+              text:
+                normalizeText(event.payload?.text) ||
+                normalizeText(event.payload?.command) ||
+                normalizedCommand,
             },
           },
         ];
@@ -216,6 +240,23 @@ class PetContractRouter {
           mode: "text",
           source,
           text: `Interacting with ${propId} from ${extensionId}.`,
+          correlationId: intent.correlationId,
+          ts: this._now(),
+        },
+      ];
+    }
+
+    if (intent.type === "INTENT_BRIDGE_DIALOG") {
+      const bridgeDialogText =
+        normalizeText(context.bridgeDialogText) || "Bridge unavailable. Local dialog fallback active.";
+      const fallbackMode = normalizeText(context.bridgeFallbackMode) || "none";
+      return [
+        {
+          type: "PET_RESPONSE",
+          mode: "text",
+          source,
+          fallbackMode,
+          text: bridgeDialogText,
           correlationId: intent.correlationId,
           ts: this._now(),
         },

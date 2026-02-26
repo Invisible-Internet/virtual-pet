@@ -216,10 +216,48 @@ function testExtensionInteractionFlow() {
   }
 }
 
+function testBridgeDialogFlow() {
+  const clock = createClock(4500);
+  const router = createPetContractRouter({
+    now: () => clock.now(),
+  });
+
+  const result = router.processEvent(
+    {
+      type: "USER_COMMAND",
+      correlationId: "corr-bridge",
+      payload: {
+        command: "bridge-test",
+        text: "bridge-test",
+      },
+      ts: clock.now(),
+    },
+    {
+      source: "online",
+      bridgeDialogText: "OpenClaw response: bridge-test",
+      bridgeFallbackMode: "none",
+    }
+  );
+
+  assert(result.ok, "bridge dialog should return ok=true");
+  assertEqual(result.intents.length, 1, "bridge dialog should emit one intent");
+  assertEqual(result.intents[0].type, "INTENT_BRIDGE_DIALOG", "bridge intent type mismatch");
+  assertEqual(result.suggestions.length, 1, "bridge dialog should emit one suggestion");
+  assertEqual(result.suggestions[0].type, "PET_RESPONSE", "bridge suggestion type mismatch");
+  assertEqual(result.suggestions[0].source, "online", "bridge suggestion source mismatch");
+  assertEqual(result.suggestions[0].fallbackMode, "none", "bridge fallback mode mismatch");
+  assertIncludes(
+    result.suggestions[0].text,
+    "OpenClaw response",
+    "bridge response text should include bridge content"
+  );
+}
+
 function run() {
   testStatusFlow();
   testAnnouncementCooldownFlow();
   testExtensionInteractionFlow();
+  testBridgeDialogFlow();
   console.log("[contracts] router checks passed");
 }
 

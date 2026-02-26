@@ -4,6 +4,12 @@ const path = require("path");
 const { CAPABILITY_STATES, createCapabilityRegistry } = require("./capability-registry");
 const { createExtensionPackRegistry, DEFAULT_EXTENSIONS_ROOT } = require("./extension-pack-registry");
 const { createPetContractRouter } = require("./pet-contract-router");
+const {
+  BRIDGE_MODES,
+  createOpenClawBridge,
+  normalizeBridgeMode,
+  requestWithTimeout,
+} = require("./openclaw-bridge");
 const { BASE_LAYOUT, computePetLayout } = require("./pet-layout");
 const {
   normalizePetBounds,
@@ -105,6 +111,10 @@ const CAPABILITY_TEST_FLAGS = Object.freeze({
   sensorsFail: process.env.PET_FORCE_SENSORS_FAIL === "1",
   openclawFail: process.env.PET_FORCE_OPENCLAW_FAIL === "1",
 });
+const OPENCLAW_BRIDGE_MODE = normalizeBridgeMode(process.env.PET_OPENCLAW_MODE || BRIDGE_MODES.online);
+const OPENCLAW_BRIDGE_TIMEOUT_MS = Number.isFinite(Number(process.env.PET_OPENCLAW_TIMEOUT_MS))
+  ? Math.max(200, Math.round(Number(process.env.PET_OPENCLAW_TIMEOUT_MS)))
+  : 1200;
 const EXTENSION_TEST_FLAGS = Object.freeze({
   disableAll: process.env.PET_DISABLE_EXTENSIONS === "1",
 });
@@ -130,6 +140,7 @@ let extensionPackRegistry = null;
 let latestExtensionSnapshot = null;
 let contractRouter = null;
 let latestContractTrace = null;
+let openclawBridge = null;
 
 const flingState = {
   active: false,
@@ -930,13 +941,13 @@ function initializeCapabilityRegistry() {
       if (CAPABILITY_TEST_FLAGS.openclawFail) {
         throw new Error("Forced bridge startup failure (PET_FORCE_OPENCLAW_FAIL=1)");
       }
-      return {
-        state: CAPABILITY_STATES.degraded,
-        reason: "offlineFallback",
-        details: {
-          mode: "localOnly",
-        },
-      };
+      if (!openclawBridge) {
+        return {
+          state: CAPABILITY_STATES.failed,
+          reason: "bridgeRuntimeUnavailable",
+        };
+      }
+      return openclawBridge.getStartupState();
     },
   });
 
@@ -1157,6 +1168,22 @@ function initializeExtensionPackRuntime() {
   logExtensionSummary("all-disabled-by-flag", disabledSnapshot);
 }
 
+function initializeOpenClawBridgeRuntime() {
+  const bridgeMode = CAPABILITY_TEST_FLAGS.openclawFail
+    ? BRIDGE_MODES.offline
+    : OPENCLAW_BRIDGE_MODE;
+  openclawBridge = createOpenClawBridge({
+    mode: bridgeMode,
+    logger: (kind, payload) => {
+      console.log(
+        `[pet-openclaw] ${kind} correlationId=${payload?.correlationId || "n/a"} route=${
+          payload?.route || "n/a"
+        } mode=${payload?.mode || bridgeMode}`
+      );
+    },
+  });
+}
+
 function emitContractTrace(trace) {
   if (!trace || typeof trace !== "object") return;
   latestContractTrace = trace;
@@ -1195,6 +1222,27 @@ function initializeContractRouter() {
   });
 }
 
+function createContractCorrelationId() {
+  const randomPart = Math.floor(Math.random() * 0xffffff)
+    .toString(16)
+    .padStart(6, "0");
+  return `evt-${Date.now().toString(36)}-${randomPart}`;
+}
+
+function normalizeUserCommandForBridge(payload) {
+  const rawPayload = payload && typeof payload === "object" ? payload : {};
+  const explicitType =
+    typeof rawPayload.type === "string" ? rawPayload.type.trim().toLowerCase() : "";
+  const command = typeof rawPayload.command === "string" ? rawPayload.command.trim().toLowerCase() : "";
+  const text = typeof rawPayload.text === "string" ? rawPayload.text.trim().toLowerCase() : "";
+  const raw = explicitType || command || text;
+  if (raw === "status" || raw === "introspect" || raw === "what are you doing") return "status";
+  if (raw === "announce-test" || raw === "announce") return "announce-test";
+  if (raw === "bridge-test" || raw === "bridge") return "bridge-test";
+  if (raw === "guardrail-test" || raw === "guardrail") return "guardrail-test";
+  return raw || "unknown";
+}
+
 function deriveContractSource() {
   const bridgeState = capabilityRegistry?.getCapabilityState(CAPABILITY_IDS.openclawBridge);
   if (bridgeState?.state === CAPABILITY_STATES.healthy) {
@@ -1211,6 +1259,177 @@ function buildStatusText() {
     `Capabilities healthy=${summary.healthyCount || 0}, ` +
     `degraded=${summary.degradedCount || 0}, failed=${summary.failedCount || 0}.`
   );
+}
+
+function deriveBridgeCurrentState() {
+  if (dragging) return "Dragging";
+  if (flingState.active) return "Flinging";
+  return "Idle";
+}
+
+function buildActivePropsSummary() {
+  if (!latestExtensionSnapshot || !Array.isArray(latestExtensionSnapshot.extensions)) return "none";
+  const summaries = [];
+  for (const extension of latestExtensionSnapshot.extensions) {
+    if (!extension?.valid || !extension?.enabled || !Array.isArray(extension.props)) continue;
+    const enabledProps = extension.props.filter((prop) => prop?.enabled).length;
+    if (enabledProps <= 0) continue;
+    summaries.push(`${extension.extensionId}:${enabledProps}`);
+  }
+  if (summaries.length <= 0) return "none";
+  return summaries.join(", ").slice(0, 180);
+}
+
+function buildExtensionContextSummary() {
+  const summary = latestExtensionSnapshot?.summary || {};
+  return (
+    `discovered=${summary.discoveredCount || 0}, ` +
+    `valid=${summary.validCount || 0}, enabled=${summary.enabledCount || 0}`
+  );
+}
+
+function buildBridgeRequestContext() {
+  return {
+    currentState: deriveBridgeCurrentState(),
+    stateContextSummary: buildStatusText(),
+    activePropsSummary: buildActivePropsSummary(),
+    extensionContextSummary: buildExtensionContextSummary(),
+    source: deriveContractSource(),
+  };
+}
+
+function buildBridgeFallbackText(route, promptText) {
+  if (route === "introspection_status") {
+    return `${buildStatusText()} (offline fallback)`;
+  }
+  const normalizedPrompt =
+    typeof promptText === "string" && promptText.trim().length > 0 ? promptText.trim() : "your request";
+  return `Bridge unavailable. Local fallback response for "${normalizedPrompt}".`;
+}
+
+function blockBridgeActions(actions, correlationId) {
+  if (!Array.isArray(actions) || actions.length <= 0) return [];
+  const blockedActionTypes = new Set(["set_state", "render_control", "identity_mutation"]);
+  const blocked = [];
+  for (const action of actions) {
+    const actionType =
+      typeof action?.type === "string" ? action.type.trim().toLowerCase() : "unknown";
+    if (!blockedActionTypes.has(actionType)) continue;
+    blocked.push(actionType);
+    console.warn(
+      `[pet-openclaw] blocked-action correlationId=${correlationId} action=${actionType} reason=non_authority_guardrail`
+    );
+    if (DIAGNOSTICS_ENABLED) {
+      emitDiagnostics({
+        kind: "openclawBlockedAction",
+        correlationId,
+        actionType,
+        reason: "non_authority_guardrail",
+      });
+    }
+  }
+  return blocked;
+}
+
+async function requestBridgeDialog({ correlationId, route, promptText }) {
+  if (!openclawBridge) {
+    return {
+      source: "offline",
+      text: buildBridgeFallbackText(route, promptText),
+      fallbackMode: "bridge_unavailable",
+    };
+  }
+
+  try {
+    const outcome = await requestWithTimeout(
+      openclawBridge.sendDialog({
+        correlationId,
+        route,
+        promptText,
+        context: buildBridgeRequestContext(),
+      }),
+      OPENCLAW_BRIDGE_TIMEOUT_MS
+    );
+
+    const blockedActions = blockBridgeActions(outcome?.response?.proposedActions, correlationId);
+    const blockedSuffix =
+      blockedActions.length > 0 ? ` Blocked actions: ${blockedActions.join(", ")}.` : "";
+    updateCapabilityState(
+      CAPABILITY_IDS.openclawBridge,
+      CAPABILITY_STATES.healthy,
+      "requestSuccess",
+      {
+        mode: openclawBridge.getMode(),
+        route,
+      }
+    );
+
+    return {
+      source: "online",
+      text: `${outcome?.response?.text || "OpenClaw response unavailable."}${blockedSuffix}`.trim(),
+      fallbackMode: "none",
+    };
+  } catch (error) {
+    const fallbackMode = error?.code || "bridge_unavailable";
+    const reason = fallbackMode === "bridge_timeout" ? "requestTimeout" : "requestFailed";
+    updateCapabilityState(
+      CAPABILITY_IDS.openclawBridge,
+      CAPABILITY_STATES.degraded,
+      reason,
+      {
+        mode: openclawBridge.getMode(),
+        route,
+        fallbackMode,
+      }
+    );
+    console.warn(
+      `[pet-openclaw] fallback correlationId=${correlationId} route=${route} reason=${fallbackMode}`
+    );
+    return {
+      source: "offline",
+      text: buildBridgeFallbackText(route, promptText),
+      fallbackMode,
+    };
+  }
+}
+
+async function buildBridgeCommandContext(payload, correlationId) {
+  const normalizedCommand = normalizeUserCommandForBridge(payload);
+  if (normalizedCommand === "announce-test" || normalizedCommand === "unknown") {
+    return {};
+  }
+  if (
+    normalizedCommand !== "status" &&
+    normalizedCommand !== "bridge-test" &&
+    normalizedCommand !== "guardrail-test"
+  ) {
+    return {};
+  }
+
+  const route = normalizedCommand === "status" ? "introspection_status" : "dialog_user_command";
+  const promptText =
+    typeof payload?.text === "string" && payload.text.trim().length > 0
+      ? payload.text.trim()
+      : normalizedCommand;
+  const bridgeResult = await requestBridgeDialog({
+    correlationId,
+    route,
+    promptText,
+  });
+
+  if (normalizedCommand === "status") {
+    return {
+      source: bridgeResult.source,
+      statusText: bridgeResult.text,
+      bridgeFallbackMode: bridgeResult.fallbackMode,
+    };
+  }
+
+  return {
+    source: bridgeResult.source,
+    bridgeDialogText: bridgeResult.text,
+    bridgeFallbackMode: bridgeResult.fallbackMode,
+  };
 }
 
 function handleContractSuggestions(result) {
@@ -1245,7 +1464,7 @@ function handleContractSuggestions(result) {
   }
 }
 
-function processPetContractEvent(eventType, payload = {}, context = {}) {
+async function processPetContractEvent(eventType, payload = {}, context = {}) {
   if (!contractRouter) {
     return {
       ok: false,
@@ -1253,10 +1472,19 @@ function processPetContractEvent(eventType, payload = {}, context = {}) {
     };
   }
 
+  const correlationId =
+    typeof context?.correlationId === "string" && context.correlationId.length > 0
+      ? context.correlationId
+      : createContractCorrelationId();
+  const bridgeContext =
+    eventType === "USER_COMMAND"
+      ? await buildBridgeCommandContext(payload, correlationId)
+      : {};
   const result = contractRouter.processEvent(
     {
       type: eventType,
       payload,
+      correlationId,
     },
     {
       source: deriveContractSource(),
@@ -1264,6 +1492,7 @@ function processPetContractEvent(eventType, payload = {}, context = {}) {
       announcementCooldownMsByReason: {
         manual_test: 5000,
       },
+      ...bridgeContext,
       ...context,
     }
   );
@@ -1712,10 +1941,14 @@ ipcMain.handle("pet:interactWithExtensionProp", (_event, payload) => {
     emitDiagnostics(eventPayload);
   }
 
-  processPetContractEvent("EXT_PROP_INTERACTED", {
+  void processPetContractEvent("EXT_PROP_INTERACTED", {
     extensionId,
     propId,
     interactionType,
+  }).catch((error) => {
+    console.warn(
+      `[pet-contract] extension-event processing failed: ${error?.message || String(error)}`
+    );
   });
 
   return result;
@@ -1732,6 +1965,7 @@ app.whenReady().then(async () => {
   physicsTimer = setInterval(stepFling, FLING_CONFIG.stepMs);
   cursorTimer = setInterval(emitCursorState, CURSOR_EMIT_INTERVAL_MS);
   initializeExtensionPackRuntime();
+  initializeOpenClawBridgeRuntime();
   initializeCapabilityRegistry();
   await startCapabilityRegistry();
 

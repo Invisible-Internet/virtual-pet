@@ -550,6 +550,16 @@ function onMovementKeyDown(event) {
     runPetUserCommand("announce-test");
     return;
   }
+  else if (key === "y") {
+    if (event.repeat) return;
+    runPetUserCommand("bridge-test");
+    return;
+  }
+  else if (key === "g") {
+    if (event.repeat) return;
+    runPetUserCommand("guardrail-test");
+    return;
+  }
   else if (key === " " || key === "spacebar") {
     if (!event.repeat) spriteJumpQueued = true;
   } else {

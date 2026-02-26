@@ -115,19 +115,19 @@ Status schema:
 | `01-gap-analysis-expansion-vs-current` | `done` | `docs/plan/01-gap-analysis-expansion-vs-current.md` |
 | `02-architecture-capability-registry` | `done` | `docs/plan/02-architecture-capability-registry.md` |
 | `02b-extension-framework-and-pack-sdk` | `done` | `docs/plan/02b-extension-framework-and-pack-sdk.md` |
-| `03-pet-core-events-intents-suggestions` | `in_progress` | `docs/plan/03-pet-core-events-intents-suggestions.md` |
-| `04-openclaw-bridge-spec` | `not_started` | `docs/plan/04-openclaw-bridge-spec.md` |
-| `05-memory-pipeline-and-obsidian-adapter` | `not_started` | `docs/plan/05-memory-pipeline-and-obsidian-adapter.md` |
+| `03-pet-core-events-intents-suggestions` | `done` | `docs/plan/03-pet-core-events-intents-suggestions.md` |
+| `04-openclaw-bridge-spec` | `done` | `docs/plan/04-openclaw-bridge-spec.md` |
+| `05-memory-pipeline-and-obsidian-adapter` | `in_progress` | `docs/plan/05-memory-pipeline-and-obsidian-adapter.md` |
 | `06-integrations-freshrss-spotify` | `not_started` | `docs/plan/06-integrations-freshrss-spotify.md` |
 | `07-state-system-extension-guide` | `not_started` | `docs/plan/07-state-system-extension-guide.md` |
 | `08-test-and-acceptance-matrix` | `not_started` | `docs/plan/08-test-and-acceptance-matrix.md` |
 | `09-decisions-log` | `in_progress` | `docs/plan/09-decisions-log.md` |
 
 ### Current Progress Snapshot
-- Current Deliverable: `03-pet-core-events-intents-suggestions`
+- Current Deliverable: `05-memory-pipeline-and-obsidian-adapter`
 - Current Status: `in_progress`
-- Overall Progress: `3/9 implementation deliverables done` (D01, D02, D02b complete; D03 runtime slice in progress)
-- Gate Snapshot: `Doc Gate=passed`, `Implementation Gate=in_progress` (manual runtime verification pending).
+- Overall Progress: `5/9 implementation deliverables done` (D01, D02, D02b, D03, D04 complete; D05 in progress)
+- Gate Snapshot: `Doc Gate=in_progress`, `Implementation Gate=in_progress`.
 - Scope Note: roadmap now explicitly tracks roam modes, baseline state set/priority, tray/settings/wardrobe surface, memory/introspection contracts, and visible acceptance tests.
 - Scope Note: roadmap also explicitly tracks conversation UX (chat/voice), speech bubble/dialog fallback, and lip-sync approximation with degraded-mode behavior.
 - Scope Note: roadmap includes proactive pet messaging, explicit introspection payload expectations, music-mode feedback loop, and memory/hobby governance details.
@@ -137,8 +137,9 @@ Status schema:
 - Scope Note: delivery model is now `spec + implementation slice` so each deliverable ships visible runtime progress, not docs only.
 - Scope Note: D02 is closed as `done` (doc + implementation gates passed).
 - Scope Note: D02b is closed as `done` (doc + implementation gates passed) with verified extension discovery, trust-warning toggles, and prop interaction outcomes.
-- Scope Note: D03 implementation slice now includes deterministic contract checks (`scripts/check-contract-router.js`) and enhanced diagnostics visibility (contract suggestion overlay + skip/response logs), while manual implementation verification remains pending.
-- Shipped Outcome (This Session): visible app/runtime change delivered (contract diagnostics visibility improvements) plus deterministic contract verification harness integrated into `npm run check`.
+- Scope Note: D03 is closed as `done` (doc + implementation gates passed) with verified status-introspection flow, announcement cooldown skip behavior, and extension interaction correlation traces.
+- Scope Note: D04 is re-closed as `done` (doc + implementation gates passed) after operator-confirmed degraded-mode drag/fling stability.
+- Shipped Outcome (This Session): visible runtime bridge behavior verified across online/timeout/offline modes with blocked-action guardrails and degraded-mode movement stability; focus advanced back to D05.
 
 ### Gating Rule
 - Do not advance to the next deliverable until the current deliverable is marked `done`, its verification gate is explicitly marked passed, and its implementation slice is explicitly marked passed in its file and mirrored in `docs/plan/00-progress-tracker.md`.
