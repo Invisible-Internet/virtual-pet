@@ -64,6 +64,9 @@ Pass when all are true:
 16. Music-mode feedback loop: `track_rating (1-10)` appears in observation log and affects next daily summary input.
 17. Media source check: Windows media event includes `source=GSMTC` when available, else deterministic fallback source labeling.
 18. Mutation transparency modes: `silent/logged/brief_notification` produce the expected user-visible notification behavior while preserving audit logs.
+19. Simple custom state onboarding: a new `Reading`-style state can be added via config and entered without core switch rewrite.
+20. Complex custom state onboarding: a `PoolPlay`-style phase state executes `enter -> loop -> exit -> recover` with deterministic fallback for missing clips.
+21. State-aware dialogue: when asked what pet is doing/reading, response references current state/context in online mode and falls back to local context when OpenClaw is offline.
 
 ## Open Questions
 - Whether to add lightweight scripted smoke tests in this deliverable or defer to implementation phase.

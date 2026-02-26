@@ -60,3 +60,10 @@ Related:
 - **Rationale:** Preserves user trust and debuggability while preventing uncontrolled behavior changes.
 - **Alternatives Considered:** Unbounded introspection verbosity, unlogged autonomous mutation/announcement behavior.
 - **Impacted Files/Modules:** D03 introspection contracts, D05 mutation governance, D08 acceptance checks.
+
+## ADR-0009: OpenClaw Receives Read-Only Pet State Context
+- **Date:** 2026-02-26
+- **Decision:** Bridge-bound requests include `currentState` and optional bounded state context summary; OpenClaw may use this for responses but cannot set state authority.
+- **Rationale:** Enables state-aware dialogue ("what are you reading/doing") while preserving local deterministic state control and offline operation.
+- **Alternatives Considered:** No state context to OpenClaw, OpenClaw-driven state authority.
+- **Impacted Files/Modules:** D03 state/context contracts, D04 bridge payload policy, D07 state narration hooks, D08 validation.

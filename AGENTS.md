@@ -118,6 +118,7 @@ Status schema:
 - Scope Note: roadmap now explicitly tracks roam modes, baseline state set/priority, tray/settings/wardrobe surface, memory/introspection contracts, and visible acceptance tests.
 - Scope Note: roadmap also explicitly tracks conversation UX (chat/voice), speech bubble/dialog fallback, and lip-sync approximation with degraded-mode behavior.
 - Scope Note: roadmap includes proactive pet messaging, explicit introspection payload expectations, music-mode feedback loop, and memory/hobby governance details.
+- Scope Note: roadmap also includes simple/complex custom-state onboarding patterns and read-only pet state context propagation to OpenClaw.
 
 ### Gating Rule
 - Do not advance to the next deliverable until the current deliverable is marked `done` and its verification gate is explicitly marked passed in its file and mirrored in `docs/plan/00-progress-tracker.md`.

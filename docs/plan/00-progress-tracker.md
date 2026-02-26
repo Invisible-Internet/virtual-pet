@@ -32,9 +32,9 @@ Allowed values:
 | `09-decisions-log` | `in_progress` | Seed decisions added |
 
 ## Next 3 Actions
-1. Complete D01 (`01-gap-analysis-expansion-vs-current`) mapping for roam modes, baseline states/priority, tray/settings/wardrobe, sensor contracts, memory tiers/layouts, introspection payloads, conversation/speech/lip-sync, and hobby scoring model.
+1. Complete D01 (`01-gap-analysis-expansion-vs-current`) mapping for roam modes, baseline states/priority, tray/settings/wardrobe, sensor contracts, memory tiers/layouts, introspection payloads, conversation/speech/lip-sync, hobby scoring model, and custom-state extensibility (simple/complex packs).
 2. Finalize D01 renderer strategy mapping as `Adopt current Canvas baseline` and keep migration proposals out of this roadmap scope.
-3. Mark D01 `review` only after tangible acceptance checklist includes proactive pet messaging, conversation offline fallback, speech bubble/chatbox paths, voice fallback behavior, and cross-check against `09-decisions-log.md`.
+3. Mark D01 `review` only after tangible acceptance checklist includes proactive pet messaging, conversation offline fallback, speech bubble/chatbox paths, voice fallback behavior, OpenClaw read-only state awareness, and cross-check against `09-decisions-log.md`.
 
 ## Blockers
 - None currently.
@@ -46,6 +46,7 @@ Allowed values:
 - Expanded roadmap/deliverable scope to include explicit roam/state/shell/memory/introspection targets and visible acceptance test expectations.
 - Added conversation/speech/lip-sync planning scope with degraded-mode fallback requirements and visible acceptance targets.
 - Added deeper specification anchors (introspection payload fields, memory layout/tier details, hobby scoring weights, proactive messaging, and music-mode rating loop).
+- Added explicit coverage for simple/complex custom state onboarding and read-only state-context propagation to OpenClaw.
 
 ## Documentation Bootstrap Verification Checklist
 - [x] All required files exist in `docs/plan/`.

@@ -16,6 +16,9 @@ Define extensible workflow for adding new pet states under the mixed model (conf
 - State registration rules.
 - Optional hook module contract.
 - Transition and priority integration rules.
+- State pack composition for animation availability:
+  - Simple pack pattern (single idle/loop animation + optional props).
+  - Complex pack pattern (entry -> loop -> interaction variants -> exit -> cooldown/recovery).
 - Baseline required state set:
   - `Idle`
   - `Roam`
@@ -35,6 +38,9 @@ Define extensible workflow for adding new pet states under the mixed model (conf
   - `MusicChill` is default entry behavior when media starts.
   - `MusicDance` transition conditions are explicit and deterministic (configurable trigger contract).
   - Dialogue visualization is an overlay behavior and must not seize state-engine authority.
+- State-context narration hooks:
+  - Optional `describe()`/context provider contract for question answering (for example: "what are you reading?").
+  - Must have deterministic fallback text when context provider data is unavailable.
 
 ## Out of Scope
 - Implementing every future state.
@@ -56,6 +62,7 @@ Define extensible workflow for adding new pet states under the mixed model (conf
 6. Provide baseline pack examples for all required states and default priorities.
 7. Provide one dialogue-visual example showing bubble + lip-sync fallback behavior.
 8. Provide one music-mode example showing `MusicChill` entry and optional transition to `MusicDance`.
+9. Provide one simple custom-state example (`Reading`) and one complex custom-state example (`PoolPlay`) with lifecycle/asset contracts.
 
 ## Verification Gate
 Pass when all are true:
@@ -66,12 +73,16 @@ Pass when all are true:
 5. Baseline required state set and default priority policy are documented end-to-end.
 6. Dialogue visual behaviors (bubble + lip-sync approximation) are documented with deterministic fallback rules.
 7. Music-mode transition rules (`MusicChill`/`MusicDance`) are explicit and deterministic.
+8. Guide includes explicit process to add a simple and a complex custom state without core switch rewrite.
+9. State-context narration hook contract is explicit and includes offline fallback behavior.
 
 ## Tangible Acceptance Test (Doc-Level)
 1. Reviewer can follow one explicit transition table with all baseline states and priority conflict resolution.
 2. Example config shows music-state prop binding (`headphones`) and deterministic fallback when asset is missing.
 3. Example dialogue config shows bubble display and lip-sync fallback to idle-mouth/talk-SFX mode when TTS data is missing.
 4. Example transition config shows `MEDIA.playing=true` enters `MusicChill` with `headphones` prop and logs rationale.
+5. Example `Reading` config shows book/comic/rss source context and deterministic fallback response when source metadata is missing.
+6. Example `PoolPlay` config shows phase transitions (`enter/loop/exit/recover`) and fallback behavior for missing sub-animations.
 
 ## Open Questions
 - Where to store state packs in repo layout (`assets/states` vs `config/states`).

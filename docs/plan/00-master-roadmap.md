@@ -27,6 +27,9 @@ This roadmap governs the documentation-first execution path for Virtual Pet v2:
 3. State System
 - Baseline states are explicitly supported: `Idle`, `Roam`, `MusicChill`, `MusicDance`, `WatchMode`, `Sleep`.
 - Default priority policy is documented and testable: `Sleep > WatchMode > MusicMode > Roam > Idle`.
+- State extension model supports both:
+  - Simple config states (single-loop or light variants).
+  - Complex phase states (entry/loop/interaction/exit/recovery animation bundles).
 4. Desktop Shell UX
 - Tray/taskbar icon interactions are specified.
 - Settings menu contracts are specified (including mode toggles, roaming mode, diagnostics exposure).
@@ -44,16 +47,19 @@ This roadmap governs the documentation-first execution path for Virtual Pet v2:
 - When TTS is unavailable, fallback talk behavior is defined (short canned SFX + text bubble).
 - Pet speech/thought bubble behavior is specified, including offline/degraded mode.
 - Basic lip-sync approximation is specified as non-blocking visual behavior tied to speech activity.
+- OpenClaw request context includes current pet state and bounded state-context metadata when available.
 
 ## Feature-to-Deliverable Ownership
 | Feature Theme | Primary Deliverable | Validation Deliverable |
 | --- | --- | --- |
 | Roam modes (desktop + user zone) | D03, D07 | D08 |
 | Baseline states + priorities | D03, D07 | D08 |
+| Add-on state packs (simple + complex animation bundles) | D07 | D08 |
 | Tray/settings/wardrobe GUI contracts | D02, D07 | D08 |
 | Sensor normalization (USER_COMMAND/MEDIA/IDLE/TIME) | D03 | D08 |
 | GSMTC media source expectations | D03, D06 | D08 |
 | Conversation (chat/voice) + offline fallback | D03, D04 | D08 |
+| OpenClaw read-only state awareness (`currentState` + context) | D03, D04 | D08 |
 | Bubble/thought balloon + lip-sync approximation | D07 | D08 |
 | OpenClaw non-authority + fallback policy | D04 | D08 |
 | Memory domains/tiers/identity mutation guardrails | D05 | D08 |

@@ -38,6 +38,9 @@ Define deterministic pet-core contracts separating facts, requests, and advisory
   - `VOICE_INPUT { transcript, confidence, partial, correlationId }`
   - `VOICE_OUTPUT { text, audioRef|ttsMeta, fallbackMode, correlationId }`
   - `PET_ANNOUNCEMENT { reason, text, channel, priority, correlationId }`
+- State awareness contracts:
+  - `PET_STATE_CHANGED { fromState, toState, reason, ts }`
+  - `STATE_CONTEXT_SNAPSHOT { state, summary, tags, ts }`
 - UI conversation surface contracts:
   - Speech bubble/thought balloon events.
   - Chatbox fallback command/query events.
@@ -65,6 +68,9 @@ Define deterministic pet-core contracts separating facts, requests, and advisory
    - Narrative mode context (`currentState`, `mood`, `currentMedia`, `recentHobby`).
    - Technical mode context (`currentState`, `lastSensorEvent`, `activeJobs`).
 7. Define `MEDIA.source` enum and baseline expectation (`GSMTC` on Windows when available).
+8. Define required context fields for bridge-bound requests:
+   - `currentState`
+   - `stateContextSummary` (bounded, optional when unavailable)
 
 ## Verification Gate
 Pass when all are true:
@@ -76,6 +82,7 @@ Pass when all are true:
 6. Sensor event contracts include media + idle + time-of-day + user command examples.
 7. Conversation and introspection contracts cover both online (OpenClaw available) and degraded (offline/text-first) modes.
 8. Proactive pet announcement contract is documented with bounded trigger classes and cooldown semantics.
+9. Bridge-bound request schemas include read-only state awareness fields with offline-safe defaults.
 
 ## Tangible Acceptance Test (Doc-Level)
 1. Contract examples include at least one full flow: `MEDIA.playing=true` -> state-intent path -> suggestion output.
@@ -84,6 +91,7 @@ Pass when all are true:
    - OpenClaw online (`USER_MESSAGE` -> `PET_RESPONSE` + optional `VOICE_OUTPUT`)
    - OpenClaw offline (local fallback response via chat/bubble path)
 4. Reviewer can validate one proactive message flow (`PET_ANNOUNCEMENT`) from trigger -> rendered bubble/chat output.
+5. Reviewer can validate one state-awareness flow (`PET_STATE_CHANGED` -> bridge payload includes `currentState` and bounded context).
 
 ## Open Questions
 - Should suggestions carry explicit expiry and confidence defaults globally?

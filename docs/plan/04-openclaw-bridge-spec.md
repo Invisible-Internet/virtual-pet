@@ -25,6 +25,10 @@ Specify how the app integrates with OpenClaw in an OpenClaw-first orchestration 
   - Flavor suggestions.
 - Introspection query routing model (`what are you thinking/doing/status report`) with safe response modes.
 - Dialogue request routing model for text and optional voice pipelines (STT in, TTS out).
+- Bridge context propagation model:
+  - Every bridge request carries read-only `currentState`.
+  - Bridge request may carry bounded `stateContextSummary` (for state-aware dialogue like reading/pool context).
+  - Missing context must degrade gracefully (no hard failure).
 - Fallback policy for voice features:
   - If STT unavailable: chat input remains usable.
   - If TTS unavailable: text + optional canned talk SFX fallback.
@@ -53,6 +57,7 @@ Specify how the app integrates with OpenClaw in an OpenClaw-first orchestration 
 5. Define fallback semantics when unavailable.
 6. Define dialogue channel behavior (streaming text, optional TTS asset return, interruption/cancel handling).
 7. Define proactive outbound suggestion behavior (`PET_ANNOUNCEMENT`) with local gating and rate limits.
+8. Define state-context payload policy and truncation/safety limits.
 
 ## Verification Gate
 Pass when all are true:
@@ -63,6 +68,7 @@ Pass when all are true:
 5. Bridge authority limitations are explicit and testable.
 6. Bridge degradation behavior includes explicit text-only fallback and optional canned SFX talk mode.
 7. Introspection prompts (`what are you thinking/doing/status report`) resolve in both online and degraded modes with bounded output policy.
+8. State-aware dialogue path is specified: OpenClaw can reference current state/context but cannot authoritatively set state.
 
 ## Tangible Acceptance Test (Doc-Level)
 1. Sequence diagram shows an AI timeout case and deterministic local fallback result.
@@ -72,6 +78,10 @@ Pass when all are true:
    - Offline dialog fallback through local chat/bubble.
    - TTS-failure fallback to canned talk SFX mode.
 4. Sequence set includes one proactive OpenClaw suggestion path that can be accepted/rejected by local pet policy before user-visible output.
+5. Sequence set includes one state-aware Q/A path:
+   - User asks what pet is doing/reading.
+   - Bridge receives `currentState` and bounded context.
+   - Offline mode returns local fallback response using same local state context.
 
 ## Open Questions
 - Default reconnect policy tuning for local loopback deployments.
