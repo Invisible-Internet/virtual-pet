@@ -19,7 +19,7 @@ Define deterministic pet-core contracts separating facts, requests, and advisory
 - Priority/debounce/cooldown contract points.
 - Explicit normalized sensor events:
   - `USER_COMMAND { type, payload }`
-  - `MEDIA { playing, title, artist, confidence }`
+  - `MEDIA { playing, title, artist, confidence, source }`
   - `USER_IDLE { idleMs }`
   - `TIME_OF_DAY { bucket }`
 - State transition contract coverage for baseline states:
@@ -37,6 +37,7 @@ Define deterministic pet-core contracts separating facts, requests, and advisory
   - `PET_RESPONSE { text, mode, correlationId }`
   - `VOICE_INPUT { transcript, confidence, partial, correlationId }`
   - `VOICE_OUTPUT { text, audioRef|ttsMeta, fallbackMode, correlationId }`
+  - `PET_ANNOUNCEMENT { reason, text, channel, priority, correlationId }`
 - UI conversation surface contracts:
   - Speech bubble/thought balloon events.
   - Chatbox fallback command/query events.
@@ -52,6 +53,7 @@ Define deterministic pet-core contracts separating facts, requests, and advisory
 - Events represent facts.
 - Intents represent work requests.
 - Suggestions represent advisory outputs (not direct authority).
+- State transition authority remains local/deterministic and must not block on OpenClaw responses.
 
 ## Implementation Breakdown
 1. Specify schema fields and required metadata.
@@ -59,6 +61,10 @@ Define deterministic pet-core contracts separating facts, requests, and advisory
 3. Define idempotency/retry expectations.
 4. Define ordering guarantees and timeout semantics.
 5. Define backward-compatible evolution strategy.
+6. Define canonical introspection payload fields:
+   - Narrative mode context (`currentState`, `mood`, `currentMedia`, `recentHobby`).
+   - Technical mode context (`currentState`, `lastSensorEvent`, `activeJobs`).
+7. Define `MEDIA.source` enum and baseline expectation (`GSMTC` on Windows when available).
 
 ## Verification Gate
 Pass when all are true:
@@ -69,6 +75,7 @@ Pass when all are true:
 5. Baseline state transitions and priority policy are represented with examples.
 6. Sensor event contracts include media + idle + time-of-day + user command examples.
 7. Conversation and introspection contracts cover both online (OpenClaw available) and degraded (offline/text-first) modes.
+8. Proactive pet announcement contract is documented with bounded trigger classes and cooldown semantics.
 
 ## Tangible Acceptance Test (Doc-Level)
 1. Contract examples include at least one full flow: `MEDIA.playing=true` -> state-intent path -> suggestion output.
@@ -76,6 +83,7 @@ Pass when all are true:
 3. Reviewer can trace one complete dialogue flow in both modes:
    - OpenClaw online (`USER_MESSAGE` -> `PET_RESPONSE` + optional `VOICE_OUTPUT`)
    - OpenClaw offline (local fallback response via chat/bubble path)
+4. Reviewer can validate one proactive message flow (`PET_ANNOUNCEMENT`) from trigger -> rendered bubble/chat output.
 
 ## Open Questions
 - Should suggestions carry explicit expiry and confidence defaults globally?

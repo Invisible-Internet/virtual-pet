@@ -53,3 +53,10 @@ Related:
 - **Rationale:** Keeps interaction dependable in degraded environments and avoids hard dependency on external voice/runtime services.
 - **Alternatives Considered:** Voice-first interaction with no text fallback, OpenClaw-required chat path.
 - **Impacted Files/Modules:** D03 contracts, D04 bridge spec, D07 dialogue visual bindings, D08 acceptance matrix.
+
+## ADR-0008: Introspection and Autonomy Outputs Are Bounded and Auditable
+- **Date:** 2026-02-26
+- **Decision:** Introspection responses are limited to approved narrative/technical payloads; autonomous mutation and announcement behavior must be threshold-gated, rate-limited, and logged.
+- **Rationale:** Preserves user trust and debuggability while preventing uncontrolled behavior changes.
+- **Alternatives Considered:** Unbounded introspection verbosity, unlogged autonomous mutation/announcement behavior.
+- **Impacted Files/Modules:** D03 introspection contracts, D05 mutation governance, D08 acceptance checks.

@@ -57,6 +57,13 @@ Pass when all are true:
 9. Voice path: when TTS/STT available, voice in/out path functions without blocking runtime.
 10. Voice fallback: if TTS fails/unavailable, canned talk SFX + text output still provide "pet is talking" feedback.
 11. Lip-sync approximation: during speech activity, visible mouth/talk animation toggles; on fallback it degrades predictably.
+12. Proactive pet messaging: deterministic trigger emits `PET_ANNOUNCEMENT` and visible bubble/chat output with cooldown respected.
+13. Introspection content: technical mode output includes `currentState`, `lastSensorEvent`, and `activeJobs`; narrative mode includes state/mood/media/hobby flavor.
+14. Memory domains: required core workspace + vault path layouts are validated, with graceful degradation when optional vault paths are unavailable.
+15. Hobby flow: daily top `1-3` selection logs scoring reasons and emits memory summary payload.
+16. Music-mode feedback loop: `track_rating (1-10)` appears in observation log and affects next daily summary input.
+17. Media source check: Windows media event includes `source=GSMTC` when available, else deterministic fallback source labeling.
+18. Mutation transparency modes: `silent/logged/brief_notification` produce the expected user-visible notification behavior while preserving audit logs.
 
 ## Open Questions
 - Whether to add lightweight scripted smoke tests in this deliverable or defer to implementation phase.

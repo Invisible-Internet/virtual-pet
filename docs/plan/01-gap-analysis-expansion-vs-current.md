@@ -23,11 +23,14 @@ Map ideas from the expansion conversation to current repository reality and lock
   - Baseline states and priority policy (`Idle`, `Roam`, `MusicChill`, `MusicDance`, `WatchMode`, `Sleep`).
   - Taskbar/tray settings and wardrobe UX surface.
   - Sensor model (including Windows GSMTC media source assumptions).
+  - Proactive pet-to-user communication triggers and output channels.
   - Memory domains/tiers and identity-promotion governance.
+  - Core workspace and Obsidian vault file/folder layout expectations.
   - Introspection behavior modes.
   - Conversation pathways (voice + text) including offline fallback UX.
   - Speech presentation (bubble/balloon) and lip-sync approximation behavior.
   - Hobby stream and scoring model.
+  - Music mode initial feature focus (`MEDIA.playing` trigger, props, rating flow).
 
 ## Out of Scope
 - Implementing feature code.
@@ -57,7 +60,7 @@ Pass when all are true:
 2. No theme is left without a decision state (`Adopt/Adapt/Defer`).
 3. All `Adopt/Adapt` items point to a downstream deliverable.
 4. Locked decisions in D09 are respected.
-5. All requested feature targets (roam modes, states, tray/settings/wardrobe, memory/introspection/hobby, conversation/speech/lip-sync) are present in the mapping table.
+5. All requested feature targets (roam modes, states, tray/settings/wardrobe, memory/introspection/hobby, conversation/speech/lip-sync, proactive pet messaging, music-mode focus) are present in the mapping table.
 
 ## Tangible Acceptance Test (Doc-Level)
 1. Reviewer can point to one row per requested feature target in the mapping table.

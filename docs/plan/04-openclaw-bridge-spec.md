@@ -17,6 +17,12 @@ Specify how the app integrates with OpenClaw in an OpenClaw-first orchestration 
 - Retry/backoff behavior.
 - Error/degraded behavior.
 - Security and minimal context payload policy.
+- OpenClaw use-case routing coverage:
+  - Dialogue generation.
+  - Hobby summaries.
+  - Memory analysis.
+  - Identity mutation analysis (advisory only).
+  - Flavor suggestions.
 - Introspection query routing model (`what are you thinking/doing/status report`) with safe response modes.
 - Dialogue request routing model for text and optional voice pipelines (STT in, TTS out).
 - Fallback policy for voice features:
@@ -46,6 +52,7 @@ Specify how the app integrates with OpenClaw in an OpenClaw-first orchestration 
 4. Define timeout/retry/circuit-breaker behavior.
 5. Define fallback semantics when unavailable.
 6. Define dialogue channel behavior (streaming text, optional TTS asset return, interruption/cancel handling).
+7. Define proactive outbound suggestion behavior (`PET_ANNOUNCEMENT`) with local gating and rate limits.
 
 ## Verification Gate
 Pass when all are true:
@@ -55,6 +62,7 @@ Pass when all are true:
 4. Security assumptions and constraints are documented.
 5. Bridge authority limitations are explicit and testable.
 6. Bridge degradation behavior includes explicit text-only fallback and optional canned SFX talk mode.
+7. Introspection prompts (`what are you thinking/doing/status report`) resolve in both online and degraded modes with bounded output policy.
 
 ## Tangible Acceptance Test (Doc-Level)
 1. Sequence diagram shows an AI timeout case and deterministic local fallback result.
@@ -63,6 +71,7 @@ Pass when all are true:
    - Online text dialog with optional TTS.
    - Offline dialog fallback through local chat/bubble.
    - TTS-failure fallback to canned talk SFX mode.
+4. Sequence set includes one proactive OpenClaw suggestion path that can be accepted/rejected by local pet policy before user-visible output.
 
 ## Open Questions
 - Default reconnect policy tuning for local loopback deployments.

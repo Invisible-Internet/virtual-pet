@@ -29,6 +29,9 @@ Define the built-in capability registry architecture that makes integrations opt
   - `dialogUi` capability (speech bubble/chatbox input/output).
   - `voiceIo` capability (STT/TTS adapters with health/degraded status).
   - `lipSync` capability (audio-activity driven approximation; non-blocking).
+- Background job and autonomy boundary:
+  - `jobScheduler` capability (daily summary runs, maintenance jobs, and job-status reporting for introspection).
+  - Autonomy policy enforcement boundary (immutable identity protection and mutation transparency policy).
 
 ## Out of Scope
 - Dynamic third-party plugin loading.
@@ -49,7 +52,7 @@ Define the built-in capability registry architecture that makes integrations opt
 3. Define intent routing responsibilities.
 4. Define global health and telemetry shape.
 5. Define fallback behavior per capability class.
-6. Define capability map for `renderer`, `brain`, `sensors`, `openclawBridge`, `desktopShell`, `wardrobe`, `dialogUi`, `voiceIo`, `lipSync`.
+6. Define capability map for `renderer`, `brain`, `sensors`, `openclawBridge`, `desktopShell`, `wardrobe`, `dialogUi`, `voiceIo`, `lipSync`, `jobScheduler`.
 
 ## Verification Gate
 Pass when all are true:
@@ -57,7 +60,7 @@ Pass when all are true:
 2. Status transitions are deterministic.
 3. Failures cannot block core pet runtime.
 4. Routing ownership is unambiguous.
-5. Desktop shell, conversation/speech, and wardrobe ownership boundaries are documented with failure fallbacks.
+5. Desktop shell, conversation/speech, wardrobe, and background job ownership boundaries are documented with failure fallbacks.
 
 ## Tangible Acceptance Test (Doc-Level)
 1. A capability map table exists with one row for each required capability class.

@@ -39,10 +39,27 @@ This roadmap governs the documentation-first execution path for Virtual Pet v2:
 - Introspection responses are documented as narrative/technical views without exposing raw reasoning.
 7. Conversation and Speech UX
 - User can ask pet questions/commands through chat UI regardless of OpenClaw availability.
+- Pet can proactively tell the user things through bubble/chat outputs based on deterministic triggers.
 - Voice path supports STT/TTS integration points where available.
 - When TTS is unavailable, fallback talk behavior is defined (short canned SFX + text bubble).
 - Pet speech/thought bubble behavior is specified, including offline/degraded mode.
 - Basic lip-sync approximation is specified as non-blocking visual behavior tied to speech activity.
+
+## Feature-to-Deliverable Ownership
+| Feature Theme | Primary Deliverable | Validation Deliverable |
+| --- | --- | --- |
+| Roam modes (desktop + user zone) | D03, D07 | D08 |
+| Baseline states + priorities | D03, D07 | D08 |
+| Tray/settings/wardrobe GUI contracts | D02, D07 | D08 |
+| Sensor normalization (USER_COMMAND/MEDIA/IDLE/TIME) | D03 | D08 |
+| GSMTC media source expectations | D03, D06 | D08 |
+| Conversation (chat/voice) + offline fallback | D03, D04 | D08 |
+| Bubble/thought balloon + lip-sync approximation | D07 | D08 |
+| OpenClaw non-authority + fallback policy | D04 | D08 |
+| Memory domains/tiers/identity mutation guardrails | D05 | D08 |
+| Hobby stream scoring + daily top picks | D06, D05 | D08 |
+| Introspection default/technical mode outputs | D03, D04 | D08 |
+| MusicMode initial behavior set | D06, D07 | D08 |
 
 ## Phases and Ordering
 ### Phase 0 - Bootstrap and Alignment

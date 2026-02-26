@@ -31,6 +31,10 @@ Define extensible workflow for adding new pet states under the mixed model (conf
 - Speech/visualization bindings:
   - Speech bubble/thought balloon presentation rules by message type.
   - Lip-sync approximation hooks tied to speech activity (not phoneme-accurate requirement).
+- Music mode behavior notes:
+  - `MusicChill` is default entry behavior when media starts.
+  - `MusicDance` transition conditions are explicit and deterministic (configurable trigger contract).
+  - Dialogue visualization is an overlay behavior and must not seize state-engine authority.
 
 ## Out of Scope
 - Implementing every future state.
@@ -51,6 +55,7 @@ Define extensible workflow for adding new pet states under the mixed model (conf
 5. Provide examples: one config-only state, one hook-enabled state.
 6. Provide baseline pack examples for all required states and default priorities.
 7. Provide one dialogue-visual example showing bubble + lip-sync fallback behavior.
+8. Provide one music-mode example showing `MusicChill` entry and optional transition to `MusicDance`.
 
 ## Verification Gate
 Pass when all are true:
@@ -60,11 +65,13 @@ Pass when all are true:
 4. Guide includes examples and anti-patterns.
 5. Baseline required state set and default priority policy are documented end-to-end.
 6. Dialogue visual behaviors (bubble + lip-sync approximation) are documented with deterministic fallback rules.
+7. Music-mode transition rules (`MusicChill`/`MusicDance`) are explicit and deterministic.
 
 ## Tangible Acceptance Test (Doc-Level)
 1. Reviewer can follow one explicit transition table with all baseline states and priority conflict resolution.
 2. Example config shows music-state prop binding (`headphones`) and deterministic fallback when asset is missing.
 3. Example dialogue config shows bubble display and lip-sync fallback to idle-mouth/talk-SFX mode when TTS data is missing.
+4. Example transition config shows `MEDIA.playing=true` enters `MusicChill` with `headphones` prop and logs rationale.
 
 ## Open Questions
 - Where to store state packs in repo layout (`assets/states` vs `config/states`).
