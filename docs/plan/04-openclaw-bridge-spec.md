@@ -4,7 +4,7 @@
 **Status:** `not_started`  
 **Owner:** `Mic + Codex`  
 **Last Updated:** `2026-02-26`  
-**Depends On:** `03-pet-core-events-intents-suggestions`  
+**Depends On:** `03-pet-core-events-intents-suggestions`, `02b-extension-framework-and-pack-sdk`  
 **Blocks:** `05-memory-pipeline-and-obsidian-adapter`, `06-integrations-freshrss-spotify`, `08-test-and-acceptance-matrix`  
 **Verification Gate:** `Bridge request/stream/error model is complete, testable, and does not violate local runtime authority rules`
 
@@ -29,6 +29,11 @@ Specify how the app integrates with OpenClaw in an OpenClaw-first orchestration 
   - Every bridge request carries read-only `currentState`.
   - Bridge request may carry bounded `stateContextSummary` (for state-aware dialogue like reading/pool context).
   - Missing context must degrade gracefully (no hard failure).
+- Extension context enrichment envelope:
+  - `activePropsSummary`
+  - `extensionContextSummary`
+  - `source` (online/offline origin labeling)
+  - bounded truncation policy for all extension-provided context.
 - Fallback policy for voice features:
   - If STT unavailable: chat input remains usable.
   - If TTS unavailable: text + optional canned talk SFX fallback.
@@ -58,6 +63,7 @@ Specify how the app integrates with OpenClaw in an OpenClaw-first orchestration 
 6. Define dialogue channel behavior (streaming text, optional TTS asset return, interruption/cancel handling).
 7. Define proactive outbound suggestion behavior (`PET_ANNOUNCEMENT`) with local gating and rate limits.
 8. Define state-context payload policy and truncation/safety limits.
+9. Define extension context enrichment payload shape and offline fallback handling.
 
 ## Verification Gate
 Pass when all are true:
@@ -69,6 +75,7 @@ Pass when all are true:
 6. Bridge degradation behavior includes explicit text-only fallback and optional canned SFX talk mode.
 7. Introspection prompts (`what are you thinking/doing/status report`) resolve in both online and degraded modes with bounded output policy.
 8. State-aware dialogue path is specified: OpenClaw can reference current state/context but cannot authoritatively set state.
+9. Extension context enrichment path is specified for both online and offline modes with explicit source labeling.
 
 ## Tangible Acceptance Test (Doc-Level)
 1. Sequence diagram shows an AI timeout case and deterministic local fallback result.
@@ -82,6 +89,9 @@ Pass when all are true:
    - User asks what pet is doing/reading.
    - Bridge receives `currentState` and bounded context.
    - Offline mode returns local fallback response using same local state context.
+6. Sequence set includes extension context enrichment:
+   - Online path with `activePropsSummary` + `extensionContextSummary`.
+   - Offline fallback path with local templated response and `source=offline`.
 
 ## Open Questions
 - Default reconnect policy tuning for local loopback deployments.

@@ -4,7 +4,7 @@
 **Status:** `not_started`  
 **Owner:** `Mic + Codex`  
 **Last Updated:** `2026-02-26`  
-**Depends On:** `02-architecture-capability-registry`  
+**Depends On:** `02-architecture-capability-registry`, `02b-extension-framework-and-pack-sdk`  
 **Blocks:** `04-openclaw-bridge-spec`, `07-state-system-extension-guide`, `08-test-and-acceptance-matrix`  
 **Verification Gate:** `Pet core contracts are fully typed, directionally consistent, and validated against current runtime constraints`
 
@@ -41,6 +41,15 @@ Define deterministic pet-core contracts separating facts, requests, and advisory
 - State awareness contracts:
   - `PET_STATE_CHANGED { fromState, toState, reason, ts }`
   - `STATE_CONTEXT_SNAPSHOT { state, summary, tags, ts }`
+- Extension interaction events:
+  - `EXT_PROP_SPAWNED`
+  - `EXT_PROP_PLACED`
+  - `EXT_PROP_INTERACTED`
+  - `EXT_PROP_DRAGGED`
+- Extension-origin intents:
+  - `INTENT_PROP_FOCUS`
+  - `INTENT_EXTENSION_STATE_ENTER`
+  - `INTENT_PROP_INTERACTION`
 - UI conversation surface contracts:
   - Speech bubble/thought balloon events.
   - Chatbox fallback command/query events.
@@ -71,6 +80,9 @@ Define deterministic pet-core contracts separating facts, requests, and advisory
 8. Define required context fields for bridge-bound requests:
    - `currentState`
    - `stateContextSummary` (bounded, optional when unavailable)
+   - `activePropsSummary` (bounded, optional when unavailable)
+   - `source` (`online` or `offline`)
+9. Define arbitration priority insertion rules for extension-origin intents vs core/runtime intents.
 
 ## Verification Gate
 Pass when all are true:
@@ -83,6 +95,7 @@ Pass when all are true:
 7. Conversation and introspection contracts cover both online (OpenClaw available) and degraded (offline/text-first) modes.
 8. Proactive pet announcement contract is documented with bounded trigger classes and cooldown semantics.
 9. Bridge-bound request schemas include read-only state awareness fields with offline-safe defaults.
+10. Extension interaction events/intents and arbitration insertion rules are documented with ownership boundaries.
 
 ## Tangible Acceptance Test (Doc-Level)
 1. Contract examples include at least one full flow: `MEDIA.playing=true` -> state-intent path -> suggestion output.
@@ -92,6 +105,7 @@ Pass when all are true:
    - OpenClaw offline (local fallback response via chat/bubble path)
 4. Reviewer can validate one proactive message flow (`PET_ANNOUNCEMENT`) from trigger -> rendered bubble/chat output.
 5. Reviewer can validate one state-awareness flow (`PET_STATE_CHANGED` -> bridge payload includes `currentState` and bounded context).
+6. Reviewer can validate one extension prop flow (`EXT_PROP_SPAWNED` -> `INTENT_PROP_FOCUS` -> arbitration decision -> state transition intent).
 
 ## Open Questions
 - Should suggestions carry explicit expiry and confidence defaults globally?

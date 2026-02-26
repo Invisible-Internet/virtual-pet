@@ -4,7 +4,7 @@
 **Status:** `not_started`  
 **Owner:** `Mic + Codex`  
 **Last Updated:** `2026-02-26`  
-**Depends On:** `03-pet-core-events-intents-suggestions`, `04-openclaw-bridge-spec`, `05-memory-pipeline-and-obsidian-adapter`, `06-integrations-freshrss-spotify`, `07-state-system-extension-guide`  
+**Depends On:** `02b-extension-framework-and-pack-sdk`, `03-pet-core-events-intents-suggestions`, `04-openclaw-bridge-spec`, `05-memory-pipeline-and-obsidian-adapter`, `06-integrations-freshrss-spotify`, `07-state-system-extension-guide`  
 **Blocks:** `Implementation execution`  
 **Verification Gate:** `Matrix covers core runtime, capability degradation, memory adapters, and integration failures with explicit pass criteria`
 
@@ -14,6 +14,7 @@ Define complete acceptance and regression matrix for architecture and implementa
 ## In Scope
 - Functional acceptance tests by subsystem.
 - Failure-mode tests (OpenClaw unavailable, adapter missing, tool missing).
+- Extension framework acceptance tests (pack loading, trust model, prop world behavior, arbitration, context propagation).
 - Regression checks for existing drag/fling/runtime behavior.
 - Documentation verification checks.
 - Visible/manual operator tests with unambiguous pass/fail outcomes for each targeted deliverable.
@@ -36,6 +37,7 @@ Define complete acceptance and regression matrix for architecture and implementa
 4. Add integration availability tests.
 5. Add session handoff and docs consistency checks.
 6. Add "human-visible proof" column for each test case (what user should see in app/log/output).
+7. Add extension-framework scenarios for pack validity, trust/warning flow, prop world interactions, and offline/online context behavior.
 
 ## Verification Gate
 Pass when all are true:
@@ -67,6 +69,25 @@ Pass when all are true:
 19. Simple custom state onboarding: a new `Reading`-style state can be added via config and entered without core switch rewrite.
 20. Complex custom state onboarding: a `PoolPlay`-style phase state executes `enter -> loop -> exit -> recover` with deterministic fallback for missing clips.
 21. State-aware dialogue: when asked what pet is doing/reading, response references current state/context in online mode and falls back to local context when OpenClaw is offline.
+
+## Extension Framework Required Visible Test Targets
+1. Valid pack loads from `extensions/` and appears in extension manager UI.
+2. Invalid manifest yields warning and non-fatal skip.
+3. Version mismatch shows warning and best-effort load behavior.
+4. One-time trust warning shown on first enable; per-extension toggle works.
+5. Spawn candy prop from GUI, drag/drop to desktop anchor, prop persists at coordinates.
+6. Pet navigates to prop and enters mapped extension behavior/state.
+7. Held-food chase behavior: near=`look/follow-head`, far=`chase` transition.
+8. Pool prop triggers wardrobe swap and complex phase behavior (`enter/loop/exit/recover`).
+9. Pool click interaction triggers splash response/effect.
+10. Multiple props can coexist while arbitrator keeps single active behavior authority.
+11. Asking "what are you doing/reading?" returns local context-aware answer offline.
+12. Same question online includes extension/state context in OpenClaw response path.
+13. OpenClaw offline does not break extension interactions or local Q/A.
+14. Disable extension cleanly removes active props/behaviors and reverts to core state logic.
+15. Multi-monitor prop anchors remain stable and pet travel remains clamped correctly.
+16. Extension scoped KV persistence survives restart within quota.
+17. Regression: drag/fling/size invariants remain unchanged.
 
 ## Open Questions
 - Whether to add lightweight scripted smoke tests in this deliverable or defer to implementation phase.

@@ -15,7 +15,7 @@ Allowed values:
 ## Current Deliverable
 - Current Deliverable: `01-gap-analysis-expansion-vs-current`
 - Current Status: `in_progress`
-- Overall Progress: `0/8 implementation deliverables done` (docs bootstrapped, content in progress)
+- Overall Progress: `0/9 implementation deliverables done` (docs bootstrapped, content in progress)
 
 ## Deliverable Status Table
 | Deliverable | Status | Notes |
@@ -23,18 +23,19 @@ Allowed values:
 | `00-master-roadmap` | `in_progress` | Initial version seeded |
 | `01-gap-analysis-expansion-vs-current` | `in_progress` | Active working document |
 | `02-architecture-capability-registry` | `not_started` | Waiting on D01 verification |
-| `03-pet-core-events-intents-suggestions` | `not_started` | Waiting on D02 |
+| `02b-extension-framework-and-pack-sdk` | `not_started` | Waiting on D02 verification |
+| `03-pet-core-events-intents-suggestions` | `not_started` | Waiting on D02 + D02b |
 | `04-openclaw-bridge-spec` | `not_started` | Waiting on D03 |
 | `05-memory-pipeline-and-obsidian-adapter` | `not_started` | Waiting on D04 |
 | `06-integrations-freshrss-spotify` | `not_started` | Waiting on D04/D05 |
-| `07-state-system-extension-guide` | `not_started` | Waiting on D03 |
+| `07-state-system-extension-guide` | `not_started` | Waiting on D03 + D02b |
 | `08-test-and-acceptance-matrix` | `not_started` | Final consolidation |
 | `09-decisions-log` | `in_progress` | Seed decisions added |
 
 ## Next 3 Actions
-1. Complete D01 (`01-gap-analysis-expansion-vs-current`) mapping for roam modes, baseline states/priority, tray/settings/wardrobe, sensor contracts, memory tiers/layouts, introspection payloads, conversation/speech/lip-sync, hobby scoring model, and custom-state extensibility (simple/complex packs).
+1. Complete D01 (`01-gap-analysis-expansion-vs-current`) mapping for extension framework rows: pack model, prop world windows, arbitration model, hook trust model, compatibility policy, and OpenClaw state/context propagation.
 2. Finalize D01 renderer strategy mapping as `Adopt current Canvas baseline` and keep migration proposals out of this roadmap scope.
-3. Mark D01 `review` only after tangible acceptance checklist includes proactive pet messaging, conversation offline fallback, speech bubble/chatbox paths, voice fallback behavior, OpenClaw read-only state awareness, and cross-check against `09-decisions-log.md`.
+3. Mark D01 `review` only after tangible acceptance checklist includes extension framework coverage (offline/online context path, prop world behavior, trust/permission visibility) and cross-check against `09-decisions-log.md`.
 
 ## Blockers
 - None currently.
@@ -47,10 +48,11 @@ Allowed values:
 - Added conversation/speech/lip-sync planning scope with degraded-mode fallback requirements and visible acceptance targets.
 - Added deeper specification anchors (introspection payload fields, memory layout/tier details, hobby scoring weights, proactive messaging, and music-mode rating loop).
 - Added explicit coverage for simple/complex custom state onboarding and read-only state-context propagation to OpenClaw.
+- Added deliverable `02b-extension-framework-and-pack-sdk` and mapped dependencies across D03/D04/D07/D08.
 
 ## Documentation Bootstrap Verification Checklist
 - [x] All required files exist in `docs/plan/`.
-- [x] Deliverable docs `01`-`08` include required sections.
+- [x] Deliverable docs `01`-`08` plus `02b` include required sections.
 - [x] `AGENTS.md` contains resume protocol and TODO/progress snapshot.
 - [x] `AGENTS.md` and this tracker reference the same current deliverable/status.
 - [x] Cross-links between tracker, roadmap, and decisions log are valid.

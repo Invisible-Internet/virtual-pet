@@ -8,6 +8,7 @@ Related:
 This roadmap governs the documentation-first execution path for Virtual Pet v2:
 - Keep Canvas runtime baseline.
 - Build modular capability architecture with graceful fallbacks.
+- Add extension framework contracts for offline-first props/state packs/context with online OpenClaw enrichment.
 - Deliver OpenClaw-first orchestration and immediate memory pipeline support.
 - Gate progression by verification before advancing to the next deliverable.
 - Lock explicit user-visible behavior targets:
@@ -48,10 +49,19 @@ This roadmap governs the documentation-first execution path for Virtual Pet v2:
 - Pet speech/thought bubble behavior is specified, including offline/degraded mode.
 - Basic lip-sync approximation is specified as non-blocking visual behavior tied to speech activity.
 - OpenClaw request context includes current pet state and bounded state-context metadata when available.
+8. Extension Framework
+- Hybrid extension packs are supported (manifest-first, optional trusted hook module).
+- Pack discovery is folder-based in v1 (`extensions/` in dev + app-data extension path in installed app).
+- Prop world uses true desktop anchors (Windows-first) and supports menu spawn + drag/drop placement.
+- Behavior arbitration remains core-authoritative for extension-origin actions.
+- Extension context can enrich OpenClaw requests in online mode, with offline-safe local fallback behavior.
 
 ## Feature-to-Deliverable Ownership
 | Feature Theme | Primary Deliverable | Validation Deliverable |
 | --- | --- | --- |
+| Extension framework contracts (pack model, trust, permissions, compatibility) | D02b | D08 |
+| Extension runtime services (`extensionRegistry`, `propWorld`, `extensionHookHost`, `permissionManager`, `behaviorArbitrator`, `extensionStore`) | D02, D02b | D08 |
+| Desktop-anchored props and interaction model | D02b, D03, D07 | D08 |
 | Roam modes (desktop + user zone) | D03, D07 | D08 |
 | Baseline states + priorities | D03, D07 | D08 |
 | Add-on state packs (simple + complex animation bundles) | D07 | D08 |
@@ -76,6 +86,7 @@ This roadmap governs the documentation-first execution path for Virtual Pet v2:
 
 ### Phase 1 - Core Architecture Contracts
 - `02-architecture-capability-registry`
+- `02b-extension-framework-and-pack-sdk`
 - `03-pet-core-events-intents-suggestions`
 - `04-openclaw-bridge-spec`
 
@@ -90,12 +101,13 @@ This roadmap governs the documentation-first execution path for Virtual Pet v2:
 ## Deliverable Sequencing
 1. `01-gap-analysis-expansion-vs-current`
 2. `02-architecture-capability-registry`
-3. `03-pet-core-events-intents-suggestions`
-4. `04-openclaw-bridge-spec`
-5. `05-memory-pipeline-and-obsidian-adapter`
-6. `06-integrations-freshrss-spotify`
-7. `07-state-system-extension-guide`
-8. `08-test-and-acceptance-matrix`
+3. `02b-extension-framework-and-pack-sdk`
+4. `03-pet-core-events-intents-suggestions`
+5. `04-openclaw-bridge-spec`
+6. `05-memory-pipeline-and-obsidian-adapter`
+7. `06-integrations-freshrss-spotify`
+8. `07-state-system-extension-guide`
+9. `08-test-and-acceptance-matrix`
 
 ## Exit Criteria Per Phase
 ### Phase 0 Exit
@@ -104,6 +116,7 @@ This roadmap governs the documentation-first execution path for Virtual Pet v2:
 
 ### Phase 1 Exit
 - Capability interfaces are frozen for v1.
+- Extension framework contracts are frozen for v1 (pack schema, trust/permission model, prop world model, arbitration model, hook boundaries).
 - Event/Intent/Suggestion contracts are frozen.
 - OpenClaw bridge behavior and fallback semantics are frozen.
 - Conversation I/O contracts (text/voice) and non-authority constraints are frozen.
@@ -126,6 +139,8 @@ This roadmap governs the documentation-first execution path for Virtual Pet v2:
 | Integration coupling to OpenClaw availability | High | Capability registry + degraded mode fallbacks |
 | Memory pipeline writes causing drift/corruption | High | Guarded write targets + promotion thresholds + mutation log |
 | Scope creep from plugin/state flexibility | Medium | Config-first with optional hooks, strict verification gates |
+| Third-party extension trust and compatibility drift | High | Author-trusted default warning + explicit permission visibility + enable/disable controls + best-effort compatibility warnings |
 | Documentation drift across sessions | Medium | Mandatory tracker + AGENTS snapshot sync at session end |
 | Renderer rewrite risk | High | Keep Canvas baseline for current roadmap |
 | Voice stack/service instability | Medium | Text-first fallback chat + canned talk SFX + degraded mode contracts |
+| Multi-window prop world complexity | High | Windows-first scope + explicit extension acceptance scenarios + deterministic fallback rules |

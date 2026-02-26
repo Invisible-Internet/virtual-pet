@@ -4,7 +4,7 @@
 **Status:** `not_started`  
 **Owner:** `Mic + Codex`  
 **Last Updated:** `2026-02-26`  
-**Depends On:** `03-pet-core-events-intents-suggestions`  
+**Depends On:** `03-pet-core-events-intents-suggestions`, `02b-extension-framework-and-pack-sdk`  
 **Blocks:** `08-test-and-acceptance-matrix`  
 **Verification Gate:** `Guide defines repeatable process for adding config-only and hook-enabled states without core switch rewrites`
 
@@ -41,6 +41,9 @@ Define extensible workflow for adding new pet states under the mixed model (conf
 - State-context narration hooks:
   - Optional `describe()`/context provider contract for question answering (for example: "what are you reading?").
   - Must have deterministic fallback text when context provider data is unavailable.
+- Prop-to-state binding patterns:
+  - Prop event triggers (`spawn/place/click/drag/proximity`) mapped to deterministic state transitions.
+  - Shared patterns for extension examples (`FoodChase`, `Reading`, `PoolPlay`).
 
 ## Out of Scope
 - Implementing every future state.
@@ -63,6 +66,7 @@ Define extensible workflow for adding new pet states under the mixed model (conf
 7. Provide one dialogue-visual example showing bubble + lip-sync fallback behavior.
 8. Provide one music-mode example showing `MusicChill` entry and optional transition to `MusicDance`.
 9. Provide one simple custom-state example (`Reading`) and one complex custom-state example (`PoolPlay`) with lifecycle/asset contracts.
+10. Provide prop-to-state mapping templates for `FoodChase`, `Reading`, and `PoolPlay`.
 
 ## Verification Gate
 Pass when all are true:
@@ -75,6 +79,7 @@ Pass when all are true:
 7. Music-mode transition rules (`MusicChill`/`MusicDance`) are explicit and deterministic.
 8. Guide includes explicit process to add a simple and a complex custom state without core switch rewrite.
 9. State-context narration hook contract is explicit and includes offline fallback behavior.
+10. Prop-to-state mapping templates are explicit and enforce deterministic fallback behavior.
 
 ## Tangible Acceptance Test (Doc-Level)
 1. Reviewer can follow one explicit transition table with all baseline states and priority conflict resolution.
@@ -83,6 +88,7 @@ Pass when all are true:
 4. Example transition config shows `MEDIA.playing=true` enters `MusicChill` with `headphones` prop and logs rationale.
 5. Example `Reading` config shows book/comic/rss source context and deterministic fallback response when source metadata is missing.
 6. Example `PoolPlay` config shows phase transitions (`enter/loop/exit/recover`) and fallback behavior for missing sub-animations.
+7. Example `FoodChase` config shows held-prop proximity behavior (`look/follow-head` near, `chase` far) with bounded transition rules.
 
 ## Open Questions
 - Where to store state packs in repo layout (`assets/states` vs `config/states`).

@@ -14,10 +14,10 @@ Related:
 
 ## ADR-0002: Use Capability Registry (Built-in Modules) for v1
 - **Date:** 2026-02-26
-- **Decision:** Implement built-in capability registry with enable/disable + health + degraded mode. No dynamic plugin loading in v1.
+- **Decision:** Implement built-in capability registry with enable/disable + health + degraded mode. No dynamic plugin loading for capability-engine modules in v1.
 - **Rationale:** Delivers modularity and fallback behavior without introducing dynamic loading complexity.
 - **Alternatives Considered:** Dynamic plugin loader in v1, monolithic integration logic.
-- **Impacted Files/Modules:** D02 architecture docs, future `main` capability orchestrator modules.
+- **Impacted Files/Modules:** D02 architecture docs, D02b extension framework boundaries, future `main` capability orchestrator modules.
 
 ## ADR-0003: OpenClaw-First Integration Orchestration
 - **Date:** 2026-02-26
@@ -66,4 +66,18 @@ Related:
 - **Decision:** Bridge-bound requests include `currentState` and optional bounded state context summary; OpenClaw may use this for responses but cannot set state authority.
 - **Rationale:** Enables state-aware dialogue ("what are you reading/doing") while preserving local deterministic state control and offline operation.
 - **Alternatives Considered:** No state context to OpenClaw, OpenClaw-driven state authority.
-- **Impacted Files/Modules:** D03 state/context contracts, D04 bridge payload policy, D07 state narration hooks, D08 validation.
+- **Impacted Files/Modules:** D02b extension framework contracts, D03 state/context contracts, D04 bridge payload policy, D07 state narration hooks, D08 validation.
+
+## ADR-0010: Extension Framework Trust and Permission Model (v1)
+- **Date:** 2026-02-26
+- **Decision:** Use author-trusted local extension loading by default with one-time warning, explicit permission visibility, and per-extension enable/disable controls.
+- **Rationale:** Matches v1 local-contributor workflow while preserving user awareness and fast rollback when extensions misbehave.
+- **Alternatives Considered:** Strict sandbox-only trust model in v1, unrestricted no-warning trust model.
+- **Impacted Files/Modules:** D02 capability ownership boundaries, D02b trust/permission contracts, D08 extension acceptance scenarios.
+
+## ADR-0011: Prop World Uses Desktop-Anchored Multi-Window Model (Windows-First)
+- **Date:** 2026-02-26
+- **Decision:** Extension props use true desktop anchor coordinates with a multi-window world model, validated Windows-first in v1.
+- **Rationale:** Required to support prop placement and interaction patterns (drop prop, pet navigates to prop, pool/food interactions) that are not realistic in pet-local-only space.
+- **Alternatives Considered:** Pet-local prop rendering only, staged local-first then desktop-anchor later.
+- **Impacted Files/Modules:** D02 capability boundaries (`propWorld`/arbitration), D02b prop world spec, D03 extension event contracts, D07 prop-to-state templates, D08 extension acceptance matrix.

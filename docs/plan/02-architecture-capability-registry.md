@@ -5,7 +5,7 @@
 **Owner:** `Mic + Codex`  
 **Last Updated:** `2026-02-26`  
 **Depends On:** `01-gap-analysis-expansion-vs-current`, `09-decisions-log`  
-**Blocks:** `03-pet-core-events-intents-suggestions`, `04-openclaw-bridge-spec`, `05-memory-pipeline-and-obsidian-adapter`  
+**Blocks:** `02b-extension-framework-and-pack-sdk`, `03-pet-core-events-intents-suggestions`, `04-openclaw-bridge-spec`, `05-memory-pipeline-and-obsidian-adapter`  
 **Verification Gate:** `Capability contract, lifecycle, status model, and fallback semantics are documented and internally consistent`
 
 ## Objective
@@ -32,9 +32,16 @@ Define the built-in capability registry architecture that makes integrations opt
 - Background job and autonomy boundary:
   - `jobScheduler` capability (daily summary runs, maintenance jobs, and job-status reporting for introspection).
   - Autonomy policy enforcement boundary (immutable identity protection and mutation transparency policy).
+- Extension framework boundary ownership:
+  - `extensionRegistry` capability (discover/load/enable/disable extension packs).
+  - `permissionManager` capability (permission visibility + warning model).
+  - `propWorld` capability (desktop-anchored props and interaction routing).
+  - `behaviorArbitrator` capability (single-authority conflict resolution for extension-origin actions).
+  - `extensionHookHost` capability (trusted hook runtime boundary).
+  - `extensionStore` capability (scoped persistence and quota governance).
 
 ## Out of Scope
-- Dynamic third-party plugin loading.
+- Dynamic third-party loading of capability-engine modules.
 - Production capability implementations.
 
 ## Dependencies
@@ -43,7 +50,8 @@ Define the built-in capability registry architecture that makes integrations opt
 
 ## Decisions Locked
 - Built-in capability registry for v1.
-- No dynamic plugin loading in v1.
+- No dynamic plugin loading for capability-engine modules in v1.
+- Extension packs (props/state/context/hook packs) are specified separately in D02b and do not replace core capability ownership.
 - Degraded mode is mandatory for all capability failures.
 
 ## Implementation Breakdown
@@ -52,7 +60,8 @@ Define the built-in capability registry architecture that makes integrations opt
 3. Define intent routing responsibilities.
 4. Define global health and telemetry shape.
 5. Define fallback behavior per capability class.
-6. Define capability map for `renderer`, `brain`, `sensors`, `openclawBridge`, `desktopShell`, `wardrobe`, `dialogUi`, `voiceIo`, `lipSync`, `jobScheduler`.
+6. Define capability map for `renderer`, `brain`, `sensors`, `openclawBridge`, `desktopShell`, `wardrobe`, `dialogUi`, `voiceIo`, `lipSync`, `jobScheduler`, `extensionRegistry`, `permissionManager`, `propWorld`, `behaviorArbitrator`, `extensionHookHost`, `extensionStore`.
+7. Define degraded behavior expectations for extension-related capabilities without violating core runtime invariants.
 
 ## Verification Gate
 Pass when all are true:
@@ -61,10 +70,12 @@ Pass when all are true:
 3. Failures cannot block core pet runtime.
 4. Routing ownership is unambiguous.
 5. Desktop shell, conversation/speech, wardrobe, and background job ownership boundaries are documented with failure fallbacks.
+6. Extension framework capability ownership boundaries are explicit and non-conflicting with core authority model.
 
 ## Tangible Acceptance Test (Doc-Level)
 1. A capability map table exists with one row for each required capability class.
 2. Reviewer can trace one failure scenario per capability and confirm documented degraded behavior.
+3. Reviewer can trace one extension-capability outage scenario (for example: `propWorld` unavailable) and confirm deterministic fallback.
 
 ## Open Questions
 - Should capability state persist across restarts in v1 or derive from config only?
