@@ -149,6 +149,8 @@ let lastDevicePixelRatio = window.devicePixelRatio || 1;
 let latestDiagnostics = null;
 let latestCapabilitySnapshot = null;
 let latestExtensionSnapshot = null;
+let latestContractTrace = null;
+let latestContractSuggestion = null;
 let diagnosticsEnabled = false;
 let latestMotion = { ...DEFAULT_MOTION };
 let currentRenderState = "idle";
@@ -538,6 +540,16 @@ function onMovementKeyDown(event) {
     toggleFirstExtensionEnabled();
     return;
   }
+  else if (key === "i") {
+    if (event.repeat) return;
+    runPetUserCommand("status");
+    return;
+  }
+  else if (key === "u") {
+    if (event.repeat) return;
+    runPetUserCommand("announce-test");
+    return;
+  }
   else if (key === " " || key === "spacebar") {
     if (!event.repeat) spriteJumpQueued = true;
   } else {
@@ -646,6 +658,18 @@ async function toggleFirstExtensionEnabled() {
     }
   } catch (error) {
     console.warn("[extension] toggle failed:", error);
+  }
+}
+
+async function runPetUserCommand(command) {
+  if (typeof window.petAPI.runUserCommand !== "function") return;
+  try {
+    const result = await window.petAPI.runUserCommand(command);
+    if (!result?.ok) {
+      console.warn("[contract] user command failed:", result?.error || "unknown");
+    }
+  } catch (error) {
+    console.warn("[contract] user command failed:", error);
   }
 }
 
@@ -2019,6 +2043,11 @@ function drawDebugOverlay(w, h) {
         ? `found=${latestExtensionSnapshot.summary.discoveredCount || 0} valid=${latestExtensionSnapshot.summary.validCount || 0} enabled=${latestExtensionSnapshot.summary.enabledCount || 0}`
         : "n/a"
     }`,
+    `contract: ${
+      latestContractTrace
+        ? `${latestContractTrace.stage || "?"}/${latestContractTrace.payload?.type || "?"} corr=${latestContractTrace.payload?.correlationId || "n/a"}`
+        : "n/a"
+    }`,
     `motion preset: ${latestMotion.preset || "n/a"}`,
     `sprite: ${
       latestSpriteFrame
@@ -2169,6 +2198,11 @@ async function init() {
       latestCapabilitySnapshot = await window.petAPI.getCapabilitySnapshot();
     } catch {}
   }
+  if (typeof window.petAPI.getContractTrace === "function") {
+    try {
+      latestContractTrace = await window.petAPI.getContractTrace();
+    } catch {}
+  }
   if (typeof window.petAPI.getExtensions === "function") {
     try {
       latestExtensionSnapshot = await window.petAPI.getExtensions();
@@ -2237,6 +2271,21 @@ async function init() {
   if (typeof window.petAPI.onExtensionEvent === "function") {
     window.petAPI.onExtensionEvent((payload) => {
       if (!payload || typeof payload !== "object") return;
+      latestDiagnostics = payload;
+    });
+  }
+
+  if (typeof window.petAPI.onContractTrace === "function") {
+    window.petAPI.onContractTrace((payload) => {
+      if (!payload || typeof payload !== "object") return;
+      latestContractTrace = payload;
+    });
+  }
+
+  if (typeof window.petAPI.onContractSuggestion === "function") {
+    window.petAPI.onContractSuggestion((payload) => {
+      if (!payload || typeof payload !== "object") return;
+      latestContractSuggestion = payload;
       latestDiagnostics = payload;
     });
   }

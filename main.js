@@ -3,6 +3,7 @@ const fs = require("fs");
 const path = require("path");
 const { CAPABILITY_STATES, createCapabilityRegistry } = require("./capability-registry");
 const { createExtensionPackRegistry, DEFAULT_EXTENSIONS_ROOT } = require("./extension-pack-registry");
+const { createPetContractRouter } = require("./pet-contract-router");
 const { BASE_LAYOUT, computePetLayout } = require("./pet-layout");
 const {
   normalizePetBounds,
@@ -127,6 +128,8 @@ let capabilityRegistry = null;
 let latestCapabilitySnapshot = null;
 let extensionPackRegistry = null;
 let latestExtensionSnapshot = null;
+let contractRouter = null;
+let latestContractTrace = null;
 
 const flingState = {
   active: false,
@@ -1154,6 +1157,106 @@ function initializeExtensionPackRuntime() {
   logExtensionSummary("all-disabled-by-flag", disabledSnapshot);
 }
 
+function emitContractTrace(trace) {
+  if (!trace || typeof trace !== "object") return;
+  latestContractTrace = trace;
+  emitToRenderer("pet:contract-trace", trace);
+}
+
+function logContractTrace(trace) {
+  if (!trace || typeof trace !== "object") return;
+  const stage = trace.stage || "unknown";
+  const payload = trace.payload || {};
+  const correlationId = payload.correlationId || "n/a";
+  const type = payload.type || "unknown";
+  const source = trace.context?.source || "offline";
+  console.log(
+    `[pet-contract] stage=${stage} type=${type} correlationId=${correlationId} source=${source}`
+  );
+
+  if (!DIAGNOSTICS_ENABLED) return;
+  emitDiagnostics({
+    kind: "contractTrace",
+    stage,
+    type,
+    correlationId,
+    source,
+    payload,
+  });
+}
+
+function initializeContractRouter() {
+  contractRouter = createPetContractRouter({
+    onTrace: (trace) => {
+      logContractTrace(trace);
+      emitContractTrace(trace);
+    },
+    announcementCooldownMs: 10000,
+  });
+}
+
+function deriveContractSource() {
+  const bridgeState = capabilityRegistry?.getCapabilityState(CAPABILITY_IDS.openclawBridge);
+  if (bridgeState?.state === CAPABILITY_STATES.healthy) {
+    return "online";
+  }
+  return "offline";
+}
+
+function buildStatusText() {
+  const runtime = latestCapabilitySnapshot?.runtimeState || "unknown";
+  const summary = latestCapabilitySnapshot?.summary || {};
+  return (
+    `Runtime ${runtime}. ` +
+    `Capabilities healthy=${summary.healthyCount || 0}, ` +
+    `degraded=${summary.degradedCount || 0}, failed=${summary.failedCount || 0}.`
+  );
+}
+
+function handleContractSuggestions(result) {
+  if (!result || !Array.isArray(result.suggestions)) return;
+  for (const suggestion of result.suggestions) {
+    emitToRenderer("pet:contract-suggestion", suggestion);
+    if (DIAGNOSTICS_ENABLED) {
+      emitDiagnostics({
+        kind: "contractSuggestion",
+        ...suggestion,
+      });
+    }
+    if (suggestion.type === "PET_ANNOUNCEMENT") {
+      console.log(
+        `[pet-contract] announcement correlationId=${suggestion.correlationId} reason=${suggestion.reason}`
+      );
+    }
+  }
+}
+
+function processPetContractEvent(eventType, payload = {}, context = {}) {
+  if (!contractRouter) {
+    return {
+      ok: false,
+      error: "contract_router_unavailable",
+    };
+  }
+
+  const result = contractRouter.processEvent(
+    {
+      type: eventType,
+      payload,
+    },
+    {
+      source: deriveContractSource(),
+      statusText: buildStatusText(),
+      announcementCooldownMsByReason: {
+        manual_test: 5000,
+      },
+      ...context,
+    }
+  );
+  handleContractSuggestions(result);
+  return result;
+}
+
 function pointInBounds(point, bounds) {
   return (
     point.x >= bounds.x &&
@@ -1227,6 +1330,9 @@ function createWindow() {
     }
     if (latestExtensionSnapshot) {
       emitExtensionSnapshot(latestExtensionSnapshot);
+    }
+    if (latestContractTrace) {
+      emitContractTrace(latestContractTrace);
     }
     resetMotionSampleFromWindow();
     emitMotionState({
@@ -1441,12 +1547,35 @@ ipcMain.handle("pet:getConfig", () => {
     layout: PET_LAYOUT,
     capabilityRuntimeState: latestCapabilitySnapshot?.runtimeState || "unknown",
     capabilitySummary: latestCapabilitySnapshot?.summary || null,
+    contractTraceStage: latestContractTrace?.stage || null,
   };
 });
 
 ipcMain.handle("pet:getCapabilitySnapshot", () => {
   if (!capabilityRegistry) return latestCapabilitySnapshot;
   return capabilityRegistry.getSnapshot();
+});
+
+ipcMain.handle("pet:getContractTrace", () => {
+  return latestContractTrace;
+});
+
+ipcMain.handle("pet:runUserCommand", (_event, payload) => {
+  const command =
+    typeof payload?.command === "string" && payload.command.trim().length > 0
+      ? payload.command.trim()
+      : "";
+  if (!command) {
+    return {
+      ok: false,
+      error: "invalid_command",
+    };
+  }
+  return processPetContractEvent("USER_COMMAND", {
+    command,
+    type: command,
+    text: command,
+  });
 });
 
 ipcMain.handle("pet:getExtensions", () => {
@@ -1569,6 +1698,12 @@ ipcMain.handle("pet:interactWithExtensionProp", (_event, payload) => {
     emitDiagnostics(eventPayload);
   }
 
+  processPetContractEvent("EXT_PROP_INTERACTED", {
+    extensionId,
+    propId,
+    interactionType,
+  });
+
   return result;
 });
 
@@ -1578,6 +1713,7 @@ ipcMain.handle("pet:getAnimationManifest", (_event, characterId) => {
 
 app.whenReady().then(async () => {
   initializeDiagnosticsLog();
+  initializeContractRouter();
   createWindow();
   physicsTimer = setInterval(stepFling, FLING_CONFIG.stepMs);
   cursorTimer = setInterval(emitCursorState, CURSOR_EMIT_INTERVAL_MS);

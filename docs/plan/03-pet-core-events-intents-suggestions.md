@@ -1,7 +1,7 @@
 # Deliverable 03: Pet Core Event/Intent/Suggestion Contracts
 
 **Deliverable ID:** `03-pet-core-events-intents-suggestions`  
-**Status:** `not_started`  
+**Status:** `in_progress`  
 **Owner:** `Mic + Codex`  
 **Last Updated:** `2026-02-26`  
 **Depends On:** `02-architecture-capability-registry`, `02b-extension-framework-and-pack-sdk`  
@@ -127,9 +127,49 @@ Pass when all are true:
 4. Confirm cooldown/debounce prevents spam for proactive message trigger class.
 
 ## Gate Status
-- `Doc Gate`: `not_started`
-- `Implementation Gate`: `not_started`
-- `Overall`: `not_started`
+- `Doc Gate`: `in_progress`
+- `Implementation Gate`: `in_progress`
+- `Overall`: `in_progress`
+
+## Implementation Progress (This Session)
+- [x] Added contract router module: `pet-contract-router.js`.
+- [x] Implemented runtime event -> intent -> suggestion processing with correlation IDs.
+- [x] Implemented normalized `USER_COMMAND` source path with deterministic intents:
+  - `status` -> `INTENT_INTROSPECTION_STATUS` -> `PET_RESPONSE`
+  - `announce-test` -> `INTENT_PROACTIVE_ANNOUNCEMENT` -> `PET_ANNOUNCEMENT`
+- [x] Implemented proactive announcement cooldown enforcement (`manual_test` cooldown).
+- [x] Implemented extension event bridge path:
+  - `EXT_PROP_INTERACTED` -> `INTENT_PROP_INTERACTION` -> `PET_RESPONSE`.
+- [x] Added main-process IPC + renderer bridge:
+  - `pet:runUserCommand`
+  - `pet:getContractTrace`
+  - `pet:contract-trace`
+  - `pet:contract-suggestion`
+- [x] Added renderer verification hotkeys:
+  - `I` -> run `status` command
+  - `U` -> run `announce-test` command
+- [x] Added syntax-check coverage for contract router module.
+- [ ] Manual runtime verification for D03 slice pending operator run.
+
+## Working Draft (v0.1)
+First D03 runtime slice is command/event-centric and focuses on deterministic routing, traceability, and cooldown behavior:
+
+| Flow | Event | Intent | Suggestion | Notes |
+| --- | --- | --- | --- | --- |
+| Status introspection | `USER_COMMAND(status)` | `INTENT_INTROSPECTION_STATUS` | `PET_RESPONSE` | Includes correlation ID and source (`offline` when bridge not healthy). |
+| Proactive announcement test | `USER_COMMAND(announce-test)` | `INTENT_PROACTIVE_ANNOUNCEMENT` | `PET_ANNOUNCEMENT` or `PET_ANNOUNCEMENT_SKIPPED` | Cooldown enforced by reason bucket (`manual_test`). |
+| Extension interaction narration | `EXT_PROP_INTERACTED` | `INTENT_PROP_INTERACTION` | `PET_RESPONSE` | Maintains core-authoritative behavior via upstream arbitration layer. |
+
+Trace stages currently emitted:
+- `event`
+- `intent`
+- `suggestion`
+
+Each stage includes:
+- `type`
+- `correlationId`
+- `source`
+- bounded payload fields
 
 ## Open Questions
 - Should suggestions carry explicit expiry and confidence defaults globally?
@@ -137,3 +177,4 @@ Pass when all are true:
 ## Change Log
 - `2026-02-26`: File created and seeded.
 - `2026-02-26`: Updated for `spec + implementation slice` workflow with mandatory implementation/visible outcome sections and dual-gate status.
+- `2026-02-26`: Advanced to `in_progress`; added first runtime event-intent-suggestion slice (`pet-contract-router.js`) with correlation IDs, user-command routing, announcement cooldown, extension interaction mapping, and trace IPC wiring.

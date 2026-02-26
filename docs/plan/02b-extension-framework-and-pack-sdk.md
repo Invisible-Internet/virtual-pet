@@ -1,7 +1,7 @@
 # Deliverable 02b: Extension Framework and Pack SDK
 
 **Deliverable ID:** `02b-extension-framework-and-pack-sdk`  
-**Status:** `in_progress`  
+**Status:** `done`  
 **Owner:** `Mic + Codex`  
 **Last Updated:** `2026-02-26`  
 **Depends On:** `02-architecture-capability-registry`, `09-decisions-log`  
@@ -111,9 +111,9 @@ Pass when all are true:
 4. Disable the extension and confirm app returns to core-only behavior without failure.
 
 ## Gate Status
-- `Doc Gate`: `in_progress`
-- `Implementation Gate`: `in_progress`
-- `Overall`: `in_progress`
+- `Doc Gate`: `passed`
+- `Implementation Gate`: `passed`
+- `Overall`: `done`
 
 ## Implementation Progress (This Session)
 - [x] Added extension discovery/validation runtime scaffold: `extension-pack-registry.js`.
@@ -132,10 +132,26 @@ Pass when all are true:
   - valid: `extensions/sample-foodchase/extension.manifest.json`
   - invalid: `extensions/sample-invalid/extension.manifest.json`
 - [x] Added syntax-check coverage for new module in `package.json`.
-- [ ] Manual runtime verification for D02b slice is pending operator run.
+- [x] Manual runtime verification for D02b slice completed with operator-provided logs.
 
 ## Working Draft (v0.1)
 First implementation pass focuses on local extension discovery, validation, enable/disable toggles, and one prop interaction path routed through core arbitration.
+
+## Manual Verification Evidence (2026-02-26)
+1. Startup discovery run:
+   - `discover discovered=2 valid=1 invalid=1 enabled=1`
+   - Invalid manifest warning surfaced: `sample-invalid: missing extensionId; invalid prop id ...`
+2. Prop interaction path:
+   - Success case logged: `interaction extension=sample-foodchase prop=candy type=hotkey decision=allow`
+3. Enable/disable and trust-warning flow:
+   - Toggle logs show enabled counts flipping `1 -> 0 -> 1`.
+   - First re-enable surfaced one-time trust warning:
+     - `trust-warning sample-foodchase: Author-trusted extension enabled...`
+4. Disabled extension interaction:
+   - Logged failure path: `interaction failed ... error=extension_disabled`
+
+## Verification Gate Status
+- `Passed (2026-02-26): D02b contract and runtime slice were implemented and manually verified (valid/invalid pack handling, trust-warning toggle path, and core-arbitrated prop interaction flow).`
 
 ## Open Questions
 - Whether to add zip-import installer workflow in post-v1 roadmap.
@@ -144,3 +160,4 @@ First implementation pass focuses on local extension discovery, validation, enab
 - `2026-02-26`: File created for extension framework and pack SDK scope.
 - `2026-02-26`: Updated for `spec + implementation slice` workflow with mandatory implementation/visible outcome sections and dual-gate status.
 - `2026-02-26`: Advanced to `in_progress`; implemented first runtime slice for extension discovery/validation, warning+skip invalid manifests, trust warning model, and core-arbitrated prop interaction path.
+- `2026-02-26`: Added manual verification evidence from operator run; moved D02b to `done` with doc/implementation gates passed.

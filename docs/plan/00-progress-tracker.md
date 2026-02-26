@@ -20,9 +20,9 @@ Allowed values:
 - D01 is a completed discovery baseline and remains doc-only by design.
 
 ## Current Deliverable
-- Current Deliverable: `02b-extension-framework-and-pack-sdk`
+- Current Deliverable: `03-pet-core-events-intents-suggestions`
 - Current Status: `in_progress`
-- Overall Progress: `2/9 implementation deliverables done` (D01 and D02 complete; D02b runtime slice started)
+- Overall Progress: `3/9 implementation deliverables done` (D01, D02, D02b complete; D03 runtime slice started)
 - Current Gate State:
   - `Doc Gate`: `in_progress`
   - `Implementation Gate`: `in_progress`
@@ -33,8 +33,8 @@ Allowed values:
 | `00-master-roadmap` | `in_progress` | Initial version seeded |
 | `01-gap-analysis-expansion-vs-current` | `done` | Verification gate passed; reviewer approved mapping completeness and downstream ownership |
 | `02-architecture-capability-registry` | `done` | Doc + implementation gates passed; runtime capability registry scaffold implemented and manually verified |
-| `02b-extension-framework-and-pack-sdk` | `in_progress` | Extension discovery/validation + prop interaction runtime slice implemented; manual verification pending |
-| `03-pet-core-events-intents-suggestions` | `not_started` | Waiting on D02 + D02b |
+| `02b-extension-framework-and-pack-sdk` | `done` | Doc + implementation gates passed; manual verification confirmed valid/invalid pack handling, trust warning flow, and prop interaction outcomes |
+| `03-pet-core-events-intents-suggestions` | `in_progress` | Event-intent-suggestion runtime slice implemented with correlation IDs and cooldown; manual verification pending |
 | `04-openclaw-bridge-spec` | `not_started` | Waiting on D03 |
 | `05-memory-pipeline-and-obsidian-adapter` | `not_started` | Waiting on D04 |
 | `06-integrations-freshrss-spotify` | `not_started` | Waiting on D04/D05 |
@@ -43,9 +43,11 @@ Allowed values:
 | `09-decisions-log` | `in_progress` | Seed decisions added |
 
 ## Next 3 Actions
-1. Run D02b manual verification: confirm valid pack load, invalid pack warning+skip, and no startup crash.
-2. Verify prop interaction flow (`pet:interactWithExtensionProp` / hotkey `P`) logs core-authoritative arbitration decision and visible event output.
-3. Finish D02b doc gate details (manifest schema tables, compatibility policy details, trust/permission UX notes) and move to `review`.
+1. Run D03 manual verification for command pipeline:
+   - `I` status command path (`event -> intent -> suggestion`) with correlation ID logs.
+   - `U` announcement path and cooldown skip behavior.
+2. Validate extension interaction routing into D03 contract pipeline and confirm correlation trace output.
+3. Finalize D03 doc gate details (schema ownership table + evolution rules + bounded payload policy) and move D03 to `review`.
 
 ## Blockers
 - None currently.
@@ -64,6 +66,8 @@ Allowed values:
 - D02 was approved and closed as `done` with verification/implementation gates passed.
 - Advanced to D02b and implemented first runtime slice: `extension-pack-registry.js`, extension discovery/validation from `extensions/`, trust-warning enable model, and core-authoritative prop interaction IPC path.
 - Added sample extension packs (one valid, one invalid) for D02b visible/manual verification scenarios.
+- D02b was manually verified by operator and approved; moved to `done` with both gates passed.
+- Advanced to D03 and implemented first runtime contract pipeline slice (`pet-contract-router.js`) with correlation IDs, user-command routing, cooldowned announcement behavior, extension event mapping, and trace/suggestion IPC channels.
 
 ## Documentation Bootstrap Verification Checklist
 - [x] All required files exist in `docs/plan/`.

@@ -114,8 +114,8 @@ Status schema:
 | `00-master-roadmap` | `in_progress` | `docs/plan/00-master-roadmap.md` |
 | `01-gap-analysis-expansion-vs-current` | `done` | `docs/plan/01-gap-analysis-expansion-vs-current.md` |
 | `02-architecture-capability-registry` | `done` | `docs/plan/02-architecture-capability-registry.md` |
-| `02b-extension-framework-and-pack-sdk` | `in_progress` | `docs/plan/02b-extension-framework-and-pack-sdk.md` |
-| `03-pet-core-events-intents-suggestions` | `not_started` | `docs/plan/03-pet-core-events-intents-suggestions.md` |
+| `02b-extension-framework-and-pack-sdk` | `done` | `docs/plan/02b-extension-framework-and-pack-sdk.md` |
+| `03-pet-core-events-intents-suggestions` | `in_progress` | `docs/plan/03-pet-core-events-intents-suggestions.md` |
 | `04-openclaw-bridge-spec` | `not_started` | `docs/plan/04-openclaw-bridge-spec.md` |
 | `05-memory-pipeline-and-obsidian-adapter` | `not_started` | `docs/plan/05-memory-pipeline-and-obsidian-adapter.md` |
 | `06-integrations-freshrss-spotify` | `not_started` | `docs/plan/06-integrations-freshrss-spotify.md` |
@@ -124,9 +124,9 @@ Status schema:
 | `09-decisions-log` | `in_progress` | `docs/plan/09-decisions-log.md` |
 
 ### Current Progress Snapshot
-- Current Deliverable: `02b-extension-framework-and-pack-sdk`
+- Current Deliverable: `03-pet-core-events-intents-suggestions`
 - Current Status: `in_progress`
-- Overall Progress: `2/9 implementation deliverables done` (D01 and D02 complete; D02b runtime slice in progress)
+- Overall Progress: `3/9 implementation deliverables done` (D01, D02, D02b complete; D03 runtime slice in progress)
 - Scope Note: roadmap now explicitly tracks roam modes, baseline state set/priority, tray/settings/wardrobe surface, memory/introspection contracts, and visible acceptance tests.
 - Scope Note: roadmap also explicitly tracks conversation UX (chat/voice), speech bubble/dialog fallback, and lip-sync approximation with degraded-mode behavior.
 - Scope Note: roadmap includes proactive pet messaging, explicit introspection payload expectations, music-mode feedback loop, and memory/hobby governance details.
@@ -135,7 +135,8 @@ Status schema:
 - Scope Note: D01 verification gate is passed and closed; focus has shifted to D02 capability contract and degraded-fallback architecture.
 - Scope Note: delivery model is now `spec + implementation slice` so each deliverable ships visible runtime progress, not docs only.
 - Scope Note: D02 is closed as `done` (doc + implementation gates passed).
-- Scope Note: D02b implementation slice has started in code (`extension-pack-registry.js`, `extensions/` discovery/validation, trust-warning model, and prop interaction arbitration path).
+- Scope Note: D02b is closed as `done` (doc + implementation gates passed) with verified extension discovery, trust-warning toggles, and prop interaction outcomes.
+- Scope Note: D03 implementation slice has started in code (`pet-contract-router.js`, command event-intent-suggestion pipeline, correlation IDs, and announcement cooldown behavior).
 
 ### Gating Rule
 - Do not advance to the next deliverable until the current deliverable is marked `done`, its verification gate is explicitly marked passed, and its implementation slice is explicitly marked passed in its file and mirrored in `docs/plan/00-progress-tracker.md`.

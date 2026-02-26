@@ -9,6 +9,8 @@ contextBridge.exposeInMainWorld("petAPI", {
   setVisibleBounds: (bounds) => ipcRenderer.send("pet:setVisibleBounds", bounds),
   getConfig: () => ipcRenderer.invoke("pet:getConfig"),
   getCapabilitySnapshot: () => ipcRenderer.invoke("pet:getCapabilitySnapshot"),
+  getContractTrace: () => ipcRenderer.invoke("pet:getContractTrace"),
+  runUserCommand: (command) => ipcRenderer.invoke("pet:runUserCommand", { command }),
   getExtensions: () => ipcRenderer.invoke("pet:getExtensions"),
   setExtensionEnabled: (extensionId, enabled) =>
     ipcRenderer.invoke("pet:setExtensionEnabled", { extensionId, enabled }),
@@ -90,6 +92,30 @@ contextBridge.exposeInMainWorld("petAPI", {
 
     return () => {
       ipcRenderer.removeListener("pet:extension-event", listener);
+    };
+  },
+  onContractTrace: (callback) => {
+    if (typeof callback !== "function") {
+      return () => {};
+    }
+
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on("pet:contract-trace", listener);
+
+    return () => {
+      ipcRenderer.removeListener("pet:contract-trace", listener);
+    };
+  },
+  onContractSuggestion: (callback) => {
+    if (typeof callback !== "function") {
+      return () => {};
+    }
+
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on("pet:contract-suggestion", listener);
+
+    return () => {
+      ipcRenderer.removeListener("pet:contract-suggestion", listener);
     };
   },
 });
