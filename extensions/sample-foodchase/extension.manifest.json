@@ -1,0 +1,18 @@
+{
+  "manifestVersion": 1,
+  "extensionId": "sample-foodchase",
+  "name": "Sample Food Chase",
+  "version": "0.1.0",
+  "apiVersion": "1.0",
+  "permissions": [
+    "prop:spawn",
+    "prop:interact",
+    "state:suggest"
+  ],
+  "props": [
+    {
+      "id": "candy",
+      "label": "Candy"
+    }
+  ]
+}

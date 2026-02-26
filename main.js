@@ -1,6 +1,8 @@
 const { app, BrowserWindow, ipcMain, screen } = require("electron");
 const fs = require("fs");
 const path = require("path");
+const { CAPABILITY_STATES, createCapabilityRegistry } = require("./capability-registry");
+const { createExtensionPackRegistry, DEFAULT_EXTENSIONS_ROOT } = require("./extension-pack-registry");
 const { BASE_LAYOUT, computePetLayout } = require("./pet-layout");
 const {
   normalizePetBounds,
@@ -87,6 +89,24 @@ const ACTIVE_FLING_PRESET = Object.prototype.hasOwnProperty.call(FLING_PRESETS, 
   ? FLING_PRESET
   : "default";
 const FLING_CONFIG = FLING_PRESETS[ACTIVE_FLING_PRESET];
+const CAPABILITY_CONTRACT_VERSION = "1.0";
+const CAPABILITY_IDS = Object.freeze({
+  renderer: "renderer",
+  brain: "brain",
+  sensors: "sensors",
+  openclawBridge: "openclawBridge",
+  extensionRegistry: "extensionRegistry",
+  permissionManager: "permissionManager",
+  behaviorArbitrator: "behaviorArbitrator",
+  propWorld: "propWorld",
+});
+const CAPABILITY_TEST_FLAGS = Object.freeze({
+  sensorsFail: process.env.PET_FORCE_SENSORS_FAIL === "1",
+  openclawFail: process.env.PET_FORCE_OPENCLAW_FAIL === "1",
+});
+const EXTENSION_TEST_FLAGS = Object.freeze({
+  disableAll: process.env.PET_DISABLE_EXTENSIONS === "1",
+});
 
 let win;
 let dragging = false;
@@ -103,6 +123,10 @@ let cursorTimer = null;
 let dragClampLatch = createDragClampLatch();
 let activePetBoundsUpdatedAtMs = 0;
 let lastMotionPayload = null;
+let capabilityRegistry = null;
+let latestCapabilitySnapshot = null;
+let extensionPackRegistry = null;
+let latestExtensionSnapshot = null;
 
 const flingState = {
   active: false,
@@ -736,6 +760,400 @@ function logDiagnostics(label, payload) {
   writeDiagnosticsLogLine(line);
 }
 
+function emitCapabilitySnapshot(snapshot) {
+  if (!snapshot || typeof snapshot !== "object") return;
+  latestCapabilitySnapshot = snapshot;
+  emitToRenderer("pet:capabilities", snapshot);
+}
+
+function logCapabilitySummary(label, snapshot) {
+  if (!snapshot || typeof snapshot !== "object") return;
+  const summary = snapshot.summary || {};
+  const line =
+    `[pet-capability] ${label} runtime=${snapshot.runtimeState}` +
+    ` healthy=${summary.healthyCount || 0}` +
+    ` degraded=${summary.degradedCount || 0}` +
+    ` failed=${summary.failedCount || 0}` +
+    ` disabled=${summary.disabledCount || 0}`;
+  console.log(line);
+
+  if (!DIAGNOSTICS_ENABLED) return;
+  logDiagnostics("capability-summary", {
+    kind: "capabilitySummary",
+    label,
+    runtimeState: snapshot.runtimeState,
+    summary,
+  });
+  emitDiagnostics({
+    kind: "capabilitySummary",
+    label,
+    runtimeState: snapshot.runtimeState,
+    summary,
+  });
+}
+
+function logCapabilityTransition(transition) {
+  if (!transition || typeof transition !== "object") return;
+
+  const capabilityId = transition.capabilityId || "unknown";
+  const fromState = transition.previous?.state || "none";
+  const toState = transition.next?.state || "unknown";
+  const reason = transition.next?.reason || "unspecified";
+  const line = `[pet-capability] ${capabilityId} ${fromState} -> ${toState} (${reason})`;
+  console.log(line);
+
+  if (!DIAGNOSTICS_ENABLED) return;
+  const payload = {
+    kind: "capabilityTransition",
+    capabilityId,
+    fromState,
+    toState,
+    reason,
+    runtimeState: transition.snapshot?.runtimeState || "unknown",
+    summary: transition.snapshot?.summary || {},
+    details: transition.next?.details || {},
+  };
+  logDiagnostics("capability-transition", payload);
+  emitDiagnostics(payload);
+}
+
+function createCapabilityContext() {
+  return {
+    app,
+    screen,
+    getWindow: () => win,
+    diagnosticsEnabled: DIAGNOSTICS_ENABLED,
+    cursorTimerActive: Boolean(cursorTimer),
+    flingEnabled: Boolean(FLING_CONFIG?.enabled),
+    flingPreset: ACTIVE_FLING_PRESET,
+  };
+}
+
+function initializeCapabilityRegistry() {
+  capabilityRegistry = createCapabilityRegistry({
+    onTransition: (transition) => {
+      logCapabilityTransition(transition);
+      emitCapabilitySnapshot(transition.snapshot);
+    },
+  });
+
+  capabilityRegistry.register({
+    capabilityId: CAPABILITY_IDS.renderer,
+    contractVersion: CAPABILITY_CONTRACT_VERSION,
+    required: true,
+    defaultEnabled: true,
+    telemetryTags: ["core", "ui"],
+    degradedPolicy: {
+      fallback: "renderMinimal",
+    },
+    start: ({ context }) => {
+      const currentWindow = context.getWindow();
+      if (!currentWindow || currentWindow.isDestroyed()) {
+        return {
+          state: CAPABILITY_STATES.failed,
+          reason: "windowUnavailable",
+        };
+      }
+      if (currentWindow.webContents?.isLoadingMainFrame()) {
+        return {
+          state: CAPABILITY_STATES.degraded,
+          reason: "windowLoading",
+        };
+      }
+      return {
+        state: CAPABILITY_STATES.healthy,
+        reason: "windowReady",
+      };
+    },
+  });
+
+  capabilityRegistry.register({
+    capabilityId: CAPABILITY_IDS.brain,
+    contractVersion: CAPABILITY_CONTRACT_VERSION,
+    required: true,
+    defaultEnabled: true,
+    telemetryTags: ["core", "state-authority"],
+    degradedPolicy: {
+      fallback: "localDeterministicMode",
+    },
+    start: () => ({
+      state: CAPABILITY_STATES.healthy,
+      reason: "localAuthorityReady",
+    }),
+  });
+
+  capabilityRegistry.register({
+    capabilityId: CAPABILITY_IDS.sensors,
+    contractVersion: CAPABILITY_CONTRACT_VERSION,
+    required: false,
+    defaultEnabled: true,
+    telemetryTags: ["input", "cursor", "display"],
+    degradedPolicy: {
+      fallback: "reducedSensorSet",
+    },
+    start: ({ context }) => {
+      if (CAPABILITY_TEST_FLAGS.sensorsFail) {
+        throw new Error("Forced sensors startup failure (PET_FORCE_SENSORS_FAIL=1)");
+      }
+      if (!context.screen || typeof context.screen.getCursorScreenPoint !== "function") {
+        return {
+          state: CAPABILITY_STATES.failed,
+          reason: "screenApiUnavailable",
+        };
+      }
+      if (!context.cursorTimerActive) {
+        return {
+          state: CAPABILITY_STATES.degraded,
+          reason: "cursorTimerInactive",
+        };
+      }
+      return {
+        state: CAPABILITY_STATES.healthy,
+        reason: "cursorAndDisplayReady",
+      };
+    },
+  });
+
+  capabilityRegistry.register({
+    capabilityId: CAPABILITY_IDS.openclawBridge,
+    contractVersion: CAPABILITY_CONTRACT_VERSION,
+    required: false,
+    defaultEnabled: true,
+    telemetryTags: ["ai", "bridge"],
+    degradedPolicy: {
+      fallback: "offlineLocalFallback",
+    },
+    start: () => {
+      if (CAPABILITY_TEST_FLAGS.openclawFail) {
+        throw new Error("Forced bridge startup failure (PET_FORCE_OPENCLAW_FAIL=1)");
+      }
+      return {
+        state: CAPABILITY_STATES.degraded,
+        reason: "offlineFallback",
+        details: {
+          mode: "localOnly",
+        },
+      };
+    },
+  });
+
+  capabilityRegistry.register({
+    capabilityId: CAPABILITY_IDS.extensionRegistry,
+    contractVersion: CAPABILITY_CONTRACT_VERSION,
+    required: false,
+    defaultEnabled: true,
+    telemetryTags: ["extensions", "registry"],
+    degradedPolicy: {
+      fallback: "coreOnlyRuntime",
+    },
+    start: () => deriveExtensionRegistryState(latestExtensionSnapshot),
+  });
+
+  capabilityRegistry.register({
+    capabilityId: CAPABILITY_IDS.permissionManager,
+    contractVersion: CAPABILITY_CONTRACT_VERSION,
+    required: false,
+    defaultEnabled: true,
+    telemetryTags: ["extensions", "permissions"],
+    degradedPolicy: {
+      fallback: "restrictiveDefault",
+    },
+    start: () => ({
+      state: CAPABILITY_STATES.healthy,
+      reason: "authorTrustedWarningModel",
+      details: {
+        warningMode: "oneTimePerExtension",
+      },
+    }),
+  });
+
+  capabilityRegistry.register({
+    capabilityId: CAPABILITY_IDS.behaviorArbitrator,
+    contractVersion: CAPABILITY_CONTRACT_VERSION,
+    required: false,
+    defaultEnabled: true,
+    telemetryTags: ["extensions", "arbitration"],
+    degradedPolicy: {
+      fallback: "corePriorityOnly",
+    },
+    start: () => ({
+      state: CAPABILITY_STATES.healthy,
+      reason: "coreAuthorityActive",
+      details: {
+        arbitrationMode: "coreAuthoritative",
+      },
+    }),
+  });
+
+  capabilityRegistry.register({
+    capabilityId: CAPABILITY_IDS.propWorld,
+    contractVersion: CAPABILITY_CONTRACT_VERSION,
+    required: false,
+    defaultEnabled: true,
+    telemetryTags: ["extensions", "props"],
+    degradedPolicy: {
+      fallback: "logOnlyPropWorld",
+    },
+    start: () => ({
+      state: CAPABILITY_STATES.degraded,
+      reason: "logOnlyPropWorld",
+      details: {
+        mode: "logOnly",
+      },
+    }),
+  });
+
+  const snapshot = capabilityRegistry.getSnapshot();
+  emitCapabilitySnapshot(snapshot);
+  logCapabilitySummary("registered", snapshot);
+}
+
+async function startCapabilityRegistry() {
+  if (!capabilityRegistry) return;
+  const snapshot = await capabilityRegistry.startAll(createCapabilityContext());
+  emitCapabilitySnapshot(snapshot);
+  logCapabilitySummary("startup-complete", snapshot);
+  refreshExtensionCapabilityStates();
+}
+
+function updateCapabilityState(capabilityId, state, reason, details = {}) {
+  if (!capabilityRegistry) return;
+  capabilityRegistry.updateCapabilityState(capabilityId, {
+    state,
+    reason,
+    details,
+  });
+}
+
+function emitExtensionSnapshot(snapshot) {
+  if (!snapshot || typeof snapshot !== "object") return;
+  latestExtensionSnapshot = snapshot;
+  emitToRenderer("pet:extensions", snapshot);
+}
+
+function logExtensionSummary(label, snapshot) {
+  if (!snapshot || typeof snapshot !== "object") return;
+  const summary = snapshot.summary || {};
+  const line =
+    `[pet-extension] ${label}` +
+    ` discovered=${summary.discoveredCount || 0}` +
+    ` valid=${summary.validCount || 0}` +
+    ` invalid=${summary.invalidCount || 0}` +
+    ` enabled=${summary.enabledCount || 0}`;
+  console.log(line);
+
+  if (!DIAGNOSTICS_ENABLED) return;
+  const payload = {
+    kind: "extensionSummary",
+    label,
+    summary,
+    warnings: snapshot.warnings || [],
+  };
+  logDiagnostics("extension-summary", payload);
+  emitDiagnostics(payload);
+}
+
+function deriveExtensionRegistryState(snapshot) {
+  const summary = snapshot?.summary || null;
+  if (!summary) {
+    return {
+      state: CAPABILITY_STATES.failed,
+      reason: "snapshotUnavailable",
+      details: {},
+    };
+  }
+
+  if (summary.validCount <= 0 && summary.invalidCount > 0) {
+    return {
+      state: CAPABILITY_STATES.degraded,
+      reason: "noValidPacks",
+      details: summary,
+    };
+  }
+  if (summary.validCount <= 0) {
+    return {
+      state: CAPABILITY_STATES.degraded,
+      reason: "noPacksFound",
+      details: summary,
+    };
+  }
+  if (summary.invalidCount > 0) {
+    return {
+      state: CAPABILITY_STATES.degraded,
+      reason: "partialInvalid",
+      details: summary,
+    };
+  }
+  return {
+    state: CAPABILITY_STATES.healthy,
+    reason: "packsDiscovered",
+    details: summary,
+  };
+}
+
+function refreshExtensionCapabilityStates() {
+  const extensionState = deriveExtensionRegistryState(latestExtensionSnapshot);
+  updateCapabilityState(
+    CAPABILITY_IDS.extensionRegistry,
+    extensionState.state,
+    extensionState.reason,
+    extensionState.details
+  );
+  updateCapabilityState(
+    CAPABILITY_IDS.permissionManager,
+    CAPABILITY_STATES.healthy,
+    "authorTrustedWarningModel",
+    {
+      warningMode: "oneTimePerExtension",
+      source: "localAuthorTrusted",
+    }
+  );
+  updateCapabilityState(
+    CAPABILITY_IDS.behaviorArbitrator,
+    CAPABILITY_STATES.healthy,
+    "coreAuthorityActive",
+    {
+      arbitrationMode: "coreAuthoritative",
+    }
+  );
+  updateCapabilityState(
+    CAPABILITY_IDS.propWorld,
+    CAPABILITY_STATES.degraded,
+    "logOnlyPropWorld",
+    {
+      mode: "logOnly",
+    }
+  );
+}
+
+function initializeExtensionPackRuntime() {
+  extensionPackRegistry = createExtensionPackRegistry({
+    rootDir: DEFAULT_EXTENSIONS_ROOT,
+    logger: (label, payload) => {
+      if (!DIAGNOSTICS_ENABLED) return;
+      logDiagnostics(`extension-registry-${label}`, payload);
+    },
+  });
+
+  const snapshot = extensionPackRegistry.discover();
+  emitExtensionSnapshot(snapshot);
+  logExtensionSummary("discover", snapshot);
+  for (const warning of snapshot.warnings || []) {
+    console.warn(`[pet-extension] warning ${warning}`);
+  }
+
+  if (!EXTENSION_TEST_FLAGS.disableAll) return;
+
+  for (const extension of snapshot.extensions || []) {
+    if (!extension.valid || !extension.enabled) continue;
+    const result = extensionPackRegistry.setEnabled(extension.extensionId, false);
+    if (!result.ok) continue;
+  }
+  const disabledSnapshot = extensionPackRegistry.getSnapshot();
+  emitExtensionSnapshot(disabledSnapshot);
+  logExtensionSummary("all-disabled-by-flag", disabledSnapshot);
+}
+
 function pointInBounds(point, bounds) {
   return (
     point.x >= bounds.x &&
@@ -801,6 +1219,15 @@ function createWindow() {
 
   win.loadFile("index.html");
   win.webContents.once("did-finish-load", () => {
+    updateCapabilityState(CAPABILITY_IDS.renderer, CAPABILITY_STATES.healthy, "didFinishLoad", {
+      windowId: win?.id || null,
+    });
+    if (latestCapabilitySnapshot) {
+      emitCapabilitySnapshot(latestCapabilitySnapshot);
+    }
+    if (latestExtensionSnapshot) {
+      emitExtensionSnapshot(latestExtensionSnapshot);
+    }
     resetMotionSampleFromWindow();
     emitMotionState({
       velocityOverride: { vx: 0, vy: 0 },
@@ -1012,18 +1439,151 @@ ipcMain.handle("pet:getConfig", () => {
     flingEnabled: FLING_CONFIG.enabled,
     availableFlingPresets: Object.keys(FLING_PRESETS),
     layout: PET_LAYOUT,
+    capabilityRuntimeState: latestCapabilitySnapshot?.runtimeState || "unknown",
+    capabilitySummary: latestCapabilitySnapshot?.summary || null,
   };
+});
+
+ipcMain.handle("pet:getCapabilitySnapshot", () => {
+  if (!capabilityRegistry) return latestCapabilitySnapshot;
+  return capabilityRegistry.getSnapshot();
+});
+
+ipcMain.handle("pet:getExtensions", () => {
+  if (!extensionPackRegistry) return latestExtensionSnapshot;
+  return extensionPackRegistry.getSnapshot();
+});
+
+ipcMain.handle("pet:setExtensionEnabled", (_event, payload) => {
+  if (!extensionPackRegistry) {
+    return { ok: false, error: "extension_registry_unavailable" };
+  }
+
+  const extensionId =
+    typeof payload?.extensionId === "string" ? payload.extensionId.trim() : "";
+  if (!extensionId) {
+    return { ok: false, error: "invalid_extension_id" };
+  }
+
+  const result = extensionPackRegistry.setEnabled(extensionId, Boolean(payload?.enabled));
+  const snapshot = result.snapshot || extensionPackRegistry.getSnapshot();
+  emitExtensionSnapshot(snapshot);
+  logExtensionSummary("set-enabled", snapshot);
+  refreshExtensionCapabilityStates();
+
+  if (result.trustWarning) {
+    console.warn(`[pet-extension] trust-warning ${extensionId}: ${result.trustWarning}`);
+    if (DIAGNOSTICS_ENABLED) {
+      emitDiagnostics({
+        kind: "extensionTrustWarning",
+        extensionId,
+        message: result.trustWarning,
+      });
+    }
+  }
+
+  return result;
+});
+
+ipcMain.handle("pet:interactWithExtensionProp", (_event, payload) => {
+  if (!extensionPackRegistry) {
+    const unavailable = { ok: false, error: "extension_registry_unavailable" };
+    console.warn("[pet-extension] interaction failed: extension_registry_unavailable");
+    emitToRenderer("pet:extension-event", {
+      kind: "extensionPropInteraction",
+      ...unavailable,
+      ts: Date.now(),
+    });
+    return unavailable;
+  }
+
+  const extensionId =
+    typeof payload?.extensionId === "string" ? payload.extensionId.trim() : "";
+  const propId = typeof payload?.propId === "string" ? payload.propId.trim() : "";
+  const interactionType =
+    typeof payload?.interactionType === "string" && payload.interactionType.trim().length > 0
+      ? payload.interactionType.trim()
+      : "click";
+  if (!extensionId || !propId) {
+    const invalidPayload = { ok: false, error: "invalid_interaction_payload" };
+    console.warn("[pet-extension] interaction failed: invalid_interaction_payload");
+    emitToRenderer("pet:extension-event", {
+      kind: "extensionPropInteraction",
+      ...invalidPayload,
+      ts: Date.now(),
+    });
+    return invalidPayload;
+  }
+
+  const interaction = extensionPackRegistry.triggerPropInteraction(
+    extensionId,
+    propId,
+    interactionType
+  );
+  if (!interaction.ok) {
+    console.warn(
+      `[pet-extension] interaction failed extension=${extensionId} prop=${propId} error=${interaction.error}`
+    );
+    emitToRenderer("pet:extension-event", {
+      kind: "extensionPropInteraction",
+      ...interaction,
+      extensionId,
+      propId,
+      interactionType,
+      ts: Date.now(),
+    });
+    if (DIAGNOSTICS_ENABLED) {
+      emitDiagnostics({
+        kind: "extensionPropInteraction",
+        ...interaction,
+        extensionId,
+        propId,
+        interactionType,
+      });
+    }
+    return interaction;
+  }
+
+  const arbitration = {
+    authority: "core",
+    decision: "allow",
+    reason: "extensionEnabledAndPropAvailable",
+    ts: Date.now(),
+  };
+  const result = {
+    ok: true,
+    intent: interaction.intent,
+    prop: interaction.prop,
+    arbitration,
+  };
+
+  const eventPayload = {
+    kind: "extensionPropInteraction",
+    ...result,
+  };
+  console.log(
+    `[pet-extension] interaction extension=${extensionId} prop=${propId} type=${interactionType} decision=${arbitration.decision}`
+  );
+  emitToRenderer("pet:extension-event", eventPayload);
+  if (DIAGNOSTICS_ENABLED) {
+    emitDiagnostics(eventPayload);
+  }
+
+  return result;
 });
 
 ipcMain.handle("pet:getAnimationManifest", (_event, characterId) => {
   return readAnimationManifest(characterId);
 });
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   initializeDiagnosticsLog();
   createWindow();
   physicsTimer = setInterval(stepFling, FLING_CONFIG.stepMs);
   cursorTimer = setInterval(emitCursorState, CURSOR_EMIT_INTERVAL_MS);
+  initializeExtensionPackRuntime();
+  initializeCapabilityRegistry();
+  await startCapabilityRegistry();
 
   if (!DIAGNOSTICS_ENABLED) return;
 
@@ -1044,6 +1604,11 @@ app.whenReady().then(() => {
 });
 
 app.on("before-quit", () => {
+  if (capabilityRegistry) {
+    capabilityRegistry.stopAll({
+      reason: "appQuit",
+    });
+  }
   if (physicsTimer) {
     clearInterval(physicsTimer);
     physicsTimer = null;

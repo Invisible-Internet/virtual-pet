@@ -1,7 +1,7 @@
 # Deliverable 02: Architecture Capability Registry
 
 **Deliverable ID:** `02-architecture-capability-registry`  
-**Status:** `in_progress`  
+**Status:** `done`  
 **Owner:** `Mic + Codex`  
 **Last Updated:** `2026-02-26`  
 **Depends On:** `01-gap-analysis-expansion-vs-current`, `09-decisions-log`  
@@ -87,7 +87,7 @@ Pass when all are true:
 
 ## Visible App Outcome
 - When app starts, logs show capability registration and lifecycle transitions.
-- When one optional capability is forced unavailable, logs show degraded/fallback state while pet still renders and moves.
+- When one optional capability is forced unavailable, logs show failed-or-degraded fallback state while pet still renders and moves.
 - Diagnostics surface (or console when diagnostics enabled) shows current capability status summary.
 
 ## Implementation Verification (Manual)
@@ -97,9 +97,57 @@ Pass when all are true:
 4. Confirm no uncaught exception terminates app during capability startup failure path.
 
 ## Gate Status
-- `Doc Gate`: `in_progress`
-- `Implementation Gate`: `not_started`
-- `Overall`: `in_progress`
+- `Doc Gate`: `passed`
+- `Implementation Gate`: `passed`
+- `Overall`: `done`
+
+## Verification Gate Status
+- `Passed (2026-02-26): D02 capability contract and runtime scaffold were reviewed, implemented, and manually verified with normal startup plus forced optional-failure scenarios.`
+
+## Implementation Progress (This Session)
+- [x] Added runtime capability registry scaffold module: `capability-registry.js`.
+- [x] Wired main-process capability lifecycle startup and transition logging in `main.js`.
+- [x] Registered baseline capabilities: `renderer`, `brain`, `sensors`, `openclawBridge`.
+- [x] Added capability snapshot exposure:
+  - IPC handler: `pet:getCapabilitySnapshot`
+  - Runtime config summary fields: `capabilityRuntimeState`, `capabilitySummary`
+  - Renderer subscription path: `pet:capabilities`
+- [x] Added forced-failure test flags for optional capabilities:
+  - `PET_FORCE_SENSORS_FAIL=1`
+  - `PET_FORCE_OPENCLAW_FAIL=1`
+- [x] Verified code integrity with `npm run check`.
+- [x] Manual runtime verification checklist completed with operator-provided startup/failure logs.
+
+## Manual Verification Evidence (2026-02-26)
+1. Normal startup (`npm start`):
+   - `renderer -> degraded(windowLoading) -> healthy(didFinishLoad)`
+   - `brain -> healthy(localAuthorityReady)`
+   - `sensors -> healthy(cursorAndDisplayReady)`
+   - `openclawBridge -> degraded(offlineFallback)`
+   - Startup summary reported and pet remained operational.
+2. Forced sensor failure (`PET_FORCE_SENSORS_FAIL=1`):
+   - `sensors -> failed(startupError)` while app still launched.
+   - Renderer completed to healthy and pet remained interactive.
+3. Forced bridge failure (`PET_FORCE_OPENCLAW_FAIL=1`):
+   - `openclawBridge -> failed(startupError)` while app still launched.
+   - Renderer + sensors remained healthy and pet remained interactive.
+
+## Failure-Mode Walkthrough Traces (Validated)
+| Scenario | Trigger | Transition Evidence | Expected Outcome | Result |
+| --- | --- | --- | --- | --- |
+| Baseline startup | `npm start` | `renderer: starting -> degraded(windowLoading) -> healthy(didFinishLoad)` | Non-blocking startup with renderer settling to healthy | Pass |
+| Optional sensor outage | `PET_FORCE_SENSORS_FAIL=1` | `sensors: starting -> failed(startupError)` | Optional failure does not block app launch or movement runtime | Pass |
+| Optional bridge outage | `PET_FORCE_OPENCLAW_FAIL=1` | `openclawBridge: starting -> failed(startupError)` | Offline/degraded operation remains available without crash | Pass |
+
+## Telemetry and Introspection Boundaries (v1)
+Capability telemetry payload limits:
+- Per-capability snapshot fields are bounded to:
+  - `capabilityId`, `contractVersion`, `required`, `enabled`, `state`, `reason`, `ts`
+  - bounded `details` object for short diagnostic keys/values
+- Global snapshot fields:
+  - `ts`, `runtimeState`, `capabilities[]`, `summary`
+- No raw exception stacks are emitted to renderer payloads by default; only short `message` text is exposed for startup errors.
+- Correlated capability transitions are logged as concise state diffs to avoid unbounded log growth.
 
 ## Open Questions
 - Should capability state persist across restarts in v1 or derive from config only?
@@ -242,10 +290,14 @@ Boot policy:
 - [x] Lifecycle state model and transition rules drafted.
 - [x] Capability map includes all required capability classes from D02 scope.
 - [x] One failure scenario per capability drafted with deterministic fallback.
-- [ ] Failure-mode walkthroughs need trace-level examples for reviewer validation.
-- [ ] Telemetry/introspection payload boundaries need final detail limits.
+- [x] Runtime scaffold implemented for baseline capability lifecycle and status snapshot exposure.
+- [x] Failure-mode walkthroughs include trace-level examples for reviewer validation.
+- [x] Telemetry/introspection payload boundaries are defined for v1.
 
 ## Change Log
 - `2026-02-26`: File created and seeded.
 - `2026-02-26`: Advanced to `in_progress`; added first-pass draft for capability interface contract, lifecycle/status model, boot order, capability map, failure/fallback matrix, and global health payload.
 - `2026-02-26`: Updated to dual-gate (`Doc Gate` + `Implementation Gate`) workflow with mandatory implementation slice and visible outcome sections.
+- `2026-02-26`: Implemented first D02 runtime slice (capability registry scaffold + baseline capability startup/transition logging + snapshot IPC exposure) and moved implementation gate to `in_progress`.
+- `2026-02-26`: Added operator-provided manual verification evidence, failure trace walkthroughs, telemetry/introspection boundaries; moved D02 to `review` with both gates passed.
+- `2026-02-26`: User approved D02 closeout; status moved to `done` and verification gate recorded as passed.

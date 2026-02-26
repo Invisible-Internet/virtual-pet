@@ -1,0 +1,14 @@
+{
+  "manifestVersion": 1,
+  "name": "Broken Sample Extension",
+  "version": "0.0.1",
+  "permissions": [
+    "prop:spawn"
+  ],
+  "props": [
+    {
+      "id": "bad prop id",
+      "label": "Broken Prop"
+    }
+  ]
+}

@@ -20,20 +20,20 @@ Allowed values:
 - D01 is a completed discovery baseline and remains doc-only by design.
 
 ## Current Deliverable
-- Current Deliverable: `02-architecture-capability-registry`
+- Current Deliverable: `02b-extension-framework-and-pack-sdk`
 - Current Status: `in_progress`
-- Overall Progress: `1/9 implementation deliverables done` (D01 complete; D02 drafting in progress)
+- Overall Progress: `2/9 implementation deliverables done` (D01 and D02 complete; D02b runtime slice started)
 - Current Gate State:
   - `Doc Gate`: `in_progress`
-  - `Implementation Gate`: `not_started`
+  - `Implementation Gate`: `in_progress`
 
 ## Deliverable Status Table
 | Deliverable | Status | Notes |
 | --- | --- | --- |
 | `00-master-roadmap` | `in_progress` | Initial version seeded |
 | `01-gap-analysis-expansion-vs-current` | `done` | Verification gate passed; reviewer approved mapping completeness and downstream ownership |
-| `02-architecture-capability-registry` | `in_progress` | Active working document; implementation slice now required before `done` |
-| `02b-extension-framework-and-pack-sdk` | `not_started` | Waiting on D02 verification |
+| `02-architecture-capability-registry` | `done` | Doc + implementation gates passed; runtime capability registry scaffold implemented and manually verified |
+| `02b-extension-framework-and-pack-sdk` | `in_progress` | Extension discovery/validation + prop interaction runtime slice implemented; manual verification pending |
 | `03-pet-core-events-intents-suggestions` | `not_started` | Waiting on D02 + D02b |
 | `04-openclaw-bridge-spec` | `not_started` | Waiting on D03 |
 | `05-memory-pipeline-and-obsidian-adapter` | `not_started` | Waiting on D04 |
@@ -43,9 +43,9 @@ Allowed values:
 | `09-decisions-log` | `in_progress` | Seed decisions added |
 
 ## Next 3 Actions
-1. Finalize D02 doc gate content (capability interface, lifecycle/status, map, failure/fallback traces) and move D02 to `review` only when contract coverage is complete.
-2. Implement D02 runtime slice in app code: capability registry scaffold with startup lifecycle and health/degraded status reporting.
-3. Validate visible D02 behavior in app/log output, then mark D02 implementation gate passed before closing D02 as `done`.
+1. Run D02b manual verification: confirm valid pack load, invalid pack warning+skip, and no startup crash.
+2. Verify prop interaction flow (`pet:interactWithExtensionProp` / hotkey `P`) logs core-authoritative arbitration decision and visible event output.
+3. Finish D02b doc gate details (manifest schema tables, compatibility policy details, trust/permission UX notes) and move to `review`.
 
 ## Blockers
 - None currently.
@@ -58,7 +58,12 @@ Allowed values:
 - Delivery approach updated to `spec + implementation slice` for D02-D08 so each deliverable must ship visible runtime progress, not documentation alone.
 - Reviewed and updated `AGENTS.md`, roadmap, tracker, and D02-D08 deliverable files for dual-gate workflow consistency.
 - Added mandatory sections across implementation deliverables: implementation slice, visible app outcome, manual implementation verification, and gate status.
-- Visible app/runtime changes this session: `none` (session focused on workflow migration prior to D02 code implementation).
+- Implemented D02 runtime slice: new `capability-registry.js`, main-process capability lifecycle startup/transition logging, baseline capability registration (`renderer`, `brain`, `sensors`, `openclawBridge`), and capability snapshot IPC/config exposure.
+- Updated renderer/preload paths to consume capability snapshot stream for diagnostics visibility.
+- Captured operator-run validation logs for normal startup plus forced optional failure paths (`PET_FORCE_SENSORS_FAIL`, `PET_FORCE_OPENCLAW_FAIL`) and marked D02 gates passed; D02 moved to `review`.
+- D02 was approved and closed as `done` with verification/implementation gates passed.
+- Advanced to D02b and implemented first runtime slice: `extension-pack-registry.js`, extension discovery/validation from `extensions/`, trust-warning enable model, and core-authoritative prop interaction IPC path.
+- Added sample extension packs (one valid, one invalid) for D02b visible/manual verification scenarios.
 
 ## Documentation Bootstrap Verification Checklist
 - [x] All required files exist in `docs/plan/`.

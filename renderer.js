@@ -147,6 +147,8 @@ const movementKeys = {
 
 let lastDevicePixelRatio = window.devicePixelRatio || 1;
 let latestDiagnostics = null;
+let latestCapabilitySnapshot = null;
+let latestExtensionSnapshot = null;
 let diagnosticsEnabled = false;
 let latestMotion = { ...DEFAULT_MOTION };
 let currentRenderState = "idle";
@@ -229,6 +231,12 @@ async function loadRuntimeConfig() {
   try {
     const config = await window.petAPI.getConfig();
     diagnosticsEnabled = Boolean(config?.diagnosticsEnabled);
+    if (config?.capabilitySummary || config?.capabilityRuntimeState) {
+      latestCapabilitySnapshot = {
+        runtimeState: config.capabilityRuntimeState || "unknown",
+        summary: config.capabilitySummary || {},
+      };
+    }
     if (config?.layout) {
       petLayout = normalizeLayout(config.layout);
     }
@@ -520,6 +528,16 @@ function onMovementKeyDown(event) {
   else if (key === "a" || key === "arrowleft") movementKeys.left = true;
   else if (key === "d" || key === "arrowright") movementKeys.right = true;
   else if (key === "shift") movementKeys.run = true;
+  else if (key === "p") {
+    if (event.repeat) return;
+    triggerFirstExtensionPropInteraction("hotkey");
+    return;
+  }
+  else if (key === "o") {
+    if (event.repeat) return;
+    toggleFirstExtensionEnabled();
+    return;
+  }
   else if (key === " " || key === "spacebar") {
     if (!event.repeat) spriteJumpQueued = true;
   } else {
@@ -576,6 +594,58 @@ async function loadSpriteRuntime(characterId) {
     spriteDragRotationVel = 0;
     spriteWasDragDriving = false;
     activeRenderMode = RENDER_MODES.procedural;
+  }
+}
+
+async function triggerFirstExtensionPropInteraction(source = "manual") {
+  if (typeof window.petAPI.getExtensions !== "function") return;
+  if (typeof window.petAPI.interactWithExtensionProp !== "function") return;
+
+  try {
+    const snapshot = latestExtensionSnapshot || (await window.petAPI.getExtensions());
+    if (!snapshot || !Array.isArray(snapshot.extensions)) return;
+
+    const extension = snapshot.extensions.find(
+      (entry) => entry.valid && Array.isArray(entry.props) && entry.props.length > 0
+    );
+    if (!extension) return;
+
+    const prop = extension.props.find((entry) => entry.enabled) || extension.props[0];
+    if (!prop) return;
+
+    const result = await window.petAPI.interactWithExtensionProp(
+      extension.extensionId,
+      prop.id,
+      source
+    );
+    if (!result?.ok) {
+      console.warn("[extension] prop interaction failed:", result?.error || "unknown");
+    }
+  } catch (error) {
+    console.warn("[extension] prop interaction failed:", error);
+  }
+}
+
+async function toggleFirstExtensionEnabled() {
+  if (typeof window.petAPI.getExtensions !== "function") return;
+  if (typeof window.petAPI.setExtensionEnabled !== "function") return;
+
+  try {
+    const snapshot = latestExtensionSnapshot || (await window.petAPI.getExtensions());
+    if (!snapshot || !Array.isArray(snapshot.extensions)) return;
+
+    const extension = snapshot.extensions.find((entry) => entry.valid);
+    if (!extension) return;
+
+    const result = await window.petAPI.setExtensionEnabled(
+      extension.extensionId,
+      !extension.enabled
+    );
+    if (result?.snapshot && typeof result.snapshot === "object") {
+      latestExtensionSnapshot = result.snapshot;
+    }
+  } catch (error) {
+    console.warn("[extension] toggle failed:", error);
   }
 }
 
@@ -1939,6 +2009,16 @@ function drawDebugOverlay(w, h) {
   const lines = [
     `render mode: ${activeRenderMode}`,
     `state: ${currentRenderState}`,
+    `capabilities: ${
+      latestCapabilitySnapshot
+        ? `${latestCapabilitySnapshot.runtimeState} h=${latestCapabilitySnapshot.summary?.healthyCount || 0} d=${latestCapabilitySnapshot.summary?.degradedCount || 0} f=${latestCapabilitySnapshot.summary?.failedCount || 0}`
+        : "n/a"
+    }`,
+    `extensions: ${
+      latestExtensionSnapshot?.summary
+        ? `found=${latestExtensionSnapshot.summary.discoveredCount || 0} valid=${latestExtensionSnapshot.summary.validCount || 0} enabled=${latestExtensionSnapshot.summary.enabledCount || 0}`
+        : "n/a"
+    }`,
     `motion preset: ${latestMotion.preset || "n/a"}`,
     `sprite: ${
       latestSpriteFrame
@@ -2084,6 +2164,16 @@ function draw() {
 
 async function init() {
   await loadRuntimeConfig();
+  if (typeof window.petAPI.getCapabilitySnapshot === "function") {
+    try {
+      latestCapabilitySnapshot = await window.petAPI.getCapabilitySnapshot();
+    } catch {}
+  }
+  if (typeof window.petAPI.getExtensions === "function") {
+    try {
+      latestExtensionSnapshot = await window.petAPI.getExtensions();
+    } catch {}
+  }
   await loadSpriteRuntime(SPRITE_CHARACTER_ID);
 
   if (typeof window.petAPI.onMotion === "function") {
@@ -2125,6 +2215,29 @@ async function init() {
       if (payload?.cursor && Number.isFinite(payload.cursor.x) && Number.isFinite(payload.cursor.y)) {
         latestCursorScreen = { x: payload.cursor.x, y: payload.cursor.y };
       }
+    });
+  }
+
+  if (typeof window.petAPI.onCapabilities === "function") {
+    window.petAPI.onCapabilities((payload) => {
+      if (payload && typeof payload === "object") {
+        latestCapabilitySnapshot = payload;
+      }
+    });
+  }
+
+  if (typeof window.petAPI.onExtensions === "function") {
+    window.petAPI.onExtensions((payload) => {
+      if (payload && typeof payload === "object") {
+        latestExtensionSnapshot = payload;
+      }
+    });
+  }
+
+  if (typeof window.petAPI.onExtensionEvent === "function") {
+    window.petAPI.onExtensionEvent((payload) => {
+      if (!payload || typeof payload !== "object") return;
+      latestDiagnostics = payload;
     });
   }
 

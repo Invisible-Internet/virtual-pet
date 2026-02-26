@@ -8,6 +8,16 @@ contextBridge.exposeInMainWorld("petAPI", {
     ipcRenderer.send("pet:setIgnoreMouseEvents", { ignore, forward }),
   setVisibleBounds: (bounds) => ipcRenderer.send("pet:setVisibleBounds", bounds),
   getConfig: () => ipcRenderer.invoke("pet:getConfig"),
+  getCapabilitySnapshot: () => ipcRenderer.invoke("pet:getCapabilitySnapshot"),
+  getExtensions: () => ipcRenderer.invoke("pet:getExtensions"),
+  setExtensionEnabled: (extensionId, enabled) =>
+    ipcRenderer.invoke("pet:setExtensionEnabled", { extensionId, enabled }),
+  interactWithExtensionProp: (extensionId, propId, interactionType = "click") =>
+    ipcRenderer.invoke("pet:interactWithExtensionProp", {
+      extensionId,
+      propId,
+      interactionType,
+    }),
   getAnimationManifest: (characterId) =>
     ipcRenderer.invoke("pet:getAnimationManifest", characterId),
   onMotion: (callback) => {
@@ -44,6 +54,42 @@ contextBridge.exposeInMainWorld("petAPI", {
 
     return () => {
       ipcRenderer.removeListener("pet:cursor", listener);
+    };
+  },
+  onCapabilities: (callback) => {
+    if (typeof callback !== "function") {
+      return () => {};
+    }
+
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on("pet:capabilities", listener);
+
+    return () => {
+      ipcRenderer.removeListener("pet:capabilities", listener);
+    };
+  },
+  onExtensions: (callback) => {
+    if (typeof callback !== "function") {
+      return () => {};
+    }
+
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on("pet:extensions", listener);
+
+    return () => {
+      ipcRenderer.removeListener("pet:extensions", listener);
+    };
+  },
+  onExtensionEvent: (callback) => {
+    if (typeof callback !== "function") {
+      return () => {};
+    }
+
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on("pet:extension-event", listener);
+
+    return () => {
+      ipcRenderer.removeListener("pet:extension-event", listener);
     };
   },
 });

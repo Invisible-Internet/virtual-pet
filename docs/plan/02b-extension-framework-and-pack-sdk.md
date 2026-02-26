@@ -1,7 +1,7 @@
 # Deliverable 02b: Extension Framework and Pack SDK
 
 **Deliverable ID:** `02b-extension-framework-and-pack-sdk`  
-**Status:** `not_started`  
+**Status:** `in_progress`  
 **Owner:** `Mic + Codex`  
 **Last Updated:** `2026-02-26`  
 **Depends On:** `02-architecture-capability-registry`, `09-decisions-log`  
@@ -111,9 +111,31 @@ Pass when all are true:
 4. Disable the extension and confirm app returns to core-only behavior without failure.
 
 ## Gate Status
-- `Doc Gate`: `not_started`
-- `Implementation Gate`: `not_started`
-- `Overall`: `not_started`
+- `Doc Gate`: `in_progress`
+- `Implementation Gate`: `in_progress`
+- `Overall`: `in_progress`
+
+## Implementation Progress (This Session)
+- [x] Added extension discovery/validation runtime scaffold: `extension-pack-registry.js`.
+- [x] Added local `extensions/` discovery with valid/invalid manifest handling and warning+skip behavior.
+- [x] Added one-time trust warning model on first enable action per extension.
+- [x] Added extension IPC/runtime routes in `main.js`:
+  - `pet:getExtensions`
+  - `pet:setExtensionEnabled`
+  - `pet:interactWithExtensionProp`
+- [x] Added core-authoritative arbitration output for prop interaction requests (`decision=allow`, `authority=core`).
+- [x] Added renderer/preload integration for extension snapshots/events and debug visibility.
+- [x] Added keyboard-driven verification hooks in renderer:
+  - `P`: trigger first available extension prop interaction.
+  - `O`: toggle first valid extension enable/disable.
+- [x] Added sample packs:
+  - valid: `extensions/sample-foodchase/extension.manifest.json`
+  - invalid: `extensions/sample-invalid/extension.manifest.json`
+- [x] Added syntax-check coverage for new module in `package.json`.
+- [ ] Manual runtime verification for D02b slice is pending operator run.
+
+## Working Draft (v0.1)
+First implementation pass focuses on local extension discovery, validation, enable/disable toggles, and one prop interaction path routed through core arbitration.
 
 ## Open Questions
 - Whether to add zip-import installer workflow in post-v1 roadmap.
@@ -121,3 +143,4 @@ Pass when all are true:
 ## Change Log
 - `2026-02-26`: File created for extension framework and pack SDK scope.
 - `2026-02-26`: Updated for `spec + implementation slice` workflow with mandatory implementation/visible outcome sections and dual-gate status.
+- `2026-02-26`: Advanced to `in_progress`; implemented first runtime slice for extension discovery/validation, warning+skip invalid manifests, trust warning model, and core-arbitrated prop interaction path.
