@@ -1228,6 +1228,20 @@ function handleContractSuggestions(result) {
         `[pet-contract] announcement correlationId=${suggestion.correlationId} reason=${suggestion.reason}`
       );
     }
+    if (suggestion.type === "PET_ANNOUNCEMENT_SKIPPED") {
+      console.log(
+        `[pet-contract] announcement-skipped correlationId=${suggestion.correlationId} reason=${suggestion.reason} skipReason=${suggestion.skipReason}`
+      );
+    }
+    if (suggestion.type === "PET_RESPONSE") {
+      const text =
+        typeof suggestion.text === "string" && suggestion.text.length > 0
+          ? suggestion.text.slice(0, 120)
+          : "";
+      console.log(
+        `[pet-contract] response correlationId=${suggestion.correlationId} mode=${suggestion.mode || "text"} text="${text}"`
+      );
+    }
   }
 }
 

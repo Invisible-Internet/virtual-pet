@@ -667,7 +667,14 @@ async function runPetUserCommand(command) {
     const result = await window.petAPI.runUserCommand(command);
     if (!result?.ok) {
       console.warn("[contract] user command failed:", result?.error || "unknown");
+      return;
     }
+    const suggestionTypes = Array.isArray(result.suggestions)
+      ? result.suggestions.map((entry) => entry?.type || "unknown").join(",")
+      : "none";
+    console.info(
+      `[contract] command=${command} correlationId=${result.correlationId || "n/a"} suggestions=${suggestionTypes}`
+    );
   } catch (error) {
     console.warn("[contract] user command failed:", error);
   }
@@ -2046,6 +2053,11 @@ function drawDebugOverlay(w, h) {
     `contract: ${
       latestContractTrace
         ? `${latestContractTrace.stage || "?"}/${latestContractTrace.payload?.type || "?"} corr=${latestContractTrace.payload?.correlationId || "n/a"}`
+        : "n/a"
+    }`,
+    `contract suggestion: ${
+      latestContractSuggestion
+        ? `${latestContractSuggestion.type || "?"} corr=${latestContractSuggestion.correlationId || "n/a"}`
         : "n/a"
     }`,
     `motion preset: ${latestMotion.preset || "n/a"}`,

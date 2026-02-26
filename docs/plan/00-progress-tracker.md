@@ -24,7 +24,7 @@ Allowed values:
 - Current Status: `in_progress`
 - Overall Progress: `3/9 implementation deliverables done` (D01, D02, D02b complete; D03 runtime slice started)
 - Current Gate State:
-  - `Doc Gate`: `in_progress`
+  - `Doc Gate`: `passed`
   - `Implementation Gate`: `in_progress`
 
 ## Deliverable Status Table
@@ -34,7 +34,7 @@ Allowed values:
 | `01-gap-analysis-expansion-vs-current` | `done` | Verification gate passed; reviewer approved mapping completeness and downstream ownership |
 | `02-architecture-capability-registry` | `done` | Doc + implementation gates passed; runtime capability registry scaffold implemented and manually verified |
 | `02b-extension-framework-and-pack-sdk` | `done` | Doc + implementation gates passed; manual verification confirmed valid/invalid pack handling, trust warning flow, and prop interaction outcomes |
-| `03-pet-core-events-intents-suggestions` | `in_progress` | Event-intent-suggestion runtime slice implemented with correlation IDs and cooldown; manual verification pending |
+| `03-pet-core-events-intents-suggestions` | `in_progress` | Doc gate passed; runtime slice + automated contract checks added; operator manual verification still pending for implementation gate |
 | `04-openclaw-bridge-spec` | `not_started` | Waiting on D03 |
 | `05-memory-pipeline-and-obsidian-adapter` | `not_started` | Waiting on D04 |
 | `06-integrations-freshrss-spotify` | `not_started` | Waiting on D04/D05 |
@@ -46,13 +46,25 @@ Allowed values:
 1. Run D03 manual verification for command pipeline:
    - `I` status command path (`event -> intent -> suggestion`) with correlation ID logs.
    - `U` announcement path and cooldown skip behavior.
-2. Validate extension interaction routing into D03 contract pipeline and confirm correlation trace output.
-3. Finalize D03 doc gate details (schema ownership table + evolution rules + bounded payload policy) and move D03 to `review`.
+2. Validate extension interaction routing into D03 contract pipeline (`P` prop interaction) and confirm correlation trace output.
+3. If manual checks pass, mark D03 `Implementation Gate` as `passed` and move D03 status to `review` (without advancing to D04 yet).
 
 ## Blockers
 - None currently.
 
 ## Last Session Summary
+- D03 documentation contract details were expanded with:
+  - schema envelope + producer/consumer ownership table
+  - idempotency/ordering/timeout policy
+  - schema evolution rules and bounded payload policy
+  - bridge-bound read-only context contract and extension arbitration insertion rules
+- D03 `Doc Gate` moved to `passed`; `Implementation Gate` remains `in_progress` pending operator manual runtime validation.
+- Added deterministic contract verification script: `scripts/check-contract-router.js` and wired `npm run check:contracts`.
+- Added runtime verification visibility improvements:
+  - renderer debug overlay now shows latest contract suggestion type + correlation ID
+  - main-process logs now include `PET_ANNOUNCEMENT_SKIPPED` and `PET_RESPONSE` summaries
+- Ran `npm run check` successfully (`check:syntax`, `check:contracts`, `check:layout`, `check:assets` all passed).
+- Shipped outcome note: visible app/runtime change delivered (enhanced contract diagnostics visibility + deterministic contract verification harness).
 - D01 was reviewed and approved by the user; deliverable status moved to `done`.
 - D01 verification gate was explicitly marked `passed` in deliverable and mirrored in tracker workflow state.
 - Current deliverable advanced to D02 per gating rule, with D02 status set to `in_progress`.

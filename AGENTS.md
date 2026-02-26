@@ -127,6 +127,7 @@ Status schema:
 - Current Deliverable: `03-pet-core-events-intents-suggestions`
 - Current Status: `in_progress`
 - Overall Progress: `3/9 implementation deliverables done` (D01, D02, D02b complete; D03 runtime slice in progress)
+- Gate Snapshot: `Doc Gate=passed`, `Implementation Gate=in_progress` (manual runtime verification pending).
 - Scope Note: roadmap now explicitly tracks roam modes, baseline state set/priority, tray/settings/wardrobe surface, memory/introspection contracts, and visible acceptance tests.
 - Scope Note: roadmap also explicitly tracks conversation UX (chat/voice), speech bubble/dialog fallback, and lip-sync approximation with degraded-mode behavior.
 - Scope Note: roadmap includes proactive pet messaging, explicit introspection payload expectations, music-mode feedback loop, and memory/hobby governance details.
@@ -136,7 +137,8 @@ Status schema:
 - Scope Note: delivery model is now `spec + implementation slice` so each deliverable ships visible runtime progress, not docs only.
 - Scope Note: D02 is closed as `done` (doc + implementation gates passed).
 - Scope Note: D02b is closed as `done` (doc + implementation gates passed) with verified extension discovery, trust-warning toggles, and prop interaction outcomes.
-- Scope Note: D03 implementation slice has started in code (`pet-contract-router.js`, command event-intent-suggestion pipeline, correlation IDs, and announcement cooldown behavior).
+- Scope Note: D03 implementation slice now includes deterministic contract checks (`scripts/check-contract-router.js`) and enhanced diagnostics visibility (contract suggestion overlay + skip/response logs), while manual implementation verification remains pending.
+- Shipped Outcome (This Session): visible app/runtime change delivered (contract diagnostics visibility improvements) plus deterministic contract verification harness integrated into `npm run check`.
 
 ### Gating Rule
 - Do not advance to the next deliverable until the current deliverable is marked `done`, its verification gate is explicitly marked passed, and its implementation slice is explicitly marked passed in its file and mirrored in `docs/plan/00-progress-tracker.md`.
