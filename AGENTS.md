@@ -94,6 +94,17 @@ This section defines the mandatory session handoff process for roadmap execution
 3. Open the file listed in `Current Deliverable`.
 4. Continue only work relevant to that deliverable unless a blocker requires escalation.
 
+### Delivery Model (Mandatory)
+- Use `spec + implementation slice` delivery for each implementation deliverable.
+- From D02 onward, each deliverable must produce both:
+  - Documentation contract updates.
+  - A concrete runtime code slice with visible/manual verification steps.
+- Required sections in each deliverable file:
+  - `Implementation Slice (Mandatory)`
+  - `Visible App Outcome`
+  - `Implementation Verification (Manual)`
+- Exception: D01 remains a completed discovery/planning baseline and is not retrofitted with runtime code requirements.
+
 ### Deliverable TODO Table
 Status schema:
 - `not_started | in_progress | review | blocked | done`
@@ -101,8 +112,8 @@ Status schema:
 | Deliverable | Status | File |
 | --- | --- | --- |
 | `00-master-roadmap` | `in_progress` | `docs/plan/00-master-roadmap.md` |
-| `01-gap-analysis-expansion-vs-current` | `review` | `docs/plan/01-gap-analysis-expansion-vs-current.md` |
-| `02-architecture-capability-registry` | `not_started` | `docs/plan/02-architecture-capability-registry.md` |
+| `01-gap-analysis-expansion-vs-current` | `done` | `docs/plan/01-gap-analysis-expansion-vs-current.md` |
+| `02-architecture-capability-registry` | `in_progress` | `docs/plan/02-architecture-capability-registry.md` |
 | `02b-extension-framework-and-pack-sdk` | `not_started` | `docs/plan/02b-extension-framework-and-pack-sdk.md` |
 | `03-pet-core-events-intents-suggestions` | `not_started` | `docs/plan/03-pet-core-events-intents-suggestions.md` |
 | `04-openclaw-bridge-spec` | `not_started` | `docs/plan/04-openclaw-bridge-spec.md` |
@@ -113,21 +124,26 @@ Status schema:
 | `09-decisions-log` | `in_progress` | `docs/plan/09-decisions-log.md` |
 
 ### Current Progress Snapshot
-- Current Deliverable: `01-gap-analysis-expansion-vs-current`
-- Current Status: `review`
-- Overall Progress: `0/9 implementation deliverables done` (D01 mapped and in review; implementation deliverables not started)
+- Current Deliverable: `02-architecture-capability-registry`
+- Current Status: `in_progress`
+- Overall Progress: `1/9 implementation deliverables done` (D01 complete and verified; D02 drafting in progress)
 - Scope Note: roadmap now explicitly tracks roam modes, baseline state set/priority, tray/settings/wardrobe surface, memory/introspection contracts, and visible acceptance tests.
 - Scope Note: roadmap also explicitly tracks conversation UX (chat/voice), speech bubble/dialog fallback, and lip-sync approximation with degraded-mode behavior.
 - Scope Note: roadmap includes proactive pet messaging, explicit introspection payload expectations, music-mode feedback loop, and memory/hobby governance details.
 - Scope Note: roadmap also includes simple/complex custom-state onboarding patterns and read-only pet state context propagation to OpenClaw.
 - Scope Note: roadmap now includes `02b-extension-framework-and-pack-sdk` for extension packs, prop world model, trust/permission policy, arbitration, and OpenClaw context enrichment contracts.
-- Scope Note: D01 now includes full Adopt/Adapt/Defer gap mapping, renderer-baseline lock, extension framework row coverage, and ADR alignment checks; pending final sign-off before marking `done`.
+- Scope Note: D01 verification gate is passed and closed; focus has shifted to D02 capability contract and degraded-fallback architecture.
+- Scope Note: delivery model is now `spec + implementation slice` so each deliverable ships visible runtime progress, not docs only.
+- Scope Note: current session delivered workflow/governance updates only; visible app/runtime changes are pending D02 implementation slice.
 
 ### Gating Rule
-- Do not advance to the next deliverable until the current deliverable is marked `done` and its verification gate is explicitly marked passed in its file and mirrored in `docs/plan/00-progress-tracker.md`.
+- Do not advance to the next deliverable until the current deliverable is marked `done`, its verification gate is explicitly marked passed, and its implementation slice is explicitly marked passed in its file and mirrored in `docs/plan/00-progress-tracker.md`.
 
 ### Session-End Update Rule
 - At the end of every working session, update both:
   - `docs/plan/00-progress-tracker.md`
   - `AGENTS.md` (Current Progress Snapshot and TODO status rows)
 - Ensure both files point to the same `Current Deliverable` and status before stopping.
+- Include a short shipped-outcome note:
+  - Visible app/runtime changes delivered this session.
+  - Or explicit `no visible app change` with reason.

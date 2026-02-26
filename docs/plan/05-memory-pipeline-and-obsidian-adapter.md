@@ -6,7 +6,7 @@
 **Last Updated:** `2026-02-26`  
 **Depends On:** `04-openclaw-bridge-spec`  
 **Blocks:** `06-integrations-freshrss-spotify`, `08-test-and-acceptance-matrix`  
-**Verification Gate:** `Memory logging, summarization, and promotion rules are fully specified with local fallback and guarded writes`
+**Verification Gate:** `Memory logging/summarization/promotion rules are fully specified and a guarded local memory pipeline slice is implemented with visible evidence`
 
 ## Objective
 Define memory pipeline architecture that can run with or without Obsidian, while supporting OpenClaw-assisted summarization.
@@ -88,14 +88,39 @@ Pass when all are true:
 5. Identity section protections are explicit, including "never mutate Immutable Core."
 6. Required workspace/vault path schemas are documented with fallback behavior for missing targets.
 7. Mutation transparency policy is documented and tied to output behavior.
+8. Runtime writes Tier-1 observation records via guarded local adapter without blocking pet runtime.
+9. Runtime exposes mutation/promotion decision logs with threshold check outcomes.
 
 ## Tangible Acceptance Test (Doc-Level)
 1. Example data flow shows one observation record promoted to summary and either rejected/accepted for adaptive identity by threshold rules.
 2. Reviewer can verify mutation-log format and find required fields (timestamp, source evidence, threshold check outcome).
 3. Reviewer can verify required file layout examples for both domains and the mutation transparency behavior table.
 
+## Implementation Slice (Mandatory)
+- Implement local memory adapter scaffold and Tier-1 observation write path.
+- Implement one summarization/promotion evaluation step with threshold result logging (accept/reject).
+- Implement guarded write policy for protected identity sections (reject forbidden writes).
+- Implement fallback behavior when optional Obsidian path unavailable.
+
+## Visible App Outcome
+- Runtime generates local memory observation entries on supported interactions.
+- Logs show promotion decision results with threshold reasons.
+- Protected identity write attempts are visibly rejected and audited.
+
+## Implementation Verification (Manual)
+1. Trigger one observation-producing flow and confirm local Tier-1 write output.
+2. Run one promotion evaluation and confirm accept/reject logging with threshold details.
+3. Attempt write to protected identity area and confirm blocked action + audit log.
+4. Configure missing vault path and confirm graceful fallback to local adapter mode.
+
+## Gate Status
+- `Doc Gate`: `not_started`
+- `Implementation Gate`: `not_started`
+- `Overall`: `not_started`
+
 ## Open Questions
 - Default summary cadence (`daily` vs `manual + daily` hybrid).
 
 ## Change Log
 - `2026-02-26`: File created and seeded.
+- `2026-02-26`: Updated for `spec + implementation slice` workflow with mandatory implementation/visible outcome sections and dual-gate status.

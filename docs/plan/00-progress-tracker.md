@@ -12,17 +12,27 @@ Allowed values:
 - `blocked`
 - `done`
 
+## Delivery Mode
+- Implementation deliverables (D02-D08) use `spec + implementation slice`.
+- A deliverable is not `done` until both are passed:
+  - `Doc Gate`
+  - `Implementation Gate`
+- D01 is a completed discovery baseline and remains doc-only by design.
+
 ## Current Deliverable
-- Current Deliverable: `01-gap-analysis-expansion-vs-current`
-- Current Status: `review`
-- Overall Progress: `0/9 implementation deliverables done` (D01 mapped and under review; implementation deliverables not started)
+- Current Deliverable: `02-architecture-capability-registry`
+- Current Status: `in_progress`
+- Overall Progress: `1/9 implementation deliverables done` (D01 complete; D02 drafting in progress)
+- Current Gate State:
+  - `Doc Gate`: `in_progress`
+  - `Implementation Gate`: `not_started`
 
 ## Deliverable Status Table
 | Deliverable | Status | Notes |
 | --- | --- | --- |
 | `00-master-roadmap` | `in_progress` | Initial version seeded |
-| `01-gap-analysis-expansion-vs-current` | `review` | Mapping table completed with extension coverage and ADR cross-check; pending sign-off for `done` |
-| `02-architecture-capability-registry` | `not_started` | Waiting on D01 verification |
+| `01-gap-analysis-expansion-vs-current` | `done` | Verification gate passed; reviewer approved mapping completeness and downstream ownership |
+| `02-architecture-capability-registry` | `in_progress` | Active working document; implementation slice now required before `done` |
 | `02b-extension-framework-and-pack-sdk` | `not_started` | Waiting on D02 verification |
 | `03-pet-core-events-intents-suggestions` | `not_started` | Waiting on D02 + D02b |
 | `04-openclaw-bridge-spec` | `not_started` | Waiting on D03 |
@@ -33,18 +43,22 @@ Allowed values:
 | `09-decisions-log` | `in_progress` | Seed decisions added |
 
 ## Next 3 Actions
-1. Run human review pass on D01 mapping completeness and verify every requested feature target resolves to a concrete row and downstream owner.
-2. Resolve any D01 review edits and, if accepted, mark D01 `done` with explicit verification-gate pass text mirrored in this tracker.
-3. Prepare D02 kickoff checklist (capability map skeleton + failure/degraded scenarios) but do not start D02 drafting until D01 is marked `done`.
+1. Finalize D02 doc gate content (capability interface, lifecycle/status, map, failure/fallback traces) and move D02 to `review` only when contract coverage is complete.
+2. Implement D02 runtime slice in app code: capability registry scaffold with startup lifecycle and health/degraded status reporting.
+3. Validate visible D02 behavior in app/log output, then mark D02 implementation gate passed before closing D02 as `done`.
 
 ## Blockers
 - None currently.
 
 ## Last Session Summary
-- Completed D01 expansion-to-repo mapping table with explicit `Adopt/Adapt/Defer` decisions across renderer, state, shell, sensor, OpenClaw, memory, hobby, music, and extension framework themes.
-- Added mandatory extension-framework rows to D01: pack model, discovery paths, prop world windows, arbitration model, hook trust/permission model, compatibility policy, and online/offline OpenClaw context propagation.
-- Finalized renderer strategy in D01 as `Adopt` Canvas baseline and `Defer` renderer migration work outside current roadmap scope.
-- Added D01 ADR cross-check against `09-decisions-log.md`, prioritized downstream gap list, and tangible acceptance checklist coverage; moved D01 status to `review`.
+- D01 was reviewed and approved by the user; deliverable status moved to `done`.
+- D01 verification gate was explicitly marked `passed` in deliverable and mirrored in tracker workflow state.
+- Current deliverable advanced to D02 per gating rule, with D02 status set to `in_progress`.
+- Began D02 first-pass drafting for capability interface, lifecycle/status model, capability map, and degraded-fallback scenarios.
+- Delivery approach updated to `spec + implementation slice` for D02-D08 so each deliverable must ship visible runtime progress, not documentation alone.
+- Reviewed and updated `AGENTS.md`, roadmap, tracker, and D02-D08 deliverable files for dual-gate workflow consistency.
+- Added mandatory sections across implementation deliverables: implementation slice, visible app outcome, manual implementation verification, and gate status.
+- Visible app/runtime changes this session: `none` (session focused on workflow migration prior to D02 code implementation).
 
 ## Documentation Bootstrap Verification Checklist
 - [x] All required files exist in `docs/plan/`.

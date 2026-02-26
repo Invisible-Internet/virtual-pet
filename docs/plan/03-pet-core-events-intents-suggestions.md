@@ -6,7 +6,7 @@
 **Last Updated:** `2026-02-26`  
 **Depends On:** `02-architecture-capability-registry`, `02b-extension-framework-and-pack-sdk`  
 **Blocks:** `04-openclaw-bridge-spec`, `07-state-system-extension-guide`, `08-test-and-acceptance-matrix`  
-**Verification Gate:** `Pet core contracts are fully typed, directionally consistent, and validated against current runtime constraints`
+**Verification Gate:** `Pet core contracts are fully typed/directionally consistent and at least one runtime event-intent-suggestion pipeline slice is implemented and visible`
 
 ## Objective
 Define deterministic pet-core contracts separating facts, requests, and advisory outputs.
@@ -96,6 +96,8 @@ Pass when all are true:
 8. Proactive pet announcement contract is documented with bounded trigger classes and cooldown semantics.
 9. Bridge-bound request schemas include read-only state awareness fields with offline-safe defaults.
 10. Extension interaction events/intents and arbitration insertion rules are documented with ownership boundaries.
+11. Runtime includes at least one implemented normalized event pipeline reaching deterministic state or UI output.
+12. Runtime logs/output expose correlation IDs through one end-to-end flow.
 
 ## Tangible Acceptance Test (Doc-Level)
 1. Contract examples include at least one full flow: `MEDIA.playing=true` -> state-intent path -> suggestion output.
@@ -107,8 +109,31 @@ Pass when all are true:
 5. Reviewer can validate one state-awareness flow (`PET_STATE_CHANGED` -> bridge payload includes `currentState` and bounded context).
 6. Reviewer can validate one extension prop flow (`EXT_PROP_SPAWNED` -> `INTENT_PROP_FOCUS` -> arbitration decision -> state transition intent).
 
+## Implementation Slice (Mandatory)
+- Implement event bus primitives (or equivalent routing layer) for events/intents/suggestions.
+- Implement at least one normalized event source (for example `USER_COMMAND` or `MEDIA`) wired to a deterministic intent.
+- Implement one suggestion output path to renderer/chat/bubble or diagnostic output with correlation ID.
+- Implement bounded cooldown/debounce behavior for one proactive message class.
+
+## Visible App Outcome
+- Triggering a supported event produces a visible/logged intent transition and output response.
+- Correlation ID appears across at least event + intent + output log entries.
+- Offline/degraded mode still produces deterministic fallback output.
+
+## Implementation Verification (Manual)
+1. Trigger one supported event path and confirm event -> intent -> suggestion chain in logs/output.
+2. Confirm state transition or visible output aligns with documented priority/ownership rules.
+3. Disable upstream dependency and confirm degraded fallback path still emits deterministic output.
+4. Confirm cooldown/debounce prevents spam for proactive message trigger class.
+
+## Gate Status
+- `Doc Gate`: `not_started`
+- `Implementation Gate`: `not_started`
+- `Overall`: `not_started`
+
 ## Open Questions
 - Should suggestions carry explicit expiry and confidence defaults globally?
 
 ## Change Log
 - `2026-02-26`: File created and seeded.
+- `2026-02-26`: Updated for `spec + implementation slice` workflow with mandatory implementation/visible outcome sections and dual-gate status.

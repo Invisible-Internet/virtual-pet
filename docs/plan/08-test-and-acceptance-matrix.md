@@ -6,7 +6,7 @@
 **Last Updated:** `2026-02-26`  
 **Depends On:** `02b-extension-framework-and-pack-sdk`, `03-pet-core-events-intents-suggestions`, `04-openclaw-bridge-spec`, `05-memory-pipeline-and-obsidian-adapter`, `06-integrations-freshrss-spotify`, `07-state-system-extension-guide`  
 **Blocks:** `Implementation execution`  
-**Verification Gate:** `Matrix covers core runtime, capability degradation, memory adapters, and integration failures with explicit pass criteria`
+**Verification Gate:** `Matrix covers core runtime/capability degradation/memory/integration failures and includes executed evidence for representative visible scenarios`
 
 ## Objective
 Define complete acceptance and regression matrix for architecture and implementation milestones.
@@ -27,7 +27,7 @@ Define complete acceptance and regression matrix for architecture and implementa
 - D03-D07 finalized contracts.
 
 ## Decisions Locked
-- Documentation-first gating remains active.
+- Dual gating remains active (`Doc Gate` + `Implementation Gate`).
 - Existing movement/runtime invariants must remain intact.
 
 ## Implementation Breakdown
@@ -46,6 +46,7 @@ Pass when all are true:
 3. Pass/fail criteria are objective and repeatable.
 4. Matrix has ownership and execution cadence.
 5. Each deliverable has at least one "visible result" acceptance scenario.
+6. Representative tests from each subsystem are actually executed and recorded with evidence links/log snippets.
 
 ## Required Visible Test Targets
 1. Roaming: pet roams desktop bounds and optional roam zone with clear boundary behavior.
@@ -92,5 +93,28 @@ Pass when all are true:
 ## Open Questions
 - Whether to add lightweight scripted smoke tests in this deliverable or defer to implementation phase.
 
+## Implementation Slice (Mandatory)
+- Implement a lightweight test execution harness or repeatable manual-run script for core visible scenarios.
+- Execute a representative subset across movement, capability degradation, dialogue fallback, extension path, and memory path.
+- Record outcomes in matrix with timestamp, runner, pass/fail, and evidence reference.
+- Ensure regression checks include drag/fling invariants from existing runtime.
+
+## Visible App Outcome
+- Test matrix includes concrete executed rows (not only planned rows).
+- User can run one command or short checklist and see pass/fail output tied to visible app behavior.
+- At least one degraded-path scenario and one extension-path scenario are demonstrated and recorded.
+
+## Implementation Verification (Manual)
+1. Run the selected smoke/manual suite and capture results in matrix.
+2. Validate one core runtime invariant test (`drag/fling/size`) remains passing.
+3. Validate one offline/degraded bridge scenario and one extension scenario with evidence.
+4. Confirm failed test behavior is explicitly surfaced with actionable notes.
+
+## Gate Status
+- `Doc Gate`: `not_started`
+- `Implementation Gate`: `not_started`
+- `Overall`: `not_started`
+
 ## Change Log
 - `2026-02-26`: File created and seeded.
+- `2026-02-26`: Updated for `spec + implementation slice` workflow with mandatory implementation/visible outcome sections and dual-gate status.

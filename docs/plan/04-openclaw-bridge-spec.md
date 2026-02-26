@@ -6,7 +6,7 @@
 **Last Updated:** `2026-02-26`  
 **Depends On:** `03-pet-core-events-intents-suggestions`, `02b-extension-framework-and-pack-sdk`  
 **Blocks:** `05-memory-pipeline-and-obsidian-adapter`, `06-integrations-freshrss-spotify`, `08-test-and-acceptance-matrix`  
-**Verification Gate:** `Bridge request/stream/error model is complete, testable, and does not violate local runtime authority rules`
+**Verification Gate:** `Bridge request/stream/error model is complete/testable and a runtime bridge slice (with offline fallback) is implemented without violating local authority rules`
 
 ## Objective
 Specify how the app integrates with OpenClaw in an OpenClaw-first orchestration model with guaranteed fallbacks.
@@ -76,6 +76,8 @@ Pass when all are true:
 7. Introspection prompts (`what are you thinking/doing/status report`) resolve in both online and degraded modes with bounded output policy.
 8. State-aware dialogue path is specified: OpenClaw can reference current state/context but cannot authoritatively set state.
 9. Extension context enrichment path is specified for both online and offline modes with explicit source labeling.
+10. Runtime includes one implemented bridge request path with correlation IDs and timeout handling.
+11. Offline fallback path is demonstrably non-blocking and user-visible.
 
 ## Tangible Acceptance Test (Doc-Level)
 1. Sequence diagram shows an AI timeout case and deterministic local fallback result.
@@ -93,8 +95,31 @@ Pass when all are true:
    - Online path with `activePropsSummary` + `extensionContextSummary`.
    - Offline fallback path with local templated response and `source=offline`.
 
+## Implementation Slice (Mandatory)
+- Implement minimal `openclawBridge` runtime module stub with request envelope and timeout behavior.
+- Implement one user-facing route (for example text dialog request) through bridge adapter.
+- Implement deterministic fallback response path when bridge unavailable/timeout.
+- Implement explicit blocked-action guardrails (`set state`, `render control`, immutable identity writes).
+
+## Visible App Outcome
+- A user query can run through bridge path when available and show response output.
+- On forced timeout/unavailable state, app shows fallback response without freezing pet runtime.
+- Logs explicitly mark `source=online` vs `source=offline` and include correlation IDs.
+
+## Implementation Verification (Manual)
+1. Run one online-available bridge request and verify response output plus correlation ID.
+2. Force timeout/unavailable bridge state and verify local fallback output.
+3. Verify pet drag/fling behavior remains unaffected during bridge failure scenarios.
+4. Validate blocked-action policy logs for at least one prohibited action attempt.
+
+## Gate Status
+- `Doc Gate`: `not_started`
+- `Implementation Gate`: `not_started`
+- `Overall`: `not_started`
+
 ## Open Questions
 - Default reconnect policy tuning for local loopback deployments.
 
 ## Change Log
 - `2026-02-26`: File created and seeded.
+- `2026-02-26`: Updated for `spec + implementation slice` workflow with mandatory implementation/visible outcome sections and dual-gate status.

@@ -5,18 +5,31 @@ Related:
 - Decisions Log: [`09-decisions-log.md`](./09-decisions-log.md)
 
 ## Summary
-This roadmap governs the documentation-first execution path for Virtual Pet v2:
+This roadmap governs the documentation-guided implementation path for Virtual Pet v2:
 - Keep Canvas runtime baseline.
 - Build modular capability architecture with graceful fallbacks.
 - Add extension framework contracts for offline-first props/state packs/context with online OpenClaw enrichment.
 - Deliver OpenClaw-first orchestration and immediate memory pipeline support.
-- Gate progression by verification before advancing to the next deliverable.
+- Gate progression by both documentation and implementation verification before advancing to the next deliverable.
 - Lock explicit user-visible behavior targets:
   - Desktop roam across display/work-area bounds and optional user-defined roam zone.
   - State catalog including `Idle`, `Roam`, `MusicChill`, `MusicDance`, `WatchMode`, `Sleep`.
   - Taskbar/tray shell with settings menu and wardrobe (costumes/accessories) controls.
   - Conversational UX with OpenClaw-backed dialogue plus offline-safe fallback chat input/output.
   - Speech output/input path with basic lip-sync approximation and fallback talk SFX mode.
+
+## Execution Mode (Doc + Code)
+For implementation deliverables (D02-D08), completion requires dual gates:
+1. `Doc Gate`: contract/spec sections are complete and internally consistent.
+2. `Implementation Gate`: at least one concrete runtime slice is implemented with visible/manual verification steps and outcomes.
+
+Definition of `done` for each implementation deliverable:
+- Deliverable file marks both gates passed.
+- Tracker mirrors status and gate outcomes.
+- User can run or observe at least one new visible app/runtime behavior tied to that deliverable.
+
+Baseline exception:
+- D01 is a completed discovery/planning deliverable and does not require retroactive runtime implementation.
 
 ## Explicit Feature Targets (Roadmap Commitments)
 1. Movement and Roaming
@@ -120,11 +133,13 @@ This roadmap governs the documentation-first execution path for Virtual Pet v2:
 - Event/Intent/Suggestion contracts are frozen.
 - OpenClaw bridge behavior and fallback semantics are frozen.
 - Conversation I/O contracts (text/voice) and non-authority constraints are frozen.
+- At least one visible runtime increment is shipped from each Phase 1 deliverable.
 
 ### Phase 2 Exit
 - Memory adapter model (`local` and `obsidian`) is specified and testable.
 - FreshRSS/Spotify intent routing and missing-skill fallback behaviors are specified.
 - Hobby stream scoring and daily summary behavior are specified with deterministic logging reasons.
+- At least one visible runtime increment is shipped from each Phase 2 deliverable.
 
 ### Phase 3 Exit
 - State extension workflow is documented and validated.
@@ -132,6 +147,7 @@ This roadmap governs the documentation-first execution path for Virtual Pet v2:
 - Desktop shell UX (tray/settings/wardrobe) has explicit acceptance scenarios.
 - Roam/state/introspection scenarios have visible, operator-checkable outcomes.
 - Conversation, speech bubble, and lip-sync fallback scenarios have visible, operator-checkable outcomes.
+- At least one visible runtime increment is shipped from each Phase 3 deliverable.
 
 ## Risk Register Summary
 | Risk | Impact | Mitigation |

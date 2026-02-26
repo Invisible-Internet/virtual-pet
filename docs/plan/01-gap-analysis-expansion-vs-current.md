@@ -1,7 +1,7 @@
 # Deliverable 01: Gap Analysis - Expansion Doc vs Current Repo
 
 **Deliverable ID:** `01-gap-analysis-expansion-vs-current`  
-**Status:** `review`  
+**Status:** `done`  
 **Owner:** `Mic + Codex`  
 **Last Updated:** `2026-02-26`  
 **Depends On:** `00-master-roadmap`, `09-decisions-log`  
@@ -155,8 +155,10 @@ Pass when all are true:
 - [x] Extension coverage includes: offline/online context path, prop world behavior, and trust/permission visibility checks.
 
 ## Verification Gate Status
-- `Provisional Pass (author self-check complete; ready for human review sign-off before marking deliverable done).`
+- `Passed (2026-02-26): reviewer approved mapping completeness, extension-framework coverage, and ADR alignment.`
+- `Implementation Gate: N/A (D01 is discovery/planning baseline by roadmap exception).`
 
 ## Change Log
 - `2026-02-26`: File created and seeded.
 - `2026-02-26`: Added full expansion-to-repo mapping table, extension framework gap rows, renderer strategy resolution, ADR cross-check, prioritized downstream gap list, and explicit verification checklist coverage; status moved to `review`.
+- `2026-02-26`: Reviewer approved D01; status moved to `done` and verification gate recorded as passed.

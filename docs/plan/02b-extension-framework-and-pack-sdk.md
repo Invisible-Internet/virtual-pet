@@ -6,7 +6,7 @@
 **Last Updated:** `2026-02-26`  
 **Depends On:** `02-architecture-capability-registry`, `09-decisions-log`  
 **Blocks:** `03-pet-core-events-intents-suggestions`, `04-openclaw-bridge-spec`, `07-state-system-extension-guide`, `08-test-and-acceptance-matrix`  
-**Verification Gate:** `Extension framework contracts are fully specified for pack model, trust/permission policy, desktop prop world, arbitration, hook boundaries, and online/offline context flow with runnable examples`
+**Verification Gate:** `Extension framework contracts are fully specified and at least one extension pack lifecycle + prop/arbitration slice is implemented with visible runtime behavior`
 
 ## Objective
 Define the v1 extension framework so contributors can add offline-first props, behaviors, and custom state packs, with optional OpenClaw context enrichment when online.
@@ -83,6 +83,8 @@ Pass when all are true:
 5. Hook model and storage boundaries are explicit.
 6. Online/offline context flow is fully specified and non-blocking.
 7. Reference examples (`FoodChase`, `Reading`, `PoolPlay`) map to framework contracts end-to-end.
+8. A minimal extension runtime slice is implemented (discover/validate/enable path with non-fatal failure behavior).
+9. At least one prop interaction path is visibly demonstrable in app runtime.
 
 ## Tangible Acceptance Test (Doc-Level)
 1. Reviewer can validate one valid and one invalid extension manifest path with non-fatal outcomes.
@@ -91,8 +93,31 @@ Pass when all are true:
 4. Reviewer can validate conflict resolution for two simultaneous extension-origin behavior requests.
 5. Reviewer can validate example pack templates for `FoodChase`, `Reading`, and `PoolPlay`.
 
+## Implementation Slice (Mandatory)
+- Implement extension discovery/validation scaffold for local `extensions/` path.
+- Implement manifest validity handling with warning + skip (non-fatal).
+- Implement one simple prop registration and interaction routing path to core intent/arbitration.
+- Implement one permission warning/toggle flow (can be config/console-backed in first slice).
+
+## Visible App Outcome
+- App discovers at least one test extension pack and logs status.
+- Invalid extension pack does not crash app and appears as skipped/warned.
+- One prop interaction triggers a visible pet reaction or logged state-intent transition.
+
+## Implementation Verification (Manual)
+1. Add one valid test pack and one invalid test pack under `extensions/` and start app.
+2. Confirm valid pack loads and invalid pack is skipped with explicit warning.
+3. Trigger one prop interaction and confirm arbitration path + pet response is visible.
+4. Disable the extension and confirm app returns to core-only behavior without failure.
+
+## Gate Status
+- `Doc Gate`: `not_started`
+- `Implementation Gate`: `not_started`
+- `Overall`: `not_started`
+
 ## Open Questions
 - Whether to add zip-import installer workflow in post-v1 roadmap.
 
 ## Change Log
 - `2026-02-26`: File created for extension framework and pack SDK scope.
+- `2026-02-26`: Updated for `spec + implementation slice` workflow with mandatory implementation/visible outcome sections and dual-gate status.

@@ -6,7 +6,7 @@
 **Last Updated:** `2026-02-26`  
 **Depends On:** `03-pet-core-events-intents-suggestions`, `02b-extension-framework-and-pack-sdk`  
 **Blocks:** `08-test-and-acceptance-matrix`  
-**Verification Gate:** `Guide defines repeatable process for adding config-only and hook-enabled states without core switch rewrites`
+**Verification Gate:** `Guide defines repeatable state-extension process and at least one simple + one complex state are implemented with visible runtime transitions`
 
 ## Objective
 Define extensible workflow for adding new pet states under the mixed model (config-first with optional code hooks).
@@ -80,6 +80,8 @@ Pass when all are true:
 8. Guide includes explicit process to add a simple and a complex custom state without core switch rewrite.
 9. State-context narration hook contract is explicit and includes offline fallback behavior.
 10. Prop-to-state mapping templates are explicit and enforce deterministic fallback behavior.
+11. Runtime demonstrates at least one simple config-only state and one complex phase state transition path.
+12. Missing state assets trigger deterministic fallback without runtime crash.
 
 ## Tangible Acceptance Test (Doc-Level)
 1. Reviewer can follow one explicit transition table with all baseline states and priority conflict resolution.
@@ -90,8 +92,31 @@ Pass when all are true:
 6. Example `PoolPlay` config shows phase transitions (`enter/loop/exit/recover`) and fallback behavior for missing sub-animations.
 7. Example `FoodChase` config shows held-prop proximity behavior (`look/follow-head` near, `chase` far) with bounded transition rules.
 
+## Implementation Slice (Mandatory)
+- Implement baseline state registration mechanism from config catalog (no switch-case rewrite path).
+- Implement one simple custom state (`Reading`) and one complex phase state (`PoolPlay`) in runtime.
+- Implement one state-context narration fallback path for missing context provider data.
+- Implement missing animation/resource fallback behavior for both simple and complex examples.
+
+## Visible App Outcome
+- User can trigger `Reading` and observe state entry/behavior.
+- User can trigger `PoolPlay` and observe `enter -> loop -> exit -> recover` sequence (or logged equivalent if visual assets missing).
+- Missing resource scenarios visibly degrade to fallback state/animation without crash.
+
+## Implementation Verification (Manual)
+1. Trigger `Reading` state and verify transition + visible/logged context output.
+2. Trigger `PoolPlay` path and verify deterministic phase transitions.
+3. Remove one required asset and verify fallback handling with explicit warning.
+4. Ask a state-aware question and verify deterministic fallback answer when context data unavailable.
+
+## Gate Status
+- `Doc Gate`: `not_started`
+- `Implementation Gate`: `not_started`
+- `Overall`: `not_started`
+
 ## Open Questions
 - Where to store state packs in repo layout (`assets/states` vs `config/states`).
 
 ## Change Log
 - `2026-02-26`: File created and seeded.
+- `2026-02-26`: Updated for `spec + implementation slice` workflow with mandatory implementation/visible outcome sections and dual-gate status.
