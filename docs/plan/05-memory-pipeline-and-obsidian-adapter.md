@@ -1,9 +1,9 @@
 # Deliverable 05: Memory Pipeline and Obsidian Adapter
 
 **Deliverable ID:** `05-memory-pipeline-and-obsidian-adapter`  
-**Status:** `in_progress`  
+**Status:** `done`  
 **Owner:** `Mic + Codex`  
-**Last Updated:** `2026-02-26`  
+**Last Updated:** `2026-02-27`  
 **Depends On:** `05a-obsidian-workspace-bootstrap-and-connectivity`  
 **Blocks:** `06-integrations-freshrss-spotify`, `08-test-and-acceptance-matrix`  
 **Verification Gate:** `Memory logging/summarization/promotion rules are fully specified and a guarded local memory pipeline slice is implemented with visible evidence`
@@ -64,7 +64,7 @@ Define memory pipeline architecture that can run with or without Obsidian, while
 3. Introduce a settings file in a `config/` folder to define path dependencies and adapter mode, then have runtime read from that file first.
 4. Keep local workspace files (`SOUL.md`, `IDENTITY.md`, `USER.md`, `MEMORY.md`) as offline fallback bootstrap, but allow redirect to OpenClaw workspace when configured.
 5. Support Windows + WSL path targets for OpenClaw/Obsidian by allowing UNC paths (for example `\\\\wsl$\\Ubuntu\\...`) in settings.
-6. D05 closeout remains blocked on D05a real-path validation evidence (OpenClaw in WSL + local Obsidian vault) even after code slice completion.
+6. D05 closeout is gated by D05a real-path validation evidence (OpenClaw in WSL + local Obsidian vault) before final implementation pass.
 
 ## Out of Scope
 - Full memory UX in notebook UI.
@@ -211,6 +211,24 @@ Define memory pipeline architecture that can run with or without Obsidian, while
 3. Press `N`; verify protected write is blocked and mutation audit entry is written.
 4. Start with `PET_MEMORY_ADAPTER=obsidian` and missing vault path; verify fallback to local mode with no runtime crash.
 
+## Manual Validation Evidence (2026-02-27)
+- Operator startup log confirms settings-driven runtime in Obsidian mode:
+  - `requestedAdapterMode=obsidian`
+  - `activeAdapterMode=obsidian`
+  - `fallbackReason=none`
+  - `activeWorkspaceRoot=W:\\AI\\OpenClaw\\Memory\\Vault`
+  - `openClawWorkspaceRoot=\\\\wsl$\\Ubuntu-24.04\\home\\openclaw\\.openclaw\\workspace`
+  - `openclawWorkspaceBootstrapMode=warn_only`
+- Manual hotkey verification evidence from live runtime:
+  - `M`: `observationWritten` for `music_rating` to `W:\\AI\\OpenClaw\\Memory\\Vault\\01_Logs\\2026-02-27.md`.
+  - `H`: `promotionDecision` logged to `...\\04_Analysis\\promotion-decisions.md` with threshold rejection reasons:
+    - `interaction_count_below_threshold`
+    - `persistence_window_below_threshold`
+    - `distinct_evidence_below_threshold`
+  - `N`: `identityMutationDecision` blocked for `section=\"Immutable Core\"` with reason `immutable_core_protected`, logged to `...\\04_Analysis\\identity-mutations.md`.
+- Additional repeated `H` runs continued to append deterministic threshold-rejection decisions without runtime instability.
+- Combined with existing automated checks (`check-memory-pipeline`) and D05a path/toggle validation, D05 implementation criteria are satisfied.
+
 ## Implementation Progress (This Session)
 - D05a inserted ahead of D05 closeout; current D05 gate is now dependent on D05a real-path verification evidence.
 - Added new runtime module: `memory-pipeline.js`.
@@ -248,8 +266,8 @@ Pass when all are true:
 
 ## Gate Status
 - `Doc Gate`: `passed`
-- `Implementation Gate`: `in_progress` (blocked on D05a real-path validation evidence)
-- `Overall`: `in_progress`
+- `Implementation Gate`: `passed`
+- `Overall`: `done`
 
 ## Open Questions
 - Should Markdown decision logs store machine fields as fenced JSON blocks or compact table rows.
@@ -265,3 +283,5 @@ Pass when all are true:
 - `2026-02-26`: Added concrete memory contracts, adapter fallback table, and delivered first runtime implementation slice with automated checks.
 - `2026-02-26`: Planning update with user feedback: markdown-first artifact policy, config-file path strategy, and OpenClaw/Obsidian real-path validation scope.
 - `2026-02-26`: Dependency updated to D05a insertion; D05 remains `in_progress` until D05a connectivity/bootstrap evidence is captured.
+- `2026-02-27`: D05a dependency satisfied (real-path validation passed); D05 remains current deliverable for final implementation-gate closeout work.
+- `2026-02-27`: Captured operator runtime evidence for `runtimeReady` + `M/H/N` manual paths in Obsidian mode and closed D05 as `done` (Doc + Implementation gates passed).

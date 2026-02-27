@@ -1,9 +1,9 @@
 # Deliverable 06: Integrations - FreshRSS and Spotify
 
 **Deliverable ID:** `06-integrations-freshrss-spotify`  
-**Status:** `not_started`  
+**Status:** `in_progress`  
 **Owner:** `Mic + Codex`  
-**Last Updated:** `2026-02-26`  
+**Last Updated:** `2026-02-27`  
 **Depends On:** `04-openclaw-bridge-spec`, `05-memory-pipeline-and-obsidian-adapter`  
 **Blocks:** `08-test-and-acceptance-matrix`  
 **Verification Gate:** `Intent routing, capability health checks, and fallback behavior are defined and at least one integration path is implemented with visible runtime output`
@@ -90,9 +90,9 @@ Pass when all are true:
 4. Verify capability health status reflects available/unavailable integration states.
 
 ## Gate Status
-- `Doc Gate`: `not_started`
+- `Doc Gate`: `in_progress`
 - `Implementation Gate`: `not_started`
-- `Overall`: `not_started`
+- `Overall`: `in_progress`
 
 ## Open Questions
 - Minimum required Spotify actions for v1 (`play/pause/next/volume`) vs extended set.
@@ -100,3 +100,4 @@ Pass when all are true:
 ## Change Log
 - `2026-02-26`: File created and seeded.
 - `2026-02-26`: Updated for `spec + implementation slice` workflow with mandatory implementation/visible outcome sections and dual-gate status.
+- `2026-02-27`: Advanced to `in_progress` after D05 closeout; implementation slice execution pending.

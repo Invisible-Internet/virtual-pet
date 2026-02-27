@@ -1,9 +1,9 @@
 # Deliverable 05a: Obsidian Workspace Bootstrap and Connectivity
 
 **Deliverable ID:** `05a-obsidian-workspace-bootstrap-and-connectivity`  
-**Status:** `in_progress`  
+**Status:** `done`  
 **Owner:** `Mic + Codex`  
-**Last Updated:** `2026-02-26`  
+**Last Updated:** `2026-02-27`  
 **Depends On:** `04-openclaw-bridge-spec`  
 **Blocks:** `05-memory-pipeline-and-obsidian-adapter`  
 **Verification Gate:** `Settings-driven OpenClaw/Obsidian paths and connectivity policies are implemented and validated with local environment evidence`
@@ -132,6 +132,32 @@ Insert a configuration-first integration layer before D05 gate closeout so runti
    - Local Obsidian vault path is valid.
    - OpenClaw/Obsidian toggles verified in both enabled and disabled states.
 
+## Manual Validation Evidence (2026-02-27)
+- Configured local override (`config/settings.local.json`) with:
+  - `paths.openClawWorkspaceRoot="\\\\wsl$\\Ubuntu-24.04\\home\\openclaw\\.openclaw\\workspace"`
+  - `paths.obsidianVaultRoot="W:\\AI\\OpenClaw\\Memory\\Vault"`
+  - `openclaw.transport="http"`
+- WSL OpenClaw runtime check:
+  - `wsl bash -lc "openclaw status --deep --json || openclaw status --deep"` reported `gateway.reachable=true` and `url=ws://127.0.0.1:18789`.
+- Resolved WSL permission/access path issue:
+  - `micster` already in `openclaw` group; `/home/openclaw/.openclaw` had restrictive permissions.
+  - Updated Linux permissions to allow traversal and workspace access for group members:
+    - `/home/openclaw/.openclaw` -> `drwx--x---`
+    - `/home/openclaw/.openclaw/workspace` -> `drwxrws---`
+- Workspace connectivity checks (elevated run required for UNC access in this environment):
+  - `npm run check:workspace` => `openclaw.status=ready`, `obsidian.status=ready`.
+  - `PET_OPENCLAW_ENABLED=0 npm run check:workspace` => `openclaw.status=disabled`.
+  - `PET_MEMORY_ADAPTER=local npm run check:workspace` => `obsidian.status=not_requested`.
+- Vault bootstrap evidence:
+  - `npm run bootstrap:obsidian-vault` created:
+    - `01_Logs`
+    - `02_User`
+    - `03_Primea`
+    - `04_Analysis`
+    - `99_System`
+- Regression check:
+  - `npm run check` passed (`check:syntax`, `check:contracts`, `check:layout`, `check:assets`).
+
 ## Automated Verification Evidence (2026-02-26)
 - `npm run check` passed:
   - syntax checks include `settings-runtime.js`.
@@ -142,9 +168,11 @@ Insert a configuration-first integration layer before D05 gate closeout so runti
 
 ## Gate Status
 - `Doc Gate`: `passed`
-- `Implementation Gate`: `in_progress` (awaiting real-path manual evidence against local WSL OpenClaw + local Obsidian vault)
-- `Overall`: `in_progress`
+- `Implementation Gate`: `passed`
+- `Overall`: `done`
 
 ## Change Log
 - `2026-02-26`: Deliverable inserted and initialized as current execution target before D05 closeout.
 - `2026-02-26`: Shipped settings/runtime/transport/bootstrap implementation slice and automated verification harness.
+- `2026-02-27`: Captured real-path validation evidence against WSL OpenClaw workspace + local Obsidian vault, including enabled/disabled toggle checks.
+- `2026-02-27`: Deliverable closed as `done` (`Doc Gate` and `Implementation Gate` both passed).

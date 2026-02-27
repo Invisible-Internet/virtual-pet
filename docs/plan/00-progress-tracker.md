@@ -20,12 +20,12 @@ Allowed values:
 - D01 is a completed discovery baseline and remains doc-only by design.
 
 ## Current Deliverable
-- Current Deliverable: `05a-obsidian-workspace-bootstrap-and-connectivity`
+- Current Deliverable: `06-integrations-freshrss-spotify`
 - Current Status: `in_progress`
-- Overall Progress: `5/10 implementation deliverables done` (D01, D02, D02b, D03, D04 complete; D05a in progress, D05 in progress)
+- Overall Progress: `7/10 implementation deliverables done` (D01, D02, D02b, D03, D04, D05a, D05 complete; D06 in progress)
 - Current Gate State:
-  - `Doc Gate`: `passed`
-  - `Implementation Gate`: `in_progress`
+  - `Doc Gate`: `in_progress`
+  - `Implementation Gate`: `not_started`
 
 ## Deliverable Status Table
 | Deliverable | Status | Notes |
@@ -36,22 +36,46 @@ Allowed values:
 | `02b-extension-framework-and-pack-sdk` | `done` | Doc + implementation gates passed; manual verification confirmed valid/invalid pack handling, trust warning flow, and prop interaction outcomes |
 | `03-pet-core-events-intents-suggestions` | `done` | Doc + implementation gates passed; manual verification confirmed status flow, announcement cooldown skips, and extension interaction trace correlation |
 | `04-openclaw-bridge-spec` | `done` | Doc + implementation gates passed after operator-confirmed online/timeout/offline + guardrail + drag/fling verification |
-| `05a-obsidian-workspace-bootstrap-and-connectivity` | `in_progress` | Settings runtime + transport/bootstrap implementation shipped; awaiting real-path validation evidence (WSL OpenClaw + local Obsidian vault) |
-| `05-memory-pipeline-and-obsidian-adapter` | `in_progress` | Memory contracts documented; runtime slice + markdown canonical logs/settings wiring shipped; awaiting D05a evidence and final real-path gate closeout |
-| `06-integrations-freshrss-spotify` | `not_started` | Waiting on D05a/D05 |
+| `05a-obsidian-workspace-bootstrap-and-connectivity` | `done` | Doc + implementation gates passed; real-path validation captured for WSL OpenClaw workspace + local Obsidian vault with enabled/disabled toggle checks |
+| `05-memory-pipeline-and-obsidian-adapter` | `done` | Doc + implementation gates passed; operator runtime evidence confirmed `runtimeReady` obsidian path plus `M/H/N` write/promotion/mutation behavior |
+| `06-integrations-freshrss-spotify` | `in_progress` | D05 dependency cleared; starting integration contract/runtime slice planning for FreshRSS + Spotify flows |
 | `07-state-system-extension-guide` | `not_started` | Waiting on D03 + D02b |
 | `08-test-and-acceptance-matrix` | `not_started` | Final consolidation |
 | `09-decisions-log` | `in_progress` | Seed decisions added |
 
 ## Next 3 Actions
-1. Run local real-path validation with WSL OpenClaw endpoint + workspace path configured in `config/settings.local.json`.
-2. Run local Obsidian vault validation (adapter toggles + fallback behavior) and capture manual evidence for D05a implementation gate.
-3. Feed D05a evidence into D05 closeout checklist (markdown artifacts + configured path behavior) before any move to D06.
+1. Draft D06 integration contract details (event schema, polling cadence, failure/degraded modes) for FreshRSS and Spotify inputs.
+2. Implement first D06 runtime slice for at least one integration path with deterministic fallback behavior.
+3. Add manual verification cases and automated contract checks for D06, then capture first runtime evidence.
 
 ## Blockers
 - None currently.
 
 ## Last Session Summary
+- Closed D05 as `done` with operator-provided runtime evidence from `npm start`:
+  - `runtimeReady` confirmed `activeAdapterMode=obsidian`, `fallbackReason=none`, OpenClaw + vault paths resolved.
+  - `M` hotkey wrote `music_rating` observation to `W:\\AI\\OpenClaw\\Memory\\Vault\\01_Logs\\2026-02-27.md`.
+  - `H` hotkey wrote threshold-gated promotion decisions to `W:\\AI\\OpenClaw\\Memory\\Vault\\04_Analysis\\promotion-decisions.md`.
+  - `N` hotkey blocked `Immutable Core` mutation and wrote audit entry to `W:\\AI\\OpenClaw\\Memory\\Vault\\04_Analysis\\identity-mutations.md`.
+- D05 `Implementation Gate` marked `passed`; D05 moved to `done`.
+- Current deliverable advanced to D06 per gating rule.
+- Closed D05a with real-path validation evidence:
+  - Added local override configuration (`config/settings.local.json`, gitignored) with:
+    - `paths.openClawWorkspaceRoot=\\\\wsl$\\Ubuntu-24.04\\home\\openclaw\\.openclaw\\workspace`
+    - `paths.obsidianVaultRoot=W:\\AI\\OpenClaw\\Memory\\Vault`
+  - Verified WSL runtime reachability via `openclaw status --deep --json` (`gateway.reachable=true`, `url=ws://127.0.0.1:18789`).
+  - Applied OpenClaw workspace access fix for `micster`:
+    - `/home/openclaw/.openclaw` -> `drwx--x---`
+    - `/home/openclaw/.openclaw/workspace` -> `drwxrws---`
+  - Ran elevated workspace checks due UNC sandbox limits:
+    - baseline: `openclaw.status=ready`, `obsidian.status=ready`
+    - `PET_OPENCLAW_ENABLED=0`: `openclaw.status=disabled`
+    - `PET_MEMORY_ADAPTER=local`: `obsidian.status=not_requested`
+  - Bootstrapped required vault directories via `npm run bootstrap:obsidian-vault`:
+    - `01_Logs`, `02_User`, `03_Primea`, `04_Analysis`, `99_System`
+  - Regression checks passed: `npm run check`.
+- D05a `Implementation Gate` marked `passed`; D05a moved to `done`.
+- Current deliverable advanced to D05 per gating rule; D05 remains `in_progress`.
 - Diagnosed persistent OpenClaw webchat Obsidian-skill failures as an exec-host policy mismatch:
   - session logs show `exec host=sandbox is configured, but sandbox runtime is unavailable` followed by gateway/node host denial because non-elevated host must match configured host.
   - in installed OpenClaw runtime, `tools.exec.host` defaulted to `sandbox` for this agent context.

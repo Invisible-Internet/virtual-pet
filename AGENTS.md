@@ -117,18 +117,18 @@ Status schema:
 | `02b-extension-framework-and-pack-sdk` | `done` | `docs/plan/02b-extension-framework-and-pack-sdk.md` |
 | `03-pet-core-events-intents-suggestions` | `done` | `docs/plan/03-pet-core-events-intents-suggestions.md` |
 | `04-openclaw-bridge-spec` | `done` | `docs/plan/04-openclaw-bridge-spec.md` |
-| `05a-obsidian-workspace-bootstrap-and-connectivity` | `in_progress` | `docs/plan/05a-obsidian-workspace-bootstrap-and-connectivity.md` |
-| `05-memory-pipeline-and-obsidian-adapter` | `in_progress` | `docs/plan/05-memory-pipeline-and-obsidian-adapter.md` |
-| `06-integrations-freshrss-spotify` | `not_started` | `docs/plan/06-integrations-freshrss-spotify.md` |
+| `05a-obsidian-workspace-bootstrap-and-connectivity` | `done` | `docs/plan/05a-obsidian-workspace-bootstrap-and-connectivity.md` |
+| `05-memory-pipeline-and-obsidian-adapter` | `done` | `docs/plan/05-memory-pipeline-and-obsidian-adapter.md` |
+| `06-integrations-freshrss-spotify` | `in_progress` | `docs/plan/06-integrations-freshrss-spotify.md` |
 | `07-state-system-extension-guide` | `not_started` | `docs/plan/07-state-system-extension-guide.md` |
 | `08-test-and-acceptance-matrix` | `not_started` | `docs/plan/08-test-and-acceptance-matrix.md` |
 | `09-decisions-log` | `in_progress` | `docs/plan/09-decisions-log.md` |
 
 ### Current Progress Snapshot
-- Current Deliverable: `05a-obsidian-workspace-bootstrap-and-connectivity`
+- Current Deliverable: `06-integrations-freshrss-spotify`
 - Current Status: `in_progress`
-- Overall Progress: `5/10 implementation deliverables done` (D01, D02, D02b, D03, D04 complete; D05a and D05 in progress)
-- Gate Snapshot: `Doc Gate=passed`, `Implementation Gate=in_progress`.
+- Overall Progress: `7/10 implementation deliverables done` (D01, D02, D02b, D03, D04, D05a, D05 complete; D06 in progress)
+- Gate Snapshot: `Doc Gate=in_progress`, `Implementation Gate=not_started`.
 - Scope Note: roadmap now explicitly tracks roam modes, baseline state set/priority, tray/settings/wardrobe surface, memory/introspection contracts, and visible acceptance tests.
 - Scope Note: roadmap also explicitly tracks conversation UX (chat/voice), speech bubble/dialog fallback, and lip-sync approximation with degraded-mode behavior.
 - Scope Note: roadmap includes proactive pet messaging, explicit introspection payload expectations, music-mode feedback loop, and memory/hobby governance details.
@@ -142,7 +142,7 @@ Status schema:
 - Scope Note: D02b is closed as `done` (doc + implementation gates passed) with verified extension discovery, trust-warning toggles, and prop interaction outcomes.
 - Scope Note: D03 is closed as `done` (doc + implementation gates passed) with verified status-introspection flow, announcement cooldown skip behavior, and extension interaction correlation traces.
 - Scope Note: D04 is re-closed as `done` (doc + implementation gates passed) after operator-confirmed degraded-mode drag/fling stability.
-- Shipped Outcome (This Session): no visible app/runtime change; integration diagnostics advanced D05a evidence by isolating OpenClaw webchat exec-host policy mismatch (`sandbox` configured while sandbox runtime unavailable), confirming wizard sections do not currently expose `tools.exec.*`, applying `tools.exec.host=gateway` (restart required to take effect), and capturing a follow-up security note that wildcard elevated allowlists (`tools.elevated.allowFrom.webchat=["*"]`) should be narrowed after testing.
+- Shipped Outcome (This Session): no new runtime code change; D05 was closed as `done` using operator startup/manual evidence confirming Obsidian-mode `runtimeReady` resolution and successful `M/H/N` memory flows (observation write, threshold-gated promotion logs, immutable-core mutation block/audit), and current deliverable advanced to D06.
 
 ### Gating Rule
 - Do not advance to the next deliverable until the current deliverable is marked `done`, its verification gate is explicitly marked passed, and its implementation slice is explicitly marked passed in its file and mirrored in `docs/plan/00-progress-tracker.md`.
