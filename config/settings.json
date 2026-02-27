@@ -1,7 +1,7 @@
 {
   "memory": {
     "enabled": true,
-    "adapterMode": "local",
+    "adapterMode": "obsidian",
     "mutationTransparencyPolicy": "logged",
     "writeLegacyJsonl": false
   },
