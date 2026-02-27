@@ -1,0 +1,24 @@
+{
+  "memory": {
+    "enabled": true,
+    "adapterMode": "obsidian",
+    "mutationTransparencyPolicy": "logged",
+    "writeLegacyJsonl": true
+  },
+  "openclaw": {
+    "enabled": true,
+    "transport": "http",
+    "mode": "online",
+    "baseUrl": "http://127.0.0.1:18789/bridge/dialog",
+    "timeoutMs": 1200,
+    "retryCount": 1,
+    "authTokenRef": "PET_OPENCLAW_AUTH_TOKEN",
+    "authToken": null,
+    "allowNonLoopback": false
+  },
+  "paths": {
+    "localWorkspaceRoot": ".",
+    "openClawWorkspaceRoot": "\\\\wsl$\\Ubuntu\\home\\user\\openclaw-workspace",
+    "obsidianVaultRoot": "W:\\AI\\PrimeaVault"
+  }
+}

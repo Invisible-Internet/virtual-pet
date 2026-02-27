@@ -10,6 +10,7 @@ This roadmap governs the documentation-guided implementation path for Virtual Pe
 - Build modular capability architecture with graceful fallbacks.
 - Add extension framework contracts for offline-first props/state packs/context with online OpenClaw enrichment.
 - Deliver OpenClaw-first orchestration and immediate memory pipeline support.
+- Use config-first settings/path management for external dependencies (OpenClaw workspace, Obsidian vault, adapter/runtime toggles).
 - Gate progression by both documentation and implementation verification before advancing to the next deliverable.
 - Lock explicit user-visible behavior targets:
   - Desktop roam across display/work-area bounds and optional user-defined roam zone.
@@ -19,7 +20,7 @@ This roadmap governs the documentation-guided implementation path for Virtual Pe
   - Speech output/input path with basic lip-sync approximation and fallback talk SFX mode.
 
 ## Execution Mode (Doc + Code)
-For implementation deliverables (D02-D08), completion requires dual gates:
+For implementation deliverables (D02-D08, including inserted D05a), completion requires dual gates:
 1. `Doc Gate`: contract/spec sections are complete and internally consistent.
 2. `Implementation Gate`: at least one concrete runtime slice is implemented with visible/manual verification steps and outcomes.
 
@@ -68,6 +69,10 @@ Baseline exception:
 - Prop world uses true desktop anchors (Windows-first) and supports menu spawn + drag/drop placement.
 - Behavior arbitration remains core-authoritative for extension-origin actions.
 - Extension context can enrich OpenClaw requests in online mode, with offline-safe local fallback behavior.
+9. Settings and Path Management
+- Runtime path dependencies are configurable via settings file (not hard-coded defaults only).
+- OpenClaw workspace path and Obsidian vault path support Windows-native and WSL UNC-style locations.
+- Environment variables remain override layer, but settings file is the durable user-editable baseline before GUI exists.
 
 ## Feature-to-Deliverable Ownership
 | Feature Theme | Primary Deliverable | Validation Deliverable |
@@ -86,6 +91,7 @@ Baseline exception:
 | Bubble/thought balloon + lip-sync approximation | D07 | D08 |
 | OpenClaw non-authority + fallback policy | D04 | D08 |
 | Memory domains/tiers/identity mutation guardrails | D05 | D08 |
+| Config/settings path model (OpenClaw + Obsidian + adapter) | D05a, D05, D07 | D08 |
 | Hobby stream scoring + daily top picks | D06, D05 | D08 |
 | Introspection default/technical mode outputs | D03, D04 | D08 |
 | MusicMode initial behavior set | D06, D07 | D08 |
@@ -104,6 +110,7 @@ Baseline exception:
 - `04-openclaw-bridge-spec`
 
 ### Phase 2 - Memory and Integrations
+- `05a-obsidian-workspace-bootstrap-and-connectivity`
 - `05-memory-pipeline-and-obsidian-adapter`
 - `06-integrations-freshrss-spotify`
 
@@ -117,10 +124,11 @@ Baseline exception:
 3. `02b-extension-framework-and-pack-sdk`
 4. `03-pet-core-events-intents-suggestions`
 5. `04-openclaw-bridge-spec`
-6. `05-memory-pipeline-and-obsidian-adapter`
-7. `06-integrations-freshrss-spotify`
-8. `07-state-system-extension-guide`
-9. `08-test-and-acceptance-matrix`
+6. `05a-obsidian-workspace-bootstrap-and-connectivity`
+7. `05-memory-pipeline-and-obsidian-adapter`
+8. `06-integrations-freshrss-spotify`
+9. `07-state-system-extension-guide`
+10. `08-test-and-acceptance-matrix`
 
 ## Exit Criteria Per Phase
 ### Phase 0 Exit
@@ -136,6 +144,9 @@ Baseline exception:
 - At least one visible runtime increment is shipped from each Phase 1 deliverable.
 
 ### Phase 2 Exit
+- Settings-driven external path resolution is implemented and validated (`config/settings.json`, local overrides, env overrides).
+- OpenClaw transport selection (`stub`/`http`) and non-loopback auth policy are implemented with deterministic fallback behavior.
+- OpenClaw workspace bootstrap and Obsidian vault prerequisite checks are available via explicit operator commands.
 - Memory adapter model (`local` and `obsidian`) is specified and testable.
 - FreshRSS/Spotify intent routing and missing-skill fallback behaviors are specified.
 - Hobby stream scoring and daily summary behavior are specified with deterministic logging reasons.

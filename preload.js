@@ -10,7 +10,13 @@ contextBridge.exposeInMainWorld("petAPI", {
   getConfig: () => ipcRenderer.invoke("pet:getConfig"),
   getCapabilitySnapshot: () => ipcRenderer.invoke("pet:getCapabilitySnapshot"),
   getContractTrace: () => ipcRenderer.invoke("pet:getContractTrace"),
+  getMemorySnapshot: () => ipcRenderer.invoke("pet:getMemorySnapshot"),
   runUserCommand: (command) => ipcRenderer.invoke("pet:runUserCommand", { command }),
+  recordMusicRating: (rating, trackTitle = "manual-track") =>
+    ipcRenderer.invoke("pet:recordMusicRating", { rating, trackTitle }),
+  runMemoryPromotionCheck: (payload = {}) =>
+    ipcRenderer.invoke("pet:runMemoryPromotionCheck", payload),
+  testProtectedIdentityWrite: () => ipcRenderer.invoke("pet:testProtectedIdentityWrite"),
   getExtensions: () => ipcRenderer.invoke("pet:getExtensions"),
   setExtensionEnabled: (extensionId, enabled) =>
     ipcRenderer.invoke("pet:setExtensionEnabled", { extensionId, enabled }),
@@ -116,6 +122,18 @@ contextBridge.exposeInMainWorld("petAPI", {
 
     return () => {
       ipcRenderer.removeListener("pet:contract-suggestion", listener);
+    };
+  },
+  onMemory: (callback) => {
+    if (typeof callback !== "function") {
+      return () => {};
+    }
+
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on("pet:memory", listener);
+
+    return () => {
+      ipcRenderer.removeListener("pet:memory", listener);
     };
   },
 });

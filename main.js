@@ -6,10 +6,16 @@ const { createExtensionPackRegistry, DEFAULT_EXTENSIONS_ROOT } = require("./exte
 const { createPetContractRouter } = require("./pet-contract-router");
 const {
   BRIDGE_MODES,
+  BRIDGE_TRANSPORTS,
   createOpenClawBridge,
-  normalizeBridgeMode,
   requestWithTimeout,
 } = require("./openclaw-bridge");
+const {
+  MEMORY_ADAPTER_MODES,
+  OPENCLAW_WORKSPACE_BOOTSTRAP_MODES,
+  createMemoryPipeline,
+} = require("./memory-pipeline");
+const { loadRuntimeSettings } = require("./settings-runtime");
 const { BASE_LAYOUT, computePetLayout } = require("./pet-layout");
 const {
   normalizePetBounds,
@@ -111,10 +117,6 @@ const CAPABILITY_TEST_FLAGS = Object.freeze({
   sensorsFail: process.env.PET_FORCE_SENSORS_FAIL === "1",
   openclawFail: process.env.PET_FORCE_OPENCLAW_FAIL === "1",
 });
-const OPENCLAW_BRIDGE_MODE = normalizeBridgeMode(process.env.PET_OPENCLAW_MODE || BRIDGE_MODES.online);
-const OPENCLAW_BRIDGE_TIMEOUT_MS = Number.isFinite(Number(process.env.PET_OPENCLAW_TIMEOUT_MS))
-  ? Math.max(200, Math.round(Number(process.env.PET_OPENCLAW_TIMEOUT_MS)))
-  : 1200;
 const EXTENSION_TEST_FLAGS = Object.freeze({
   disableAll: process.env.PET_DISABLE_EXTENSIONS === "1",
 });
@@ -141,6 +143,14 @@ let latestExtensionSnapshot = null;
 let contractRouter = null;
 let latestContractTrace = null;
 let openclawBridge = null;
+let memoryPipeline = null;
+let latestMemorySnapshot = null;
+let runtimeSettings = null;
+let runtimeSettingsSourceMap = {};
+let runtimeSettingsValidationWarnings = [];
+let runtimeSettingsValidationErrors = [];
+let runtimeSettingsResolvedPaths = null;
+let runtimeSettingsFiles = null;
 
 const flingState = {
   active: false,
@@ -1168,20 +1178,201 @@ function initializeExtensionPackRuntime() {
   logExtensionSummary("all-disabled-by-flag", disabledSnapshot);
 }
 
+function buildRuntimeSettingsSummary() {
+  const settings = runtimeSettings && typeof runtimeSettings === "object" ? runtimeSettings : {};
+  const memory = settings.memory && typeof settings.memory === "object" ? settings.memory : {};
+  const openclaw = settings.openclaw && typeof settings.openclaw === "object" ? settings.openclaw : {};
+  const paths = settings.paths && typeof settings.paths === "object" ? settings.paths : {};
+  const resolvedPaths =
+    runtimeSettingsResolvedPaths && typeof runtimeSettingsResolvedPaths === "object"
+      ? runtimeSettingsResolvedPaths
+      : null;
+  return {
+    memory: {
+      enabled: Boolean(memory.enabled),
+      adapterMode: memory.adapterMode || MEMORY_ADAPTER_MODES.local,
+      mutationTransparencyPolicy: memory.mutationTransparencyPolicy || "logged",
+      writeLegacyJsonl: Boolean(memory.writeLegacyJsonl),
+    },
+    openclaw: {
+      enabled: Boolean(openclaw.enabled),
+      transport: openclaw.transport || BRIDGE_TRANSPORTS.stub,
+      mode: openclaw.mode || BRIDGE_MODES.online,
+      baseUrl: openclaw.baseUrl || "",
+      timeoutMs: Number.isFinite(Number(openclaw.timeoutMs))
+        ? Math.max(200, Math.round(Number(openclaw.timeoutMs)))
+        : 1200,
+      retryCount: Number.isFinite(Number(openclaw.retryCount))
+        ? Math.max(0, Math.round(Number(openclaw.retryCount)))
+        : 0,
+      allowNonLoopback: Boolean(openclaw.allowNonLoopback),
+      loopbackEndpoint: Boolean(openclaw.loopbackEndpoint),
+      nonLoopbackAuthSatisfied: Boolean(openclaw.nonLoopbackAuthSatisfied),
+      authTokenConfigured: Boolean(openclaw.authToken),
+      authTokenRef: openclaw.authTokenRef || null,
+    },
+    paths: {
+      localWorkspaceRoot: paths.localWorkspaceRoot || __dirname,
+      openClawWorkspaceRoot: paths.openClawWorkspaceRoot || null,
+      obsidianVaultRoot: paths.obsidianVaultRoot || null,
+    },
+    resolvedPaths,
+  };
+}
+
+function initializeRuntimeSettings() {
+  const loaded = loadRuntimeSettings({
+    app,
+    projectRoot: __dirname,
+    env: process.env,
+  });
+  runtimeSettings = loaded.settings;
+  runtimeSettingsSourceMap = loaded.sourceMap || {};
+  runtimeSettingsValidationWarnings = Array.isArray(loaded.validationWarnings)
+    ? loaded.validationWarnings
+    : [];
+  runtimeSettingsValidationErrors = Array.isArray(loaded.validationErrors)
+    ? loaded.validationErrors
+    : [];
+  runtimeSettingsResolvedPaths = loaded.resolvedPaths || null;
+  runtimeSettingsFiles = loaded.files || null;
+
+  if (runtimeSettingsValidationWarnings.length > 0) {
+    for (const warning of runtimeSettingsValidationWarnings) {
+      console.warn(warning);
+    }
+  }
+  if (runtimeSettingsValidationErrors.length > 0) {
+    for (const error of runtimeSettingsValidationErrors) {
+      console.warn(error);
+    }
+  }
+}
+
+function getBridgeRequestTimeoutMs() {
+  const configured = Number(runtimeSettings?.openclaw?.timeoutMs);
+  if (!Number.isFinite(configured) || configured < 200) return 1200;
+  return Math.round(configured);
+}
+
 function initializeOpenClawBridgeRuntime() {
-  const bridgeMode = CAPABILITY_TEST_FLAGS.openclawFail
-    ? BRIDGE_MODES.offline
-    : OPENCLAW_BRIDGE_MODE;
+  const settings = runtimeSettings?.openclaw || {};
+  const configuredMode = typeof settings.mode === "string" ? settings.mode : BRIDGE_MODES.online;
+  const configuredTransport =
+    settings.transport === BRIDGE_TRANSPORTS.http
+      ? BRIDGE_TRANSPORTS.http
+      : BRIDGE_TRANSPORTS.stub;
+  const openclawEnabled = Boolean(settings.enabled);
+  const bridgeMode =
+    CAPABILITY_TEST_FLAGS.openclawFail || !openclawEnabled ? BRIDGE_MODES.offline : configuredMode;
+
   openclawBridge = createOpenClawBridge({
     mode: bridgeMode,
+    transport: configuredTransport,
+    baseUrl: typeof settings.baseUrl === "string" ? settings.baseUrl : "",
+    retryCount: Number.isFinite(Number(settings.retryCount))
+      ? Math.max(0, Math.round(Number(settings.retryCount)))
+      : 0,
+    authToken: typeof settings.authToken === "string" ? settings.authToken : null,
+    allowNonLoopback: Boolean(settings.allowNonLoopback),
+    requestTimeoutMs: getBridgeRequestTimeoutMs(),
     logger: (kind, payload) => {
       console.log(
         `[pet-openclaw] ${kind} correlationId=${payload?.correlationId || "n/a"} route=${
           payload?.route || "n/a"
-        } mode=${payload?.mode || bridgeMode}`
+        } mode=${payload?.mode || bridgeMode} transport=${
+          payload?.transport || configuredTransport
+        }`
       );
     },
   });
+}
+
+function emitMemorySnapshot(snapshot) {
+  if (!snapshot || typeof snapshot !== "object") return;
+  latestMemorySnapshot = snapshot;
+  emitToRenderer("pet:memory", {
+    kind: "memorySnapshot",
+    snapshot,
+    ts: Date.now(),
+  });
+}
+
+function logMemoryEvent(kind, payload = {}) {
+  const suffix =
+    payload && typeof payload === "object" ? ` ${JSON.stringify(payload)}` : "";
+  console.log(`[pet-memory] ${kind}${suffix}`);
+  if (!DIAGNOSTICS_ENABLED) return;
+  emitDiagnostics({
+    kind: "memoryEvent",
+    eventKind: kind,
+    payload,
+  });
+}
+
+async function initializeMemoryPipelineRuntime() {
+  const settings = buildRuntimeSettingsSummary();
+  if (!settings.memory.enabled) {
+    memoryPipeline = null;
+    latestMemorySnapshot = {
+      requestedAdapterMode: settings.memory.adapterMode,
+      activeAdapterMode: "disabled",
+      fallbackReason: "memory_disabled",
+      localWorkspaceRoot: settings.paths.localWorkspaceRoot,
+      openClawWorkspaceRoot: settings.paths.openClawWorkspaceRoot,
+      obsidianVaultPath: settings.paths.obsidianVaultRoot,
+      openclawEnabled: settings.openclaw.enabled,
+      writeLegacyJsonl: settings.memory.writeLegacyJsonl,
+      paths: null,
+    };
+    emitMemorySnapshot(latestMemorySnapshot);
+    logMemoryEvent("runtimeDisabled", latestMemorySnapshot);
+    return;
+  }
+
+  memoryPipeline = createMemoryPipeline({
+    workspaceRoot: settings.paths.localWorkspaceRoot,
+    paths: {
+      localWorkspaceRoot: settings.paths.localWorkspaceRoot,
+      openClawWorkspaceRoot: settings.paths.openClawWorkspaceRoot,
+      obsidianVaultRoot: settings.paths.obsidianVaultRoot,
+    },
+    openclawEnabled: settings.openclaw.enabled,
+    openclawWorkspaceBootstrapMode: OPENCLAW_WORKSPACE_BOOTSTRAP_MODES.warn_only,
+    adapterMode: settings.memory.adapterMode,
+    obsidianVaultPath: settings.paths.obsidianVaultRoot,
+    mutationTransparencyPolicy: settings.memory.mutationTransparencyPolicy,
+    writeLegacyJsonl: settings.memory.writeLegacyJsonl,
+    logger: (kind, payload) => {
+      logMemoryEvent(kind, payload);
+      emitToRenderer("pet:memory", {
+        kind,
+        payload,
+        ts: Date.now(),
+      });
+    },
+  });
+
+  try {
+    const snapshot = await memoryPipeline.start();
+    emitMemorySnapshot(snapshot);
+    logMemoryEvent("runtimeReady", snapshot);
+  } catch (error) {
+    console.warn(`[pet-memory] runtime initialization failed: ${error?.message || String(error)}`);
+    const fallbackSettings = buildRuntimeSettingsSummary();
+    latestMemorySnapshot = {
+      requestedAdapterMode: fallbackSettings.memory.adapterMode,
+      activeAdapterMode: MEMORY_ADAPTER_MODES.local,
+      fallbackReason: "startup_failed",
+      error: error?.message || String(error),
+      localWorkspaceRoot: fallbackSettings.paths.localWorkspaceRoot,
+      openClawWorkspaceRoot: fallbackSettings.paths.openClawWorkspaceRoot,
+      obsidianVaultPath: fallbackSettings.paths.obsidianVaultRoot,
+      openclawEnabled: fallbackSettings.openclaw.enabled,
+      writeLegacyJsonl: fallbackSettings.memory.writeLegacyJsonl,
+    };
+    emitMemorySnapshot(latestMemorySnapshot);
+  }
 }
 
 function emitContractTrace(trace) {
@@ -1332,6 +1523,14 @@ function blockBridgeActions(actions, correlationId) {
 }
 
 async function requestBridgeDialog({ correlationId, route, promptText }) {
+  if (!runtimeSettings?.openclaw?.enabled) {
+    return {
+      source: "offline",
+      text: buildBridgeFallbackText(route, promptText),
+      fallbackMode: "bridge_disabled",
+    };
+  }
+
   if (!openclawBridge) {
     return {
       source: "offline",
@@ -1348,7 +1547,7 @@ async function requestBridgeDialog({ correlationId, route, promptText }) {
         promptText,
         context: buildBridgeRequestContext(),
       }),
-      OPENCLAW_BRIDGE_TIMEOUT_MS
+      getBridgeRequestTimeoutMs()
     );
 
     const blockedActions = blockBridgeActions(outcome?.response?.proposedActions, correlationId);
@@ -1365,7 +1564,7 @@ async function requestBridgeDialog({ correlationId, route, promptText }) {
     );
 
     return {
-      source: "online",
+      source: outcome?.response?.source || "online",
       text: `${outcome?.response?.text || "OpenClaw response unavailable."}${blockedSuffix}`.trim(),
       fallbackMode: "none",
     };
@@ -1430,6 +1629,84 @@ async function buildBridgeCommandContext(payload, correlationId) {
     bridgeDialogText: bridgeResult.text,
     bridgeFallbackMode: bridgeResult.fallbackMode,
   };
+}
+
+function extractFirstResponseSuggestion(result) {
+  if (!result || !Array.isArray(result.suggestions)) return null;
+  return (
+    result.suggestions.find((suggestion) => suggestion?.type === "PET_RESPONSE") || null
+  );
+}
+
+function createMemoryObservationFromContractResult(eventType, payload, result, correlationId) {
+  if (eventType === "USER_COMMAND") {
+    const command =
+      typeof payload?.command === "string" && payload.command.trim().length > 0
+        ? payload.command.trim().toLowerCase()
+        : "unknown";
+    const responseSuggestion = extractFirstResponseSuggestion(result);
+    return {
+      observationType: "question_response",
+      source: "contract_user_command",
+      correlationId,
+      evidenceTag: command,
+      payload: {
+        command,
+        responseText: responseSuggestion?.text || "",
+        responseSource: responseSuggestion?.source || "offline",
+        suggestionTypes: Array.isArray(result?.suggestions)
+          ? result.suggestions.map((entry) => entry?.type || "unknown")
+          : [],
+      },
+    };
+  }
+
+  if (eventType === "EXT_PROP_INTERACTED") {
+    const extensionId =
+      typeof payload?.extensionId === "string" && payload.extensionId.trim().length > 0
+        ? payload.extensionId.trim()
+        : "unknown_extension";
+    const propId =
+      typeof payload?.propId === "string" && payload.propId.trim().length > 0
+        ? payload.propId.trim()
+        : "unknown_prop";
+    return {
+      observationType: "hobby_summary",
+      source: "extension_prop_interaction",
+      correlationId,
+      evidenceTag: `${extensionId}:${propId}`,
+      payload: {
+        extensionId,
+        propId,
+        interactionType:
+          typeof payload?.interactionType === "string" && payload.interactionType.trim().length > 0
+            ? payload.interactionType.trim()
+            : "click",
+      },
+    };
+  }
+
+  return null;
+}
+
+function queueMemoryObservation(observation) {
+  if (!memoryPipeline || !observation) return;
+  void memoryPipeline
+    .recordObservation(observation)
+    .then((outcome) => {
+      if (!outcome?.ok) return;
+      emitToRenderer("pet:memory", {
+        kind: "observationWritten",
+        observationType: outcome.observation?.observationType || "unknown",
+        source: outcome.observation?.source || "local",
+        targetPath: outcome.targetPath || null,
+        adapterMode: outcome.adapterMode || latestMemorySnapshot?.activeAdapterMode || "local",
+        ts: Date.now(),
+      });
+    })
+    .catch((error) => {
+      console.warn(`[pet-memory] observation write failed: ${error?.message || String(error)}`);
+    });
 }
 
 function handleContractSuggestions(result) {
@@ -1497,6 +1774,9 @@ async function processPetContractEvent(eventType, payload = {}, context = {}) {
     }
   );
   handleContractSuggestions(result);
+  queueMemoryObservation(
+    createMemoryObservationFromContractResult(eventType, payload, result, correlationId)
+  );
   return result;
 }
 
@@ -1576,6 +1856,9 @@ function createWindow() {
     }
     if (latestContractTrace) {
       emitContractTrace(latestContractTrace);
+    }
+    if (latestMemorySnapshot) {
+      emitMemorySnapshot(latestMemorySnapshot);
     }
     resetMotionSampleFromWindow();
     emitMotionState({
@@ -1781,6 +2064,7 @@ ipcMain.handle("pet:getPosition", () => {
 });
 
 ipcMain.handle("pet:getConfig", () => {
+  const settingsSummary = buildRuntimeSettingsSummary();
   return {
     diagnosticsEnabled: DIAGNOSTICS_ENABLED,
     clampToWorkArea: CLAMP_TO_WORK_AREA,
@@ -1791,6 +2075,19 @@ ipcMain.handle("pet:getConfig", () => {
     capabilityRuntimeState: latestCapabilitySnapshot?.runtimeState || "unknown",
     capabilitySummary: latestCapabilitySnapshot?.summary || null,
     contractTraceStage: latestContractTrace?.stage || null,
+    memoryAdapterMode: latestMemorySnapshot?.activeAdapterMode || "unknown",
+    memoryFallbackReason: latestMemorySnapshot?.fallbackReason || "none",
+    openclawEnabled: settingsSummary.openclaw.enabled,
+    openclawTransport: settingsSummary.openclaw.transport,
+    openclawMode: settingsSummary.openclaw.mode,
+    openclawBaseUrl: settingsSummary.openclaw.baseUrl,
+    openclawLoopbackEndpoint: settingsSummary.openclaw.loopbackEndpoint,
+    openclawAuthTokenConfigured: settingsSummary.openclaw.authTokenConfigured,
+    settingsSummary,
+    settingsSourceMap: runtimeSettingsSourceMap,
+    settingsValidationWarnings: runtimeSettingsValidationWarnings,
+    settingsValidationErrors: runtimeSettingsValidationErrors,
+    settingsFiles: runtimeSettingsFiles,
   };
 });
 
@@ -1801,6 +2098,11 @@ ipcMain.handle("pet:getCapabilitySnapshot", () => {
 
 ipcMain.handle("pet:getContractTrace", () => {
   return latestContractTrace;
+});
+
+ipcMain.handle("pet:getMemorySnapshot", () => {
+  if (!memoryPipeline) return latestMemorySnapshot;
+  return memoryPipeline.getSnapshot();
 });
 
 ipcMain.handle("pet:runUserCommand", (_event, payload) => {
@@ -1819,6 +2121,97 @@ ipcMain.handle("pet:runUserCommand", (_event, payload) => {
     type: command,
     text: command,
   });
+});
+
+ipcMain.handle("pet:recordMusicRating", async (_event, payload) => {
+  if (!memoryPipeline) {
+    return {
+      ok: false,
+      error: "memory_pipeline_unavailable",
+    };
+  }
+  const rating = Number.isFinite(Number(payload?.rating))
+    ? Math.max(1, Math.min(10, Math.round(Number(payload.rating))))
+    : 7;
+  const trackTitle =
+    typeof payload?.trackTitle === "string" && payload.trackTitle.trim().length > 0
+      ? payload.trackTitle.trim()
+      : "unknown_track";
+  const outcome = await memoryPipeline.recordObservation({
+    observationType: "music_rating",
+    source: "manual_music_rating",
+    evidenceTag: trackTitle.toLowerCase(),
+    correlationId: createContractCorrelationId(),
+    payload: {
+      trackTitle,
+      rating,
+    },
+  });
+  emitToRenderer("pet:memory", {
+    kind: "musicRatingRecorded",
+    rating,
+    trackTitle,
+    targetPath: outcome?.targetPath || null,
+    adapterMode: outcome?.adapterMode || latestMemorySnapshot?.activeAdapterMode || "local",
+    ts: Date.now(),
+  });
+  return outcome;
+});
+
+ipcMain.handle("pet:runMemoryPromotionCheck", async (_event, payload) => {
+  if (!memoryPipeline) {
+    return {
+      ok: false,
+      error: "memory_pipeline_unavailable",
+    };
+  }
+  const result = await memoryPipeline.evaluatePromotionCandidate({
+    candidateType:
+      typeof payload?.candidateType === "string" && payload.candidateType.trim().length > 0
+        ? payload.candidateType.trim()
+        : "adaptive_music_preference",
+    focusObservationType:
+      typeof payload?.focusObservationType === "string" && payload.focusObservationType.trim().length > 0
+        ? payload.focusObservationType.trim()
+        : "",
+    thresholds: payload?.thresholds,
+  });
+  emitToRenderer("pet:memory", {
+    kind: "promotionDecision",
+    outcome: result?.decision?.outcome || "unknown",
+    reasons: result?.decision?.reasons || [],
+    targetPath: result?.targetPath || null,
+    adapterMode: result?.adapterMode || latestMemorySnapshot?.activeAdapterMode || "local",
+    ts: Date.now(),
+  });
+  return result;
+});
+
+ipcMain.handle("pet:testProtectedIdentityWrite", async () => {
+  if (!memoryPipeline) {
+    return {
+      ok: false,
+      error: "memory_pipeline_unavailable",
+    };
+  }
+  const result = await memoryPipeline.attemptIdentityMutation({
+    section: "Immutable Core",
+    evidence: ["manual_protected_write_test"],
+    patch: {
+      operation: "replace",
+      key: "core_identity",
+      value: "forbidden_mutation_attempt",
+    },
+  });
+  emitToRenderer("pet:memory", {
+    kind: "identityMutationTest",
+    outcome: result?.auditEntry?.outcome || "unknown",
+    reason: result?.auditEntry?.reason || "none",
+    targetPath: result?.targetPath || null,
+    adapterMode: result?.adapterMode || latestMemorySnapshot?.activeAdapterMode || "local",
+    ts: Date.now(),
+  });
+  return result;
 });
 
 ipcMain.handle("pet:getExtensions", () => {
@@ -1960,7 +2353,9 @@ ipcMain.handle("pet:getAnimationManifest", (_event, characterId) => {
 
 app.whenReady().then(async () => {
   initializeDiagnosticsLog();
+  initializeRuntimeSettings();
   initializeContractRouter();
+  await initializeMemoryPipelineRuntime();
   createWindow();
   physicsTimer = setInterval(stepFling, FLING_CONFIG.stepMs);
   cursorTimer = setInterval(emitCursorState, CURSOR_EMIT_INTERVAL_MS);

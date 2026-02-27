@@ -28,3 +28,5 @@ Thumbs.db
 # Misc
 *.swp
 virtual-pet.code-workspace
+scripts/.tmp-memory-pipeline-check/
+config/settings.local.json

@@ -13,18 +13,18 @@ Allowed values:
 - `done`
 
 ## Delivery Mode
-- Implementation deliverables (D02-D08) use `spec + implementation slice`.
+- Implementation deliverables (D02-D08, including inserted D05a) use `spec + implementation slice`.
 - A deliverable is not `done` until both are passed:
   - `Doc Gate`
   - `Implementation Gate`
 - D01 is a completed discovery baseline and remains doc-only by design.
 
 ## Current Deliverable
-- Current Deliverable: `05-memory-pipeline-and-obsidian-adapter`
+- Current Deliverable: `05a-obsidian-workspace-bootstrap-and-connectivity`
 - Current Status: `in_progress`
-- Overall Progress: `5/9 implementation deliverables done` (D01, D02, D02b, D03, D04 complete; D05 started)
+- Overall Progress: `5/10 implementation deliverables done` (D01, D02, D02b, D03, D04 complete; D05a in progress, D05 in progress)
 - Current Gate State:
-  - `Doc Gate`: `in_progress`
+  - `Doc Gate`: `passed`
   - `Implementation Gate`: `in_progress`
 
 ## Deliverable Status Table
@@ -36,21 +36,95 @@ Allowed values:
 | `02b-extension-framework-and-pack-sdk` | `done` | Doc + implementation gates passed; manual verification confirmed valid/invalid pack handling, trust warning flow, and prop interaction outcomes |
 | `03-pet-core-events-intents-suggestions` | `done` | Doc + implementation gates passed; manual verification confirmed status flow, announcement cooldown skips, and extension interaction trace correlation |
 | `04-openclaw-bridge-spec` | `done` | Doc + implementation gates passed after operator-confirmed online/timeout/offline + guardrail + drag/fling verification |
-| `05-memory-pipeline-and-obsidian-adapter` | `in_progress` | Resumed after D04 re-closeout; memory pipeline contract + first runtime slice planning in progress |
-| `06-integrations-freshrss-spotify` | `not_started` | Waiting on D04/D05 |
+| `05a-obsidian-workspace-bootstrap-and-connectivity` | `in_progress` | Settings runtime + transport/bootstrap implementation shipped; awaiting real-path validation evidence (WSL OpenClaw + local Obsidian vault) |
+| `05-memory-pipeline-and-obsidian-adapter` | `in_progress` | Memory contracts documented; runtime slice + markdown canonical logs/settings wiring shipped; awaiting D05a evidence and final real-path gate closeout |
+| `06-integrations-freshrss-spotify` | `not_started` | Waiting on D05a/D05 |
 | `07-state-system-extension-guide` | `not_started` | Waiting on D03 + D02b |
 | `08-test-and-acceptance-matrix` | `not_started` | Final consolidation |
 | `09-decisions-log` | `in_progress` | Seed decisions added |
 
 ## Next 3 Actions
-1. Draft D05 memory record schema and adapter contract details for `local` and optional `obsidian` modes.
-2. Implement first D05 runtime slice for Tier-1 observation writes with guarded local adapter fallback.
-3. Add D05 manual verification evidence for threshold decision logging and protected identity write rejection.
+1. Run local real-path validation with WSL OpenClaw endpoint + workspace path configured in `config/settings.local.json`.
+2. Run local Obsidian vault validation (adapter toggles + fallback behavior) and capture manual evidence for D05a implementation gate.
+3. Feed D05a evidence into D05 closeout checklist (markdown artifacts + configured path behavior) before any move to D06.
 
 ## Blockers
 - None currently.
 
 ## Last Session Summary
+- Diagnosed persistent OpenClaw webchat Obsidian-skill failures as an exec-host policy mismatch:
+  - session logs show `exec host=sandbox is configured, but sandbox runtime is unavailable` followed by gateway/node host denial because non-elevated host must match configured host.
+  - in installed OpenClaw runtime, `tools.exec.host` defaulted to `sandbox` for this agent context.
+- Confirmed wizard limitations for this issue:
+  - `openclaw configure --help` sections are `workspace|model|web|gateway|daemon|channels|skills|health` (no `tools.exec` section).
+  - outcome: wizard helps with gateway/skills setup but does not currently expose the required exec-host override.
+- Applied runtime config fix for test environment:
+  - set `tools.exec.host=gateway` via `openclaw config set tools.exec.host gateway` (gateway restart still required before webchat sessions inherit the change).
+- Captured security follow-up:
+  - `openclaw security audit --json` flags `tools.elevated.allowFrom.webchat=["*"]` as critical; keep for temporary diagnostics only and narrow back to explicit session allowlists.
+- Captured OpenClaw runtime diagnostics from user for Obsidian skill execution policy:
+  - `tools.elevated.allowFrom.webchat` successfully set to session allowlist entry.
+  - `sandbox explain --json` now reports `allowedByConfig=true` with no failures.
+  - observed CLI drift: `openclaw approvals set default --gateway --host ask --sandbox allow` is no longer valid in installed OpenClaw version; approvals are now managed via `openclaw approvals set --file/--stdin`.
+- Verified `obsidian-cli print-default --path-only` under `openclaw` user resolves to `/mnt/w/AI/OpenClaw/Memory/Vault` (matches corrected vault path).
+- Next manual integration action remains gateway process restart/reload so running webchat session picks up updated `allowFrom.webchat` config.
+- Applied requested memory artifact cleanup:
+  - set `config/settings.json` `memory.writeLegacyJsonl=false` so legacy `.jsonl` compatibility logs are no longer written by default.
+  - removed existing legacy artifacts from workspace:
+    - `memory/promotion-decisions.jsonl`
+    - `memory/identity-mutations.jsonl`
+  - removed local root workspace docs that are no longer needed in current runtime mode:
+    - `SOUL.md`
+    - `IDENTITY.md`
+    - `USER.md`
+    - `MEMORY.md`
+- Verified no regression after cleanup with `npm run check:contracts` (all checks passed).
+- Deliverable status unchanged per gating rule: D05a remains current and `in_progress` pending real-path validation evidence.
+- Inserted new deliverable `05a-obsidian-workspace-bootstrap-and-connectivity` before D05 closeout and made it the current deliverable.
+- Implemented settings runtime and config-first integration wiring:
+  - added `settings-runtime.js` with layered resolution (`settings.json`, local/userData override, env overrides),
+  - added validation warnings/errors + path resolution summary (`loadRuntimeSettings`),
+  - wired `main.js` memory/bridge initialization to resolved settings snapshot.
+- Added config assets and local override patterns:
+  - `config/settings.json`
+  - `config/settings.local.example.json`
+  - `config/README.md`
+- Implemented OpenClaw transport/policy runtime updates:
+  - `stub` + `http` transport selection,
+  - loopback/non-loopback policy enforcement,
+  - non-loopback token requirements with deterministic fallback.
+- Implemented memory governance runtime updates:
+  - OpenClaw disabled no longer creates `SOUL.md`/`IDENTITY.md`/`USER.md`/`MEMORY.md`,
+  - OpenClaw configured runtime stays warn-only for missing workspace files,
+  - explicit bootstrap path added (`bootstrapOpenClawWorkspaceFiles`),
+  - Markdown canonical decision logs retained with legacy JSONL compatibility and one-time migration.
+- Added/updated deterministic checks:
+  - `scripts/check-settings-runtime.js`
+  - `scripts/check-workspace-connectivity.js`
+  - expanded `scripts/check-openclaw-bridge.js`
+  - expanded `scripts/check-memory-pipeline.js`
+  - `npm run check` passed end-to-end.
+- User manual verification logs confirmed D05 runtime slice behavior:
+  - Tier-1 observation write: `memory/2026-02-26.md`
+  - Promotion decision log with threshold rejection reasons: `memory/promotion-decisions.jsonl`
+  - Protected identity write blocked + audited: `memory/identity-mutations.jsonl`
+- Planning decisions captured from user review:
+  - Adopt Markdown-first canonical memory artifacts (JSONL is transitional only).
+  - Add config-first path settings to support OpenClaw workspace + Obsidian vault targeting.
+  - Treat local `SOUL.md`/`IDENTITY.md`/`USER.md`/`MEMORY.md` as offline fallback bootstrap until external workspace path is configured.
+- Roadmap and D05 docs updated with config/path-management scope and WSL path compatibility expectations.
+- Implemented D05 first runtime slice:
+  - Added `memory-pipeline.js` with adapter modes (`local`, `obsidian`) and guarded fallback behavior.
+  - Added Tier-1 observation writes (`question_response`, `hobby_summary`, `music_rating`) with append-only logs.
+  - Added promotion decision evaluation with threshold outcome logging (`accepted`/`rejected`).
+  - Added protected identity mutation guardrails and mutation audit logging (`Immutable Core` blocked).
+- Wired memory runtime into app lifecycle and UI/manual controls:
+  - Main process now initializes memory runtime and emits memory events/snapshots.
+  - Renderer hotkeys added: `M` (music rating), `H` (promotion check), `N` (protected write test).
+  - Preload bridge expanded with memory IPC APIs.
+- Added deterministic automated checks: `scripts/check-memory-pipeline.js` and wired it into `npm run check:contracts`.
+- Ran `npm run check` successfully (`check:syntax`, `check:contracts`, `check:layout`, `check:assets` all passed).
+- D05 `Doc Gate` marked `passed`; `Implementation Gate` remains `in_progress` pending manual runtime evidence.
 - Operator confirmed final D04 degraded-mode drag/fling non-blocking behavior (`timeout` + `offline` runs).
 - D04 `Implementation Gate` marked `passed`; D04 re-closed as `done` with both gates passed.
 - Current deliverable advanced back to D05 per gating rule, with D05 status set to `in_progress`.
@@ -115,7 +189,7 @@ Allowed values:
 
 ## Documentation Bootstrap Verification Checklist
 - [x] All required files exist in `docs/plan/`.
-- [x] Deliverable docs `01`-`08` plus `02b` include required sections.
+- [x] Deliverable docs `01`-`08` plus `02b` and `05a` include required sections.
 - [x] `AGENTS.md` contains resume protocol and TODO/progress snapshot.
 - [x] `AGENTS.md` and this tracker reference the same current deliverable/status.
 - [x] Cross-links between tracker, roadmap, and decisions log are valid.

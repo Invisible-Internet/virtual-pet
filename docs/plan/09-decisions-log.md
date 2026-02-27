@@ -81,3 +81,31 @@ Related:
 - **Rationale:** Required to support prop placement and interaction patterns (drop prop, pet navigates to prop, pool/food interactions) that are not realistic in pet-local-only space.
 - **Alternatives Considered:** Pet-local prop rendering only, staged local-first then desktop-anchor later.
 - **Impacted Files/Modules:** D02 capability boundaries (`propWorld`/arbitration), D02b prop world spec, D03 extension event contracts, D07 prop-to-state templates, D08 extension acceptance matrix.
+
+## ADR-0012: Markdown-First Memory Artifact Policy
+- **Date:** 2026-02-26
+- **Decision:** Canonical user-facing memory artifacts should be Markdown-first. `.jsonl` files are allowed only as temporary implementation-slice outputs until Markdown parity is complete.
+- **Rationale:** Improves inspectability/editability for operator workflows and aligns with OpenClaw/Obsidian document-centric memory strategy.
+- **Alternatives Considered:** Keep JSONL as long-term canonical store, dual canonical stores (JSONL + Markdown).
+- **Impacted Files/Modules:** D05 memory adapter outputs, mutation/promotion log formats, D08 acceptance checks.
+
+## ADR-0013: Config-First External Path Resolution
+- **Date:** 2026-02-26
+- **Decision:** Add `config/settings.json` as durable settings baseline for external paths (`openClawWorkspaceRoot`, `obsidianVaultRoot`, local fallback roots) and memory adapter mode. Environment variables remain override layer.
+- **Rationale:** Needed for real local integration (including WSL-hosted OpenClaw), predictable portability, and future GUI settings synchronization.
+- **Alternatives Considered:** Environment-variables-only, hard-coded repo-relative paths.
+- **Impacted Files/Modules:** D05 settings/path contracts, D07 settings UI groundwork, runtime bootstrap config loading, D08 path-resolution acceptance tests.
+
+## ADR-0014: Insert D05a Connectivity/Bootstrap Gate Before D05 Closeout
+- **Date:** 2026-02-26
+- **Decision:** Add `05a-obsidian-workspace-bootstrap-and-connectivity` before D05 completion and require its implementation evidence before D05 gate closeout.
+- **Rationale:** Path/config/transport uncertainties (OpenClaw in WSL, local Obsidian vault, optional remote endpoints) require a dedicated validation gate before memory deliverable finalization.
+- **Alternatives Considered:** Keep path/connectivity work embedded in D05 only, defer connectivity verification to D08.
+- **Impacted Files/Modules:** `00-master-roadmap.md`, `00-progress-tracker.md`, `AGENTS.md`, D05a deliverable file, D05 dependency chain.
+
+## ADR-0015: OpenClaw Workspace Writes Are Non-Destructive by Default
+- **Date:** 2026-02-26
+- **Decision:** Normal runtime should never auto-create missing OpenClaw workspace files. Missing prerequisites are warning-only and resolved via explicit bootstrap command.
+- **Rationale:** Prevents accidental mutation of external OpenClaw workspaces and keeps ownership boundaries explicit.
+- **Alternatives Considered:** Always auto-create required OpenClaw workspace files during startup.
+- **Impacted Files/Modules:** `memory-pipeline.js`, `scripts/check-workspace-connectivity.js`, D05a workspace governance, D05 closeout criteria.

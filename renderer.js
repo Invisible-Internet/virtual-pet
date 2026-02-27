@@ -151,6 +151,8 @@ let latestCapabilitySnapshot = null;
 let latestExtensionSnapshot = null;
 let latestContractTrace = null;
 let latestContractSuggestion = null;
+let latestMemorySnapshot = null;
+let latestMemoryEvent = null;
 let diagnosticsEnabled = false;
 let latestMotion = { ...DEFAULT_MOTION };
 let currentRenderState = "idle";
@@ -560,6 +562,21 @@ function onMovementKeyDown(event) {
     runPetUserCommand("guardrail-test");
     return;
   }
+  else if (key === "m") {
+    if (event.repeat) return;
+    recordManualMusicRating();
+    return;
+  }
+  else if (key === "h") {
+    if (event.repeat) return;
+    runMemoryPromotionCheck();
+    return;
+  }
+  else if (key === "n") {
+    if (event.repeat) return;
+    runProtectedIdentityWriteTest();
+    return;
+  }
   else if (key === " " || key === "spacebar") {
     if (!event.repeat) spriteJumpQueued = true;
   } else {
@@ -687,6 +704,54 @@ async function runPetUserCommand(command) {
     );
   } catch (error) {
     console.warn("[contract] user command failed:", error);
+  }
+}
+
+async function recordManualMusicRating() {
+  if (typeof window.petAPI.recordMusicRating !== "function") return;
+  try {
+    const result = await window.petAPI.recordMusicRating(8, "manual-track");
+    if (!result?.ok) {
+      console.warn("[memory] music rating record failed:", result?.error || "unknown");
+      return;
+    }
+    console.info(
+      `[memory] music rating recorded adapter=${result.adapterMode || "unknown"} target=${result.targetPath || "n/a"}`
+    );
+  } catch (error) {
+    console.warn("[memory] music rating record failed:", error);
+  }
+}
+
+async function runMemoryPromotionCheck() {
+  if (typeof window.petAPI.runMemoryPromotionCheck !== "function") return;
+  try {
+    const result = await window.petAPI.runMemoryPromotionCheck({
+      candidateType: "adaptive_music_preference",
+      focusObservationType: "music_rating",
+    });
+    if (!result?.ok) {
+      console.warn("[memory] promotion check failed:", result?.error || "unknown");
+      return;
+    }
+    const decision = result.decision || {};
+    console.info(
+      `[memory] promotion decision outcome=${decision.outcome || "unknown"} reasons=${(decision.reasons || []).join(",") || "none"}`
+    );
+  } catch (error) {
+    console.warn("[memory] promotion check failed:", error);
+  }
+}
+
+async function runProtectedIdentityWriteTest() {
+  if (typeof window.petAPI.testProtectedIdentityWrite !== "function") return;
+  try {
+    const result = await window.petAPI.testProtectedIdentityWrite();
+    const outcome = result?.auditEntry?.outcome || "unknown";
+    const reason = result?.auditEntry?.reason || "none";
+    console.info(`[memory] identity mutation test outcome=${outcome} reason=${reason}`);
+  } catch (error) {
+    console.warn("[memory] identity mutation test failed:", error);
   }
 }
 
@@ -2070,6 +2135,16 @@ function drawDebugOverlay(w, h) {
         ? `${latestContractSuggestion.type || "?"} corr=${latestContractSuggestion.correlationId || "n/a"}`
         : "n/a"
     }`,
+    `memory: ${
+      latestMemorySnapshot
+        ? `${latestMemorySnapshot.activeAdapterMode || "unknown"} fallback=${latestMemorySnapshot.fallbackReason || "none"}`
+        : "n/a"
+    }`,
+    `memory event: ${
+      latestMemoryEvent
+        ? `${latestMemoryEvent.kind || "?"}${latestMemoryEvent.outcome ? `:${latestMemoryEvent.outcome}` : ""}`
+        : "n/a"
+    }`,
     `motion preset: ${latestMotion.preset || "n/a"}`,
     `sprite: ${
       latestSpriteFrame
@@ -2230,6 +2305,11 @@ async function init() {
       latestExtensionSnapshot = await window.petAPI.getExtensions();
     } catch {}
   }
+  if (typeof window.petAPI.getMemorySnapshot === "function") {
+    try {
+      latestMemorySnapshot = await window.petAPI.getMemorySnapshot();
+    } catch {}
+  }
   await loadSpriteRuntime(SPRITE_CHARACTER_ID);
 
   if (typeof window.petAPI.onMotion === "function") {
@@ -2308,6 +2388,17 @@ async function init() {
     window.petAPI.onContractSuggestion((payload) => {
       if (!payload || typeof payload !== "object") return;
       latestContractSuggestion = payload;
+      latestDiagnostics = payload;
+    });
+  }
+
+  if (typeof window.petAPI.onMemory === "function") {
+    window.petAPI.onMemory((payload) => {
+      if (!payload || typeof payload !== "object") return;
+      latestMemoryEvent = payload;
+      if (payload.snapshot && typeof payload.snapshot === "object") {
+        latestMemorySnapshot = payload.snapshot;
+      }
       latestDiagnostics = payload;
     });
   }
