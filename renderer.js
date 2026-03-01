@@ -153,6 +153,7 @@ let latestContractTrace = null;
 let latestContractSuggestion = null;
 let latestMemorySnapshot = null;
 let latestMemoryEvent = null;
+let latestIntegrationEvent = null;
 let diagnosticsEnabled = false;
 let latestMotion = { ...DEFAULT_MOTION };
 let currentRenderState = "idle";
@@ -562,9 +563,24 @@ function onMovementKeyDown(event) {
     runPetUserCommand("guardrail-test");
     return;
   }
+  else if (key === "j") {
+    if (event.repeat) return;
+    runSpotifyProbe();
+    return;
+  }
+  else if (key === "l") {
+    if (event.repeat) return;
+    runFreshRssProbe();
+    return;
+  }
   else if (key === "m") {
     if (event.repeat) return;
     recordManualMusicRating();
+    return;
+  }
+  else if (key === "r") {
+    if (event.repeat) return;
+    recordManualTrackRating();
     return;
   }
   else if (key === "h") {
@@ -720,6 +736,60 @@ async function recordManualMusicRating() {
     );
   } catch (error) {
     console.warn("[memory] music rating record failed:", error);
+  }
+}
+
+async function runSpotifyProbe() {
+  if (typeof window.petAPI.probeSpotifyIntegration !== "function") return;
+  try {
+    const result = await window.petAPI.probeSpotifyIntegration();
+    if (!result?.probe) {
+      console.warn("[integration] spotify probe failed:", result?.error || "unknown");
+      return;
+    }
+    console.info(
+      `[integration] spotify probe state=${result.probe?.capabilityState || "unknown"} fallback=${result.probe?.fallbackMode || "none"}`
+    );
+  } catch (error) {
+    console.warn("[integration] spotify probe failed:", error);
+  }
+}
+
+async function runFreshRssProbe() {
+  if (typeof window.petAPI.probeFreshRssIntegration !== "function") return;
+  try {
+    const result = await window.petAPI.probeFreshRssIntegration();
+    if (!result?.probe) {
+      console.warn("[integration] freshrss probe failed:", result?.error || "unknown");
+      return;
+    }
+    console.info(
+      `[integration] freshrss probe state=${result.probe?.capabilityState || "unknown"} fallback=${result.probe?.fallbackMode || "none"}`
+    );
+  } catch (error) {
+    console.warn("[integration] freshrss probe failed:", error);
+  }
+}
+
+async function recordManualTrackRating() {
+  if (typeof window.petAPI.recordTrackRating !== "function") return;
+  try {
+    const result = await window.petAPI.recordTrackRating({
+      provider: "spotify",
+      rating: 9,
+      trackTitle: "Night Drive",
+      artist: "Primea FM",
+      album: "Sample Rotation",
+    });
+    if (!result?.ok) {
+      console.warn("[integration] track rating record failed:", result?.error || "unknown");
+      return;
+    }
+    console.info(
+      `[integration] track rating recorded adapter=${result.adapterMode || "unknown"} target=${result.targetPath || "n/a"}`
+    );
+  } catch (error) {
+    console.warn("[integration] track rating record failed:", error);
   }
 }
 
@@ -1068,6 +1138,14 @@ function formatPoint(point) {
 function formatRect(rect) {
   if (!rect) return "(n/a)";
   return `x:${rect.x} y:${rect.y} w:${rect.width} h:${rect.height}`;
+}
+
+function getCapabilityStateLabel(capabilityId) {
+  const capabilities = Array.isArray(latestCapabilitySnapshot?.capabilities)
+    ? latestCapabilitySnapshot.capabilities
+    : [];
+  const match = capabilities.find((entry) => entry?.capabilityId === capabilityId);
+  return match?.state || "n/a";
 }
 
 function deriveRenderState(nowMs) {
@@ -1440,6 +1518,28 @@ function spawnImpactFx(motion) {
     }
   }
 
+  if (fxParticles.length > MAX_FX_PARTICLES) {
+    fxParticles = fxParticles.slice(-MAX_FX_PARTICLES);
+  }
+}
+
+function spawnIntegrationFx(payload) {
+  const anchor = getRigAnchor();
+  const starCount = payload?.kind === "trackRatingRecorded" ? 4 : 6;
+  for (let i = 0; i < starCount; i += 1) {
+    fxParticles.push({
+      type: "star",
+      x: anchor.x + randomRange(-18, 18),
+      y: anchor.y - 26 + randomRange(-10, 10),
+      vx: randomRange(-55, 55),
+      vy: randomRange(-135, -40),
+      ageMs: 0,
+      maxAgeMs: 340 + randomRange(0, 220),
+      size: 4 + randomRange(0, 4),
+      rotation: randomRange(0, Math.PI * 2),
+      spin: randomRange(-6, 6),
+    });
+  }
   if (fxParticles.length > MAX_FX_PARTICLES) {
     fxParticles = fxParticles.slice(-MAX_FX_PARTICLES);
   }
@@ -2145,6 +2245,12 @@ function drawDebugOverlay(w, h) {
         ? `${latestMemoryEvent.kind || "?"}${latestMemoryEvent.outcome ? `:${latestMemoryEvent.outcome}` : ""}`
         : "n/a"
     }`,
+    `integrations: spotify=${getCapabilityStateLabel("spotifyIntegration")} freshrss=${getCapabilityStateLabel("freshRssIntegration")}`,
+    `integration event: ${
+      latestIntegrationEvent
+        ? `${latestIntegrationEvent.kind || "?"}${latestIntegrationEvent.fallbackMode ? `:${latestIntegrationEvent.fallbackMode}` : ""}`
+        : "n/a"
+    }`,
     `motion preset: ${latestMotion.preset || "n/a"}`,
     `sprite: ${
       latestSpriteFrame
@@ -2400,6 +2506,15 @@ async function init() {
         latestMemorySnapshot = payload.snapshot;
       }
       latestDiagnostics = payload;
+    });
+  }
+
+  if (typeof window.petAPI.onIntegration === "function") {
+    window.petAPI.onIntegration((payload) => {
+      if (!payload || typeof payload !== "object") return;
+      latestIntegrationEvent = payload;
+      latestDiagnostics = payload;
+      spawnIntegrationFx(payload);
     });
   }
 

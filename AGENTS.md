@@ -119,16 +119,16 @@ Status schema:
 | `04-openclaw-bridge-spec` | `done` | `docs/plan/04-openclaw-bridge-spec.md` |
 | `05a-obsidian-workspace-bootstrap-and-connectivity` | `done` | `docs/plan/05a-obsidian-workspace-bootstrap-and-connectivity.md` |
 | `05-memory-pipeline-and-obsidian-adapter` | `done` | `docs/plan/05-memory-pipeline-and-obsidian-adapter.md` |
-| `06-integrations-freshrss-spotify` | `in_progress` | `docs/plan/06-integrations-freshrss-spotify.md` |
-| `07-state-system-extension-guide` | `not_started` | `docs/plan/07-state-system-extension-guide.md` |
+| `06-integrations-freshrss-spotify` | `done` | `docs/plan/06-integrations-freshrss-spotify.md` |
+| `07-state-system-extension-guide` | `in_progress` | `docs/plan/07-state-system-extension-guide.md` |
 | `08-test-and-acceptance-matrix` | `not_started` | `docs/plan/08-test-and-acceptance-matrix.md` |
 | `09-decisions-log` | `in_progress` | `docs/plan/09-decisions-log.md` |
 
 ### Current Progress Snapshot
-- Current Deliverable: `06-integrations-freshrss-spotify`
+- Current Deliverable: `07-state-system-extension-guide`
 - Current Status: `in_progress`
-- Overall Progress: `7/10 implementation deliverables done` (D01, D02, D02b, D03, D04, D05a, D05 complete; D06 in progress)
-- Gate Snapshot: `Doc Gate=in_progress`, `Implementation Gate=not_started`.
+- Overall Progress: `8/10 implementation deliverables done` (D01, D02, D02b, D03, D04, D05a, D05, D06 complete; D07 in progress)
+- Gate Snapshot: `Doc Gate=not_started`, `Implementation Gate=not_started`.
 - Scope Note: roadmap now explicitly tracks roam modes, baseline state set/priority, tray/settings/wardrobe surface, memory/introspection contracts, and visible acceptance tests.
 - Scope Note: roadmap also explicitly tracks conversation UX (chat/voice), speech bubble/dialog fallback, and lip-sync approximation with degraded-mode behavior.
 - Scope Note: roadmap includes proactive pet messaging, explicit introspection payload expectations, music-mode feedback loop, and memory/hobby governance details.
@@ -142,7 +142,8 @@ Status schema:
 - Scope Note: D02b is closed as `done` (doc + implementation gates passed) with verified extension discovery, trust-warning toggles, and prop interaction outcomes.
 - Scope Note: D03 is closed as `done` (doc + implementation gates passed) with verified status-introspection flow, announcement cooldown skip behavior, and extension interaction correlation traces.
 - Scope Note: D04 is re-closed as `done` (doc + implementation gates passed) after operator-confirmed degraded-mode drag/fling stability.
-- Shipped Outcome (This Session): no new runtime code change; D05 was closed as `done` using operator startup/manual evidence confirming Obsidian-mode `runtimeReady` resolution and successful `M/H/N` memory flows (observation write, threshold-gated promotion logs, immutable-core mutation block/audit), and current deliverable advanced to D06.
+- Scope Note: D06 is closed as `done` after operator-confirmed Spotify/FreshRSS healthy paths, `track_rating` writes, and deterministic Spotify unavailable fallback. Focus now shifts to D07 state-system extension contracts and runtime slice planning.
+- Shipped Outcome (This Session): visible app/runtime change delivered for D06 and verification gate passed: live FreshRSS/Spotify probe support, memory output, and deterministic fallback behavior are now closed out. Current deliverable advanced to D07.
 
 ### Gating Rule
 - Do not advance to the next deliverable until the current deliverable is marked `done`, its verification gate is explicitly marked passed, and its implementation slice is explicitly marked passed in its file and mirrored in `docs/plan/00-progress-tracker.md`.

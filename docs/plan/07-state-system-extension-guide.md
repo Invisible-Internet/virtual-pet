@@ -1,9 +1,9 @@
 # Deliverable 07: State System Extension Guide
 
 **Deliverable ID:** `07-state-system-extension-guide`  
-**Status:** `not_started`  
+**Status:** `in_progress`  
 **Owner:** `Mic + Codex`  
-**Last Updated:** `2026-02-26`  
+**Last Updated:** `2026-03-01`  
 **Depends On:** `03-pet-core-events-intents-suggestions`, `02b-extension-framework-and-pack-sdk`  
 **Blocks:** `08-test-and-acceptance-matrix`  
 **Verification Gate:** `Guide defines repeatable state-extension process and at least one simple + one complex state are implemented with visible runtime transitions`
@@ -112,7 +112,7 @@ Pass when all are true:
 ## Gate Status
 - `Doc Gate`: `not_started`
 - `Implementation Gate`: `not_started`
-- `Overall`: `not_started`
+- `Overall`: `in_progress`
 
 ## Open Questions
 - Where to store state packs in repo layout (`assets/states` vs `config/states`).
@@ -120,3 +120,4 @@ Pass when all are true:
 ## Change Log
 - `2026-02-26`: File created and seeded.
 - `2026-02-26`: Updated for `spec + implementation slice` workflow with mandatory implementation/visible outcome sections and dual-gate status.
+- `2026-03-01`: Advanced to `in_progress` after D06 closeout; implementation work not started yet.

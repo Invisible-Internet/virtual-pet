@@ -4,6 +4,14 @@ const fs = require("fs");
 const path = require("path");
 const { normalizeBridgeMode, BRIDGE_MODES } = require("./openclaw-bridge");
 const {
+  buildDefaultIntegrationSettings,
+  normalizeIntegrationSettings,
+} = require("./integration-runtime");
+const {
+  DEFAULT_OPENCLAW_AGENT_ID,
+  DEFAULT_OPENCLAW_AGENT_TIMEOUT_MS,
+} = require("./openclaw-agent-probe");
+const {
   MEMORY_ADAPTER_MODES,
   MUTATION_TRANSPARENCY_POLICIES,
   DEFAULT_OBSIDIAN_VAULT_PATH,
@@ -159,6 +167,7 @@ function validateResolvedPaths(normalized, warnings, errors) {
 
 function buildDefaultSettings(projectRoot) {
   return {
+    integrations: buildDefaultIntegrationSettings(),
     memory: {
       enabled: true,
       adapterMode: MEMORY_ADAPTER_MODES.local,
@@ -169,6 +178,8 @@ function buildDefaultSettings(projectRoot) {
       enabled: true,
       transport: OPENCLAW_TRANSPORTS.stub,
       mode: BRIDGE_MODES.online,
+      agentId: DEFAULT_OPENCLAW_AGENT_ID,
+      agentTimeoutMs: DEFAULT_OPENCLAW_AGENT_TIMEOUT_MS,
       baseUrl: "http://127.0.0.1:18789/bridge/dialog",
       timeoutMs: 1200,
       retryCount: 0,
@@ -187,6 +198,8 @@ function buildDefaultSettings(projectRoot) {
 function normalizeSettings(rawSettings, { projectRoot, env, warnings, errors }) {
   const raw = rawSettings && typeof rawSettings === "object" ? rawSettings : {};
   const normalized = buildDefaultSettings(projectRoot);
+
+  normalized.integrations = normalizeIntegrationSettings(raw.integrations);
 
   const memoryRaw = raw.memory && typeof raw.memory === "object" ? raw.memory : {};
   normalized.memory.enabled = toBoolean(memoryRaw.enabled, normalized.memory.enabled);
@@ -222,6 +235,12 @@ function normalizeSettings(rawSettings, { projectRoot, env, warnings, errors }) 
     toOptionalString(openclawRaw.transport, normalized.openclaw.transport) === OPENCLAW_TRANSPORTS.http
       ? OPENCLAW_TRANSPORTS.http
       : OPENCLAW_TRANSPORTS.stub;
+  normalized.openclaw.agentId = toOptionalString(openclawRaw.agentId, normalized.openclaw.agentId);
+  normalized.openclaw.agentTimeoutMs = toPositiveInteger(
+    openclawRaw.agentTimeoutMs,
+    normalized.openclaw.agentTimeoutMs,
+    1000
+  );
   normalized.openclaw.mode = normalizeBridgeMode(
     toOptionalString(openclawRaw.mode, normalized.openclaw.mode),
     normalized.openclaw.mode
@@ -325,6 +344,15 @@ function applyEnvOverrides(settings, env, sourceMap) {
   if (Object.prototype.hasOwnProperty.call(env, "PET_OPENCLAW_TRANSPORT")) {
     set("openclaw.transport", toOptionalString(env.PET_OPENCLAW_TRANSPORT, next.openclaw.transport));
   }
+  if (Object.prototype.hasOwnProperty.call(env, "PET_OPENCLAW_AGENT_ID")) {
+    set("openclaw.agentId", toOptionalString(env.PET_OPENCLAW_AGENT_ID, next.openclaw.agentId));
+  }
+  if (Object.prototype.hasOwnProperty.call(env, "PET_OPENCLAW_AGENT_TIMEOUT_MS")) {
+    set(
+      "openclaw.agentTimeoutMs",
+      toPositiveInteger(env.PET_OPENCLAW_AGENT_TIMEOUT_MS, next.openclaw.agentTimeoutMs, 1000)
+    );
+  }
   if (Object.prototype.hasOwnProperty.call(env, "PET_OPENCLAW_MODE")) {
     set("openclaw.mode", toOptionalString(env.PET_OPENCLAW_MODE, next.openclaw.mode));
   }
@@ -357,6 +385,27 @@ function applyEnvOverrides(settings, env, sourceMap) {
   }
   if (Object.prototype.hasOwnProperty.call(env, "PET_OBSIDIAN_VAULT_PATH")) {
     set("paths.obsidianVaultRoot", toOptionalString(env.PET_OBSIDIAN_VAULT_PATH, next.paths.obsidianVaultRoot));
+  }
+  if (Object.prototype.hasOwnProperty.call(env, "PET_SPOTIFY_ENABLED")) {
+    set("integrations.spotify.enabled", toBoolean(env.PET_SPOTIFY_ENABLED, next.integrations.spotify.enabled));
+  }
+  if (Object.prototype.hasOwnProperty.call(env, "PET_SPOTIFY_AVAILABLE")) {
+    set(
+      "integrations.spotify.available",
+      toBoolean(env.PET_SPOTIFY_AVAILABLE, next.integrations.spotify.available)
+    );
+  }
+  if (Object.prototype.hasOwnProperty.call(env, "PET_FRESHRSS_ENABLED")) {
+    set(
+      "integrations.freshRss.enabled",
+      toBoolean(env.PET_FRESHRSS_ENABLED, next.integrations.freshRss.enabled)
+    );
+  }
+  if (Object.prototype.hasOwnProperty.call(env, "PET_FRESHRSS_AVAILABLE")) {
+    set(
+      "integrations.freshRss.available",
+      toBoolean(env.PET_FRESHRSS_AVAILABLE, next.integrations.freshRss.available)
+    );
   }
 
   return next;

@@ -31,6 +31,16 @@ async function writeJson(filePath, value) {
 async function testLayeredPrecedenceAndEnvOverrides() {
   const root = await makeTempProjectRoot("precedence");
   const baseSettings = {
+    integrations: {
+      spotify: {
+        enabled: true,
+        available: true,
+      },
+      freshRss: {
+        enabled: true,
+        available: false,
+      },
+    },
     memory: {
       adapterMode: "local",
       mutationTransparencyPolicy: "logged",
@@ -42,6 +52,8 @@ async function testLayeredPrecedenceAndEnvOverrides() {
       transport: "stub",
       mode: "online",
       baseUrl: "http://127.0.0.1:18789/bridge/dialog",
+      agentId: "main",
+      agentTimeoutMs: 60000,
       timeoutMs: 900,
       retryCount: 0,
       allowNonLoopback: false,
@@ -53,12 +65,19 @@ async function testLayeredPrecedenceAndEnvOverrides() {
     },
   };
   const localSettings = {
+    integrations: {
+      spotify: {
+        available: false,
+      },
+    },
     memory: {
       adapterMode: "obsidian",
       writeLegacyJsonl: true,
     },
     openclaw: {
       transport: "http",
+      agentId: "prime-main",
+      agentTimeoutMs: 45000,
       baseUrl: "http://localhost:19999/bridge/dialog",
       timeoutMs: 1500,
     },
@@ -72,21 +91,29 @@ async function testLayeredPrecedenceAndEnvOverrides() {
       PET_MEMORY_ADAPTER: "local",
       PET_OPENCLAW_TRANSPORT: "http",
       PET_OPENCLAW_BASE_URL: "https://remote.example.com/bridge/dialog",
+      PET_OPENCLAW_AGENT_ID: "session-main",
+      PET_OPENCLAW_AGENT_TIMEOUT_MS: "75000",
       PET_OPENCLAW_ALLOW_NON_LOOPBACK: "1",
       PET_OPENCLAW_AUTH_TOKEN: "test-token",
       PET_OPENCLAW_RETRY_COUNT: "2",
+      PET_SPOTIFY_AVAILABLE: "1",
     },
   });
 
   assert(loaded.settings.memory.adapterMode === "local", "env should override memory.adapterMode");
   assert(loaded.settings.memory.writeLegacyJsonl === true, "local file should override base setting");
+  assert(loaded.settings.integrations.spotify.available === true, "env should override spotify availability");
   assert(loaded.settings.openclaw.transport === "http", "transport should resolve to HTTP");
   assert(loaded.settings.openclaw.baseUrl === "https://remote.example.com/bridge/dialog", "env baseUrl should win");
+  assert(loaded.settings.openclaw.agentId === "session-main", "env agentId should win");
+  assert(loaded.settings.openclaw.agentTimeoutMs === 75000, "env agentTimeoutMs should parse");
   assert(loaded.settings.openclaw.retryCount === 2, "env retry count should parse");
   assert(loaded.settings.openclaw.authToken === "test-token", "auth token should resolve from env");
   assert(loaded.sourceMap.baseConfig.endsWith(path.join("config", "settings.json")), "base config source map missing");
   assert(loaded.sourceMap.localConfig.endsWith(path.join("config", "settings.local.json")), "local config source map missing");
   assert(loaded.sourceMap["memory.adapterMode"] === "env", "env source map should mark memory.adapterMode");
+  assert(loaded.sourceMap["integrations.spotify.available"] === "env", "env source map should mark spotify availability");
+  assert(loaded.sourceMap["openclaw.agentId"] === "env", "env source map should mark openclaw.agentId");
   assert(loaded.sourceMap["openclaw.baseUrl"] === "env", "env source map should mark openclaw.baseUrl");
 }
 

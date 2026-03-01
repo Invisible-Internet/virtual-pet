@@ -165,6 +165,63 @@ class PetContractRouter {
       ];
     }
 
+    if (event.type === "MEDIA") {
+      const playing = Boolean(event.payload?.playing);
+      const confidence = asNumber(event.payload?.confidence, 0);
+      if (playing && confidence >= 0.7) {
+        return [
+          {
+            type: "INTENT_STATE_MUSIC_MODE",
+            reason: "media_playing_music_mode",
+            correlationId: event.correlationId,
+            ts: this._now(),
+            payload: {
+              provider: normalizeText(event.payload?.provider) || "media",
+              source: normalizeText(event.payload?.source) || "media",
+              title: normalizeText(event.payload?.title) || "unknown_track",
+              artist: normalizeText(event.payload?.artist) || "unknown_artist",
+              album: normalizeText(event.payload?.album) || "unknown_album",
+              suggestedState:
+                normalizeText(event.payload?.suggestedState) || "MusicChill",
+              activeProp: normalizeText(event.payload?.activeProp) || "headphones",
+              entryDialogue: normalizeText(event.payload?.entryDialogue) || "",
+              fallbackMode: normalizeText(event.payload?.fallbackMode) || "none",
+            },
+          },
+        ];
+      }
+
+      return [
+        {
+          type: "INTENT_MEDIA_IGNORED",
+          reason: "media_not_playing",
+          correlationId: event.correlationId,
+          ts: this._now(),
+          payload: {
+            provider: normalizeText(event.payload?.provider) || "media",
+            playing,
+            confidence,
+          },
+        },
+      ];
+    }
+
+    if (event.type === "FRESHRSS_ITEMS") {
+      return [
+        {
+          type: "INTENT_HOBBY_SUMMARY",
+          reason: "freshrss_latest_items",
+          correlationId: event.correlationId,
+          ts: this._now(),
+          payload: {
+            summary: normalizeText(event.payload?.summary) || "FreshRSS summary unavailable.",
+            itemCount: Array.isArray(event.payload?.items) ? event.payload.items.length : 0,
+            fallbackMode: normalizeText(event.payload?.fallbackMode) || "none",
+          },
+        },
+      ];
+    }
+
     return [
       {
         type: "INTENT_UNSUPPORTED_EVENT",
@@ -257,6 +314,54 @@ class PetContractRouter {
           source,
           fallbackMode,
           text: bridgeDialogText,
+          correlationId: intent.correlationId,
+          ts: this._now(),
+        },
+      ];
+    }
+
+    if (intent.type === "INTENT_STATE_MUSIC_MODE") {
+      const suggestedState =
+        normalizeText(context.mediaSuggestedState) ||
+        normalizeText(intent.payload?.suggestedState) ||
+        "MusicChill";
+      const responseText =
+        normalizeText(context.mediaResponseText) ||
+        `Suggesting ${suggestedState} for ${intent.payload?.title || "unknown_track"}.`;
+      return [
+        {
+          type: "PET_RESPONSE",
+          mode: "text",
+          source,
+          fallbackMode:
+            normalizeText(context.integrationFallbackMode) ||
+            normalizeText(intent.payload?.fallbackMode) ||
+            "none",
+          suggestedState,
+          provider: normalizeText(intent.payload?.provider) || "media",
+          activeProp: normalizeText(intent.payload?.activeProp) || "headphones",
+          text: responseText,
+          correlationId: intent.correlationId,
+          ts: this._now(),
+        },
+      ];
+    }
+
+    if (intent.type === "INTENT_MEDIA_IGNORED") {
+      return [];
+    }
+
+    if (intent.type === "INTENT_HOBBY_SUMMARY") {
+      return [
+        {
+          type: "PET_RESPONSE",
+          mode: "text",
+          source,
+          fallbackMode: normalizeText(intent.payload?.fallbackMode) || "none",
+          text:
+            normalizeText(context.freshRssResponseText) ||
+            normalizeText(intent.payload?.summary) ||
+            "FreshRSS summary unavailable.",
           correlationId: intent.correlationId,
           ts: this._now(),
         },

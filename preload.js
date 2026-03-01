@@ -12,6 +12,11 @@ contextBridge.exposeInMainWorld("petAPI", {
   getContractTrace: () => ipcRenderer.invoke("pet:getContractTrace"),
   getMemorySnapshot: () => ipcRenderer.invoke("pet:getMemorySnapshot"),
   runUserCommand: (command) => ipcRenderer.invoke("pet:runUserCommand", { command }),
+  probeSpotifyIntegration: () => ipcRenderer.invoke("pet:probeSpotifyIntegration"),
+  probeFreshRssIntegration: () => ipcRenderer.invoke("pet:probeFreshRssIntegration"),
+  simulateSpotifyPlayback: (payload = {}) =>
+    ipcRenderer.invoke("pet:simulateSpotifyPlayback", payload),
+  recordTrackRating: (payload = {}) => ipcRenderer.invoke("pet:recordTrackRating", payload),
   recordMusicRating: (rating, trackTitle = "manual-track") =>
     ipcRenderer.invoke("pet:recordMusicRating", { rating, trackTitle }),
   runMemoryPromotionCheck: (payload = {}) =>
@@ -134,6 +139,18 @@ contextBridge.exposeInMainWorld("petAPI", {
 
     return () => {
       ipcRenderer.removeListener("pet:memory", listener);
+    };
+  },
+  onIntegration: (callback) => {
+    if (typeof callback !== "function") {
+      return () => {};
+    }
+
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on("pet:integration", listener);
+
+    return () => {
+      ipcRenderer.removeListener("pet:integration", listener);
     };
   },
 });

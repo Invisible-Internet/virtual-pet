@@ -11,6 +11,25 @@ const {
   requestWithTimeout,
 } = require("./openclaw-bridge");
 const {
+  DEFAULT_OPENCLAW_AGENT_ID,
+  DEFAULT_OPENCLAW_AGENT_TIMEOUT_MS,
+  buildSpotifyNowPlayingPrompt,
+  buildSpotifyTopArtistPrompt,
+  buildFreshRssPrompt,
+  runOpenClawAgentPrompt,
+  parseJsonPayload,
+  detectAgentFailure,
+  normalizeSpotifyNowPlayingPayload,
+  normalizeSpotifyTopArtistPayload,
+  normalizeFreshRssPayload,
+  detectFreshRssPayloadFailure,
+} = require("./openclaw-agent-probe");
+const {
+  INTEGRATION_TRANSPORTS,
+  deriveIntegrationCapabilityState,
+  createTrackRatingObservation,
+} = require("./integration-runtime");
+const {
   MEMORY_ADAPTER_MODES,
   OPENCLAW_WORKSPACE_BOOTSTRAP_MODES,
   createMemoryPipeline,
@@ -108,6 +127,8 @@ const CAPABILITY_IDS = Object.freeze({
   brain: "brain",
   sensors: "sensors",
   openclawBridge: "openclawBridge",
+  spotifyIntegration: "spotifyIntegration",
+  freshRssIntegration: "freshRssIntegration",
   extensionRegistry: "extensionRegistry",
   permissionManager: "permissionManager",
   behaviorArbitrator: "behaviorArbitrator",
@@ -145,6 +166,11 @@ let latestContractTrace = null;
 let openclawBridge = null;
 let memoryPipeline = null;
 let latestMemorySnapshot = null;
+let latestIntegrationEvent = null;
+let integrationProbeStates = {
+  spotify: createInitialIntegrationProbeState(),
+  freshRss: createInitialIntegrationProbeState(),
+};
 let runtimeSettings = null;
 let runtimeSettingsSourceMap = {};
 let runtimeSettingsValidationWarnings = [];
@@ -309,6 +335,18 @@ function summarizeDisplay(display) {
     scaleFactor: display.scaleFactor,
     bounds: display.bounds,
     workArea: display.workArea,
+  };
+}
+
+function createInitialIntegrationProbeState() {
+  return {
+    state: "pending",
+    reason: "probePending",
+    fallbackMode: "probe_pending",
+    lastProbeAt: 0,
+    lastSuccessAt: 0,
+    lastFailureAt: 0,
+    error: null,
   };
 }
 
@@ -962,6 +1000,30 @@ function initializeCapabilityRegistry() {
   });
 
   capabilityRegistry.register({
+    capabilityId: CAPABILITY_IDS.spotifyIntegration,
+    contractVersion: CAPABILITY_CONTRACT_VERSION,
+    required: false,
+    defaultEnabled: true,
+    telemetryTags: ["integrations", "spotify", "media"],
+    degradedPolicy: {
+      fallback: "localMusicMode",
+    },
+    start: () => deriveIntegrationState(CAPABILITY_IDS.spotifyIntegration),
+  });
+
+  capabilityRegistry.register({
+    capabilityId: CAPABILITY_IDS.freshRssIntegration,
+    contractVersion: CAPABILITY_CONTRACT_VERSION,
+    required: false,
+    defaultEnabled: true,
+    telemetryTags: ["integrations", "freshrss", "feeds"],
+    degradedPolicy: {
+      fallback: "skipFeedPolling",
+    },
+    start: () => deriveIntegrationState(CAPABILITY_IDS.freshRssIntegration),
+  });
+
+  capabilityRegistry.register({
     capabilityId: CAPABILITY_IDS.extensionRegistry,
     contractVersion: CAPABILITY_CONTRACT_VERSION,
     required: false,
@@ -1037,6 +1099,7 @@ async function startCapabilityRegistry() {
   const snapshot = await capabilityRegistry.startAll(createCapabilityContext());
   emitCapabilitySnapshot(snapshot);
   logCapabilitySummary("startup-complete", snapshot);
+  refreshIntegrationCapabilityStates();
   refreshExtensionCapabilityStates();
 }
 
@@ -1180,6 +1243,8 @@ function initializeExtensionPackRuntime() {
 
 function buildRuntimeSettingsSummary() {
   const settings = runtimeSettings && typeof runtimeSettings === "object" ? runtimeSettings : {};
+  const integrations =
+    settings.integrations && typeof settings.integrations === "object" ? settings.integrations : {};
   const memory = settings.memory && typeof settings.memory === "object" ? settings.memory : {};
   const openclaw = settings.openclaw && typeof settings.openclaw === "object" ? settings.openclaw : {};
   const paths = settings.paths && typeof settings.paths === "object" ? settings.paths : {};
@@ -1188,6 +1253,27 @@ function buildRuntimeSettingsSummary() {
       ? runtimeSettingsResolvedPaths
       : null;
   return {
+    integrations: {
+      spotify: {
+        enabled: Boolean(integrations.spotify?.enabled),
+        available: Boolean(integrations.spotify?.available),
+        transport: integrations.spotify?.transport || INTEGRATION_TRANSPORTS.stub,
+        defaultTrackTitle: integrations.spotify?.defaultTrackTitle || "Night Drive",
+        defaultArtist: integrations.spotify?.defaultArtist || "Primea FM",
+        defaultAlbum: integrations.spotify?.defaultAlbum || "Sample Rotation",
+      },
+      freshRss: {
+        enabled: Boolean(integrations.freshRss?.enabled),
+        available: Boolean(integrations.freshRss?.available),
+        transport: integrations.freshRss?.transport || INTEGRATION_TRANSPORTS.stub,
+        pollCadenceMinutes: Number.isFinite(Number(integrations.freshRss?.pollCadenceMinutes))
+          ? Math.max(5, Math.round(Number(integrations.freshRss.pollCadenceMinutes)))
+          : 30,
+        dailyTopItems: Number.isFinite(Number(integrations.freshRss?.dailyTopItems))
+          ? Math.max(1, Math.min(3, Math.round(Number(integrations.freshRss.dailyTopItems))))
+          : 3,
+      },
+    },
     memory: {
       enabled: Boolean(memory.enabled),
       adapterMode: memory.adapterMode || MEMORY_ADAPTER_MODES.local,
@@ -1198,6 +1284,10 @@ function buildRuntimeSettingsSummary() {
       enabled: Boolean(openclaw.enabled),
       transport: openclaw.transport || BRIDGE_TRANSPORTS.stub,
       mode: openclaw.mode || BRIDGE_MODES.online,
+      agentId: openclaw.agentId || DEFAULT_OPENCLAW_AGENT_ID,
+      agentTimeoutMs: Number.isFinite(Number(openclaw.agentTimeoutMs))
+        ? Math.max(1000, Math.round(Number(openclaw.agentTimeoutMs)))
+        : DEFAULT_OPENCLAW_AGENT_TIMEOUT_MS,
       baseUrl: openclaw.baseUrl || "",
       timeoutMs: Number.isFinite(Number(openclaw.timeoutMs))
         ? Math.max(200, Math.round(Number(openclaw.timeoutMs)))
@@ -1286,6 +1376,157 @@ function initializeOpenClawBridgeRuntime() {
       );
     },
   });
+}
+
+function emitIntegrationEvent(payload) {
+  if (!payload || typeof payload !== "object") return;
+  latestIntegrationEvent = payload;
+  emitToRenderer("pet:integration", payload);
+}
+
+function setIntegrationProbeState(integrationId, update = {}) {
+  if (integrationId !== "spotify" && integrationId !== "freshRss") return;
+  const previous = integrationProbeStates[integrationId] || createInitialIntegrationProbeState();
+  const next = {
+    ...previous,
+    ...update,
+    state: typeof update.state === "string" ? update.state : previous.state,
+    reason: typeof update.reason === "string" ? update.reason : previous.reason,
+    fallbackMode:
+      typeof update.fallbackMode === "string" ? update.fallbackMode : previous.fallbackMode,
+    lastProbeAt: Number.isFinite(update.lastProbeAt)
+      ? update.lastProbeAt
+      : Number.isFinite(previous.lastProbeAt)
+        ? previous.lastProbeAt
+        : 0,
+    lastSuccessAt: Number.isFinite(update.lastSuccessAt)
+      ? update.lastSuccessAt
+      : Number.isFinite(previous.lastSuccessAt)
+        ? previous.lastSuccessAt
+        : 0,
+    lastFailureAt: Number.isFinite(update.lastFailureAt)
+      ? update.lastFailureAt
+      : Number.isFinite(previous.lastFailureAt)
+        ? previous.lastFailureAt
+        : 0,
+    error:
+      typeof update.error === "string" || update.error === null ? update.error : previous.error,
+  };
+  integrationProbeStates = {
+    ...integrationProbeStates,
+    [integrationId]: next,
+  };
+  refreshIntegrationCapabilityStates();
+}
+
+function getOpenClawAgentProbeOptions() {
+  const settings = buildRuntimeSettingsSummary();
+  return {
+    agentId: settings.openclaw.agentId || DEFAULT_OPENCLAW_AGENT_ID,
+    timeoutMs: settings.openclaw.agentTimeoutMs || DEFAULT_OPENCLAW_AGENT_TIMEOUT_MS,
+  };
+}
+
+async function runAgentProbeWithJson(prompt, label) {
+  const options = getOpenClawAgentProbeOptions();
+  const envelope = await runOpenClawAgentPrompt({
+    agentId: options.agentId,
+    timeoutMs: options.timeoutMs,
+    prompt,
+    logger: (kind, payload) => {
+      console.log(
+        `[pet-openclaw-agent] ${label} ${kind} agent=${options.agentId} runId=${
+          payload?.runId || "n/a"
+        } status=${payload?.status || "n/a"}`
+      );
+    },
+  });
+  try {
+    return {
+      ok: true,
+      text: envelope.payloadText,
+      json: parseJsonPayload(envelope.payloadText),
+      envelope,
+    };
+  } catch {
+    return {
+      ok: false,
+      text: envelope.payloadText,
+      failure: detectAgentFailure(envelope.payloadText),
+      envelope,
+    };
+  }
+}
+
+function buildSpotifyProbeResponseText(nowPlaying, topArtistSummary, degradedParts = []) {
+  const segments = [];
+  if (nowPlaying) {
+    segments.push(
+      `Spotify ${nowPlaying.isPlaying ? "is playing" : "last reported"} ${nowPlaying.trackName} by ${nowPlaying.artistName}.`
+    );
+  }
+  if (topArtistSummary?.topArtist) {
+    segments.push(`Top artist (${topArtistSummary.timeRange}): ${topArtistSummary.topArtist}.`);
+  }
+  if (degradedParts.length > 0) {
+    segments.push(`Degraded: ${degradedParts.join("; ")}.`);
+  }
+  return segments.join(" ").trim() || "Spotify probe returned no usable data.";
+}
+
+function buildFreshRssResponseText(summary, items = [], degradedReason = null, degradedMessage = null) {
+  const normalizedSummary =
+    typeof summary === "string" && summary.trim().length > 0
+      ? summary.trim()
+      : `FreshRSS returned ${items.length} items.`;
+  if (!degradedReason) return normalizedSummary;
+  const detail =
+    typeof degradedMessage === "string" && degradedMessage.trim().length > 0
+      ? degradedMessage.trim()
+      : degradedReason;
+  if (normalizedSummary === detail) {
+    return normalizedSummary;
+  }
+  return `${normalizedSummary} Degraded: ${detail}.`;
+}
+
+function deriveIntegrationState(capabilityId) {
+  const settings = buildRuntimeSettingsSummary();
+  if (capabilityId === CAPABILITY_IDS.spotifyIntegration) {
+    return deriveIntegrationCapabilityState("spotify", settings.integrations.spotify, {
+      openclawEnabled: settings.openclaw.enabled,
+      probeState: integrationProbeStates.spotify,
+    });
+  }
+  if (capabilityId === CAPABILITY_IDS.freshRssIntegration) {
+    return deriveIntegrationCapabilityState("freshRss", settings.integrations.freshRss, {
+      openclawEnabled: settings.openclaw.enabled,
+      probeState: integrationProbeStates.freshRss,
+    });
+  }
+  return null;
+}
+
+function refreshIntegrationCapabilityStates() {
+  if (!capabilityRegistry) return;
+  const spotifyState = deriveIntegrationState(CAPABILITY_IDS.spotifyIntegration);
+  if (spotifyState) {
+    updateCapabilityState(
+      CAPABILITY_IDS.spotifyIntegration,
+      spotifyState.state,
+      spotifyState.reason,
+      spotifyState.details
+    );
+  }
+  const freshRssState = deriveIntegrationState(CAPABILITY_IDS.freshRssIntegration);
+  if (freshRssState) {
+    updateCapabilityState(
+      CAPABILITY_IDS.freshRssIntegration,
+      freshRssState.state,
+      freshRssState.reason,
+      freshRssState.details
+    );
+  }
 }
 
 function emitMemorySnapshot(snapshot) {
@@ -1445,10 +1686,15 @@ function deriveContractSource() {
 function buildStatusText() {
   const runtime = latestCapabilitySnapshot?.runtimeState || "unknown";
   const summary = latestCapabilitySnapshot?.summary || {};
+  const spotifyState =
+    capabilityRegistry?.getCapabilityState(CAPABILITY_IDS.spotifyIntegration)?.state || "unknown";
+  const freshRssState =
+    capabilityRegistry?.getCapabilityState(CAPABILITY_IDS.freshRssIntegration)?.state || "unknown";
   return (
     `Runtime ${runtime}. ` +
     `Capabilities healthy=${summary.healthyCount || 0}, ` +
-    `degraded=${summary.degradedCount || 0}, failed=${summary.failedCount || 0}.`
+    `degraded=${summary.degradedCount || 0}, failed=${summary.failedCount || 0}. ` +
+    `Integrations spotify=${spotifyState}, freshrss=${freshRssState}.`
   );
 }
 
@@ -1562,6 +1808,7 @@ async function requestBridgeDialog({ correlationId, route, promptText }) {
         route,
       }
     );
+    refreshIntegrationCapabilityStates();
 
     return {
       source: outcome?.response?.source || "online",
@@ -1581,6 +1828,7 @@ async function requestBridgeDialog({ correlationId, route, promptText }) {
         fallbackMode,
       }
     );
+    refreshIntegrationCapabilityStates();
     console.warn(
       `[pet-openclaw] fallback correlationId=${correlationId} route=${route} reason=${fallbackMode}`
     );
@@ -1686,6 +1934,80 @@ function createMemoryObservationFromContractResult(eventType, payload, result, c
     };
   }
 
+  if (eventType === "MEDIA") {
+    const title =
+      typeof payload?.title === "string" && payload.title.trim().length > 0
+        ? payload.title.trim()
+        : "unknown_track";
+    const artist =
+      typeof payload?.artist === "string" && payload.artist.trim().length > 0
+        ? payload.artist.trim()
+        : "unknown_artist";
+    const provider =
+      typeof payload?.provider === "string" && payload.provider.trim().length > 0
+        ? payload.provider.trim()
+        : "media";
+    return {
+      observationType: "spotify_playback",
+      source: `${provider}_playback`,
+      correlationId,
+      evidenceTag: `${provider}:${title}`.toLowerCase().replace(/\s+/g, "-"),
+      payload: {
+        playing: Boolean(payload?.playing),
+        confidence: Number.isFinite(Number(payload?.confidence))
+          ? Number(payload.confidence)
+          : 0,
+        title,
+        artist,
+        album:
+          typeof payload?.album === "string" && payload.album.trim().length > 0
+            ? payload.album.trim()
+            : "unknown_album",
+        provider,
+        suggestedState:
+          typeof payload?.suggestedState === "string" && payload.suggestedState.trim().length > 0
+            ? payload.suggestedState.trim()
+            : "MusicChill",
+        fallbackMode:
+          typeof payload?.fallbackMode === "string" && payload.fallbackMode.trim().length > 0
+            ? payload.fallbackMode.trim()
+            : "none",
+        topArtistSummary:
+          payload?.topArtistSummary && typeof payload.topArtistSummary === "object"
+            ? payload.topArtistSummary
+            : null,
+      },
+    };
+  }
+
+  if (eventType === "FRESHRSS_ITEMS") {
+    const fallbackMode =
+      typeof payload?.fallbackMode === "string" && payload.fallbackMode.trim().length > 0
+        ? payload.fallbackMode.trim()
+        : "none";
+    if (fallbackMode !== "none") {
+      return null;
+    }
+    const items = Array.isArray(payload?.items) ? payload.items.slice(0, 5) : [];
+    return {
+      observationType: "freshrss_summary",
+      source: "openclaw_freshrss_probe",
+      correlationId,
+      evidenceTag:
+        items.length > 0 && typeof items[0]?.source === "string" && items[0].source.trim().length > 0
+          ? items[0].source.trim().toLowerCase().replace(/\s+/g, "-")
+          : "freshrss",
+      payload: {
+        summary:
+          typeof payload?.summary === "string" && payload.summary.trim().length > 0
+            ? payload.summary.trim()
+            : "FreshRSS summary unavailable.",
+        items,
+        fallbackMode,
+      },
+    };
+  }
+
   return null;
 }
 
@@ -1780,6 +2102,349 @@ async function processPetContractEvent(eventType, payload = {}, context = {}) {
   return result;
 }
 
+async function probeSpotifyIntegration() {
+  const settings = buildRuntimeSettingsSummary();
+  const correlationId = createContractCorrelationId();
+  const nowMs = Date.now();
+
+  if (!settings.openclaw.enabled || !settings.integrations.spotify.enabled) {
+    const reason = !settings.integrations.spotify.enabled ? "disabledByConfig" : "openclawDisabledFallback";
+    setIntegrationProbeState("spotify", {
+      state: "degraded",
+      reason,
+      fallbackMode: reason,
+      lastProbeAt: nowMs,
+      lastFailureAt: nowMs,
+      error: reason,
+    });
+    const integrationEvent = {
+      kind: "spotifyProbe",
+      correlationId,
+      provider: "spotify",
+      fallbackMode: reason,
+      source: "offline",
+      capabilityState: "degraded",
+      text: "Spotify probe is unavailable because integration or OpenClaw is disabled.",
+      ts: nowMs,
+    };
+    emitIntegrationEvent(integrationEvent);
+    return {
+      ok: false,
+      error: reason,
+      probe: integrationEvent,
+    };
+  }
+
+  if (!settings.integrations.spotify.available) {
+    setIntegrationProbeState("spotify", {
+      state: "degraded",
+      reason: "providerUnavailable",
+      fallbackMode: "spotify_provider_unavailable",
+      lastProbeAt: nowMs,
+      lastFailureAt: nowMs,
+      error: "provider unavailable by config",
+    });
+    const integrationEvent = {
+      kind: "spotifyProbe",
+      correlationId,
+      provider: "spotify",
+      fallbackMode: "spotify_provider_unavailable",
+      source: "offline",
+      capabilityState: "degraded",
+      text: "Spotify probe is configured unavailable.",
+      ts: nowMs,
+    };
+    emitIntegrationEvent(integrationEvent);
+    return {
+      ok: false,
+      error: "providerUnavailable",
+      probe: integrationEvent,
+    };
+  }
+
+  const degradedParts = [];
+  let nowPlaying = null;
+  let topArtistSummary = null;
+
+  try {
+    const nowPlayingProbe = await runAgentProbeWithJson(
+      buildSpotifyNowPlayingPrompt(),
+      "spotify-now-playing"
+    );
+    if (nowPlayingProbe.ok) {
+      nowPlaying = normalizeSpotifyNowPlayingPayload(nowPlayingProbe.json);
+    } else {
+      degradedParts.push(`now_playing=${nowPlayingProbe.failure.reason}`);
+    }
+  } catch (error) {
+    degradedParts.push(`now_playing=${detectAgentFailure("", error).reason}`);
+  }
+
+  try {
+    const topArtistProbe = await runAgentProbeWithJson(
+      buildSpotifyTopArtistPrompt(),
+      "spotify-top-artist"
+    );
+    if (topArtistProbe.ok) {
+      topArtistSummary = normalizeSpotifyTopArtistPayload(topArtistProbe.json);
+    } else {
+      degradedParts.push(`top_artist=${topArtistProbe.failure.reason}`);
+    }
+  } catch (error) {
+    degradedParts.push(`top_artist=${detectAgentFailure("", error).reason}`);
+  }
+
+  const succeeded = Boolean(nowPlaying && topArtistSummary);
+  const fallbackMode = succeeded ? "none" : degradedParts[0] || "spotify_probe_failed";
+  const responseText = buildSpotifyProbeResponseText(nowPlaying, topArtistSummary, degradedParts);
+
+  if (succeeded) {
+    setIntegrationProbeState("spotify", {
+      state: "healthy",
+      reason: "probeHealthy",
+      fallbackMode: "none",
+      lastProbeAt: nowMs,
+      lastSuccessAt: nowMs,
+      error: null,
+    });
+  } else {
+    setIntegrationProbeState("spotify", {
+      state: "degraded",
+      reason: fallbackMode,
+      fallbackMode,
+      lastProbeAt: nowMs,
+      lastFailureAt: nowMs,
+      error: responseText,
+    });
+  }
+
+  let contractResult = null;
+  if (nowPlaying) {
+    contractResult = await processPetContractEvent(
+      "MEDIA",
+      {
+        playing: Boolean(nowPlaying.isPlaying),
+        confidence: succeeded ? 0.98 : 0.8,
+        provider: "spotify",
+        source: "spotify",
+        title: nowPlaying.trackName,
+        artist: nowPlaying.artistName,
+        album: nowPlaying.albumName,
+        suggestedState: "MusicChill",
+        activeProp: "headphones",
+        entryDialogue: responseText,
+        fallbackMode,
+        topArtistSummary,
+      },
+      {
+        correlationId,
+        source: succeeded ? "online" : "offline",
+        mediaResponseText: responseText,
+        mediaSuggestedState: "MusicChill",
+        integrationFallbackMode: fallbackMode,
+      }
+    );
+  }
+
+  const integrationEvent = {
+    kind: "spotifyProbe",
+    correlationId,
+    provider: "spotify",
+    nowPlaying,
+    topArtistSummary,
+    fallbackMode,
+    source: succeeded ? "online" : "offline",
+    capabilityState: succeeded ? "healthy" : "degraded",
+    degradedParts,
+    text: responseText,
+    ts: nowMs,
+  };
+  console.log(
+    `[pet-integration] spotify probe correlationId=${correlationId} state=${integrationEvent.capabilityState} fallback=${fallbackMode}`
+  );
+  emitIntegrationEvent(integrationEvent);
+  return {
+    ok: succeeded,
+    correlationId,
+    probe: integrationEvent,
+    contractResult,
+  };
+}
+
+async function probeFreshRssIntegration() {
+  const settings = buildRuntimeSettingsSummary();
+  const correlationId = createContractCorrelationId();
+  const nowMs = Date.now();
+
+  if (!settings.openclaw.enabled || !settings.integrations.freshRss.enabled) {
+    const reason = !settings.integrations.freshRss.enabled ? "disabledByConfig" : "openclawDisabledFallback";
+    setIntegrationProbeState("freshRss", {
+      state: "degraded",
+      reason,
+      fallbackMode: reason,
+      lastProbeAt: nowMs,
+      lastFailureAt: nowMs,
+      error: reason,
+    });
+    const integrationEvent = {
+      kind: "freshRssProbe",
+      correlationId,
+      provider: "freshRss",
+      fallbackMode: reason,
+      source: "offline",
+      capabilityState: "degraded",
+      text: "FreshRSS probe is unavailable because integration or OpenClaw is disabled.",
+      ts: nowMs,
+    };
+    emitIntegrationEvent(integrationEvent);
+    return {
+      ok: false,
+      error: reason,
+      probe: integrationEvent,
+    };
+  }
+
+  if (!settings.integrations.freshRss.available) {
+    setIntegrationProbeState("freshRss", {
+      state: "degraded",
+      reason: "providerUnavailable",
+      fallbackMode: "freshrss_provider_unavailable",
+      lastProbeAt: nowMs,
+      lastFailureAt: nowMs,
+      error: "provider unavailable by config",
+    });
+    const integrationEvent = {
+      kind: "freshRssProbe",
+      correlationId,
+      provider: "freshRss",
+      fallbackMode: "freshrss_provider_unavailable",
+      source: "offline",
+      capabilityState: "degraded",
+      text: "FreshRSS probe is configured unavailable.",
+      ts: nowMs,
+    };
+    emitIntegrationEvent(integrationEvent);
+    return {
+      ok: false,
+      error: "providerUnavailable",
+      probe: integrationEvent,
+    };
+  }
+
+  let normalized = null;
+  let failure = null;
+  try {
+    const probe = await runAgentProbeWithJson(buildFreshRssPrompt(), "freshrss-latest");
+    if (probe.ok) {
+      normalized = normalizeFreshRssPayload(probe.json);
+      failure = detectFreshRssPayloadFailure(normalized);
+    } else {
+      failure = probe.failure;
+    }
+  } catch (error) {
+    failure = detectAgentFailure("", error);
+  }
+
+  const succeeded = Boolean(
+    normalized &&
+      !failure &&
+      (normalized.items.length > 0 || normalized.summary === "FreshRSS returned no recent items.")
+  );
+  const fallbackMode = succeeded ? "none" : failure?.reason || "freshrss_probe_failed";
+  const responseText = buildFreshRssResponseText(
+    normalized?.summary || "",
+    normalized?.items || [],
+    succeeded ? null : failure?.reason || "probe failed",
+    succeeded ? null : failure?.message || null
+  );
+
+  if (succeeded) {
+    setIntegrationProbeState("freshRss", {
+      state: "healthy",
+      reason: "probeHealthy",
+      fallbackMode: "none",
+      lastProbeAt: nowMs,
+      lastSuccessAt: nowMs,
+      error: null,
+    });
+  } else {
+    setIntegrationProbeState("freshRss", {
+      state: "degraded",
+      reason: fallbackMode,
+      fallbackMode,
+      lastProbeAt: nowMs,
+      lastFailureAt: nowMs,
+      error: failure?.message || responseText,
+    });
+  }
+
+  let contractResult = null;
+  if (normalized) {
+    contractResult = await processPetContractEvent(
+      "FRESHRSS_ITEMS",
+      {
+        summary: normalized.summary,
+        items: normalized.items,
+        fallbackMode,
+      },
+      {
+        correlationId,
+        source: succeeded ? "online" : "offline",
+        freshRssResponseText: responseText,
+      }
+    );
+  }
+
+  const integrationEvent = {
+    kind: "freshRssProbe",
+    correlationId,
+    provider: "freshRss",
+    summary: normalized?.summary || null,
+    items: normalized?.items || [],
+    fallbackMode,
+    source: succeeded ? "online" : "offline",
+    capabilityState: succeeded ? "healthy" : "degraded",
+    text: responseText,
+    ts: nowMs,
+  };
+  console.log(
+    `[pet-integration] freshrss probe correlationId=${correlationId} state=${integrationEvent.capabilityState} fallback=${fallbackMode}`
+  );
+  emitIntegrationEvent(integrationEvent);
+  return {
+    ok: succeeded,
+    correlationId,
+    probe: integrationEvent,
+    contractResult,
+  };
+}
+
+async function recordTrackRating(payload = {}) {
+  if (!memoryPipeline) {
+    return {
+      ok: false,
+      error: "memory_pipeline_unavailable",
+    };
+  }
+  const correlationId = createContractCorrelationId();
+  const observation = createTrackRatingObservation(payload, correlationId);
+  const outcome = await memoryPipeline.recordObservation(observation);
+  const integrationEvent = {
+    kind: "trackRatingRecorded",
+    correlationId,
+    provider: observation.payload.provider,
+    trackTitle: observation.payload.trackTitle,
+    artist: observation.payload.artist,
+    rating: observation.payload.rating,
+    targetPath: outcome?.targetPath || null,
+    adapterMode: outcome?.adapterMode || latestMemorySnapshot?.activeAdapterMode || "local",
+    ts: Date.now(),
+  };
+  emitIntegrationEvent(integrationEvent);
+  emitToRenderer("pet:memory", integrationEvent);
+  return outcome;
+}
+
 function pointInBounds(point, bounds) {
   return (
     point.x >= bounds.x &&
@@ -1859,6 +2524,9 @@ function createWindow() {
     }
     if (latestMemorySnapshot) {
       emitMemorySnapshot(latestMemorySnapshot);
+    }
+    if (latestIntegrationEvent) {
+      emitIntegrationEvent(latestIntegrationEvent);
     }
     resetMotionSampleFromWindow();
     emitMotionState({
@@ -2121,6 +2789,22 @@ ipcMain.handle("pet:runUserCommand", (_event, payload) => {
     type: command,
     text: command,
   });
+});
+
+ipcMain.handle("pet:probeSpotifyIntegration", () => {
+  return probeSpotifyIntegration();
+});
+
+ipcMain.handle("pet:probeFreshRssIntegration", () => {
+  return probeFreshRssIntegration();
+});
+
+ipcMain.handle("pet:simulateSpotifyPlayback", () => {
+  return probeSpotifyIntegration();
+});
+
+ipcMain.handle("pet:recordTrackRating", (_event, payload) => {
+  return recordTrackRating(payload);
 });
 
 ipcMain.handle("pet:recordMusicRating", async (_event, payload) => {

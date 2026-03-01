@@ -5,8 +5,8 @@
   "private": true,
   "scripts": {
     "start": "electron .",
-    "check:syntax": "node --check main.js && node --check capability-registry.js && node --check extension-pack-registry.js && node --check openclaw-bridge.js && node --check memory-pipeline.js && node --check settings-runtime.js && node --check pet-contract-router.js && node --check renderer.js && node --check renderer-sprite-runtime.js && node --check preload.js && node --check pet-layout.js",
-    "check:contracts": "node scripts/check-contract-router.js && node scripts/check-openclaw-bridge.js && node scripts/check-memory-pipeline.js && node scripts/check-settings-runtime.js",
+    "check:syntax": "node --check main.js && node --check capability-registry.js && node --check extension-pack-registry.js && node --check integration-runtime.js && node --check openclaw-agent-probe.js && node --check openclaw-bridge.js && node --check memory-pipeline.js && node --check settings-runtime.js && node --check pet-contract-router.js && node --check renderer.js && node --check renderer-sprite-runtime.js && node --check preload.js && node --check pet-layout.js",
+    "check:contracts": "node scripts/check-contract-router.js && node scripts/check-openclaw-agent-probe.js && node scripts/check-openclaw-bridge.js && node scripts/check-memory-pipeline.js && node scripts/check-settings-runtime.js && node scripts/check-integration-runtime.js",
     "check:layout": "node scripts/check-layout.js",
     "check:assets": "node scripts/check-assets.js",
     "check:workspace": "node scripts/check-workspace-connectivity.js",

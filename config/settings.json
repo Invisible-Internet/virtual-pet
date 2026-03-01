@@ -1,4 +1,21 @@
 {
+  "integrations": {
+    "spotify": {
+      "enabled": true,
+      "available": true,
+      "transport": "stub",
+      "defaultTrackTitle": "Night Drive",
+      "defaultArtist": "Primea FM",
+      "defaultAlbum": "Sample Rotation"
+    },
+    "freshRss": {
+      "enabled": true,
+      "available": true,
+      "transport": "stub",
+      "pollCadenceMinutes": 30,
+      "dailyTopItems": 3
+    }
+  },
   "memory": {
     "enabled": true,
     "adapterMode": "obsidian",
@@ -9,6 +26,8 @@
     "enabled": true,
     "transport": "stub",
     "mode": "online",
+    "agentId": "main",
+    "agentTimeoutMs": 60000,
     "baseUrl": "http://127.0.0.1:18789/bridge/dialog",
     "timeoutMs": 1200,
     "retryCount": 0,

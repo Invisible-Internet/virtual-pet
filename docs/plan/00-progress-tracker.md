@@ -20,11 +20,11 @@ Allowed values:
 - D01 is a completed discovery baseline and remains doc-only by design.
 
 ## Current Deliverable
-- Current Deliverable: `06-integrations-freshrss-spotify`
+- Current Deliverable: `07-state-system-extension-guide`
 - Current Status: `in_progress`
-- Overall Progress: `7/10 implementation deliverables done` (D01, D02, D02b, D03, D04, D05a, D05 complete; D06 in progress)
+- Overall Progress: `8/10 implementation deliverables done` (D01, D02, D02b, D03, D04, D05a, D05, D06 complete; D07 in progress)
 - Current Gate State:
-  - `Doc Gate`: `in_progress`
+  - `Doc Gate`: `not_started`
   - `Implementation Gate`: `not_started`
 
 ## Deliverable Status Table
@@ -38,20 +38,31 @@ Allowed values:
 | `04-openclaw-bridge-spec` | `done` | Doc + implementation gates passed after operator-confirmed online/timeout/offline + guardrail + drag/fling verification |
 | `05a-obsidian-workspace-bootstrap-and-connectivity` | `done` | Doc + implementation gates passed; real-path validation captured for WSL OpenClaw workspace + local Obsidian vault with enabled/disabled toggle checks |
 | `05-memory-pipeline-and-obsidian-adapter` | `done` | Doc + implementation gates passed; operator runtime evidence confirmed `runtimeReady` obsidian path plus `M/H/N` write/promotion/mutation behavior |
-| `06-integrations-freshrss-spotify` | `in_progress` | D05 dependency cleared; starting integration contract/runtime slice planning for FreshRSS + Spotify flows |
-| `07-state-system-extension-guide` | `not_started` | Waiting on D03 + D02b |
+| `06-integrations-freshrss-spotify` | `done` | Doc + implementation gates passed; operator verification confirmed FreshRSS/Spotify healthy paths, `track_rating` writes, and deterministic Spotify unavailable fallback |
+| `07-state-system-extension-guide` | `in_progress` | Advanced after D06 closeout; implementation work not started yet |
 | `08-test-and-acceptance-matrix` | `not_started` | Final consolidation |
 | `09-decisions-log` | `in_progress` | Seed decisions added |
 
 ## Next 3 Actions
-1. Draft D06 integration contract details (event schema, polling cadence, failure/degraded modes) for FreshRSS and Spotify inputs.
-2. Implement first D06 runtime slice for at least one integration path with deterministic fallback behavior.
-3. Add manual verification cases and automated contract checks for D06, then capture first runtime evidence.
+1. Open D07 and define the baseline state catalog contract, registration rules, and fallback model for config-only vs hook-enabled states.
+2. Implement the first D07 runtime slice for one simple state (`Reading`) and one complex phase state (`PoolPlay`) without switch-case expansion.
+3. Add deterministic missing-resource fallback behavior and manual verification steps for D07 before considering gate movement.
 
 ## Blockers
 - None currently.
 
 ## Last Session Summary
+- Closed D06 as `done`:
+  - live OpenClaw-agent Spotify and FreshRSS healthy paths were manually verified in-app.
+  - `track_rating` memory writes were manually verified in-app.
+  - deterministic Spotify unavailable fallback was manually verified with `PET_SPOTIFY_AVAILABLE=0`.
+  - parser/failure-hardening changes remained green under `npm run check`.
+- Verification status for D06 after this session:
+  - `Doc Gate`: `passed`
+  - `Implementation Gate`: `passed`
+  - `Verification Gate`: `passed`
+- Shipped outcome note:
+  - visible app/runtime change delivered: D06 is now closed with live FreshRSS/Spotify probe support, memory output, and verified fallback behavior. Current deliverable advanced to D07.
 - Closed D05 as `done` with operator-provided runtime evidence from `npm start`:
   - `runtimeReady` confirmed `activeAdapterMode=obsidian`, `fallbackReason=none`, OpenClaw + vault paths resolved.
   - `M` hotkey wrote `music_rating` observation to `W:\\AI\\OpenClaw\\Memory\\Vault\\01_Logs\\2026-02-27.md`.
