@@ -13,16 +13,17 @@ Allowed values:
 - `done`
 
 ## Delivery Mode
-- Implementation deliverables (D02-D08, including inserted D05a) use `spec + implementation slice`.
+- Implementation deliverables (D02-D08, including D02b, D05a, D07b, and D07c) use `spec + implementation slice`.
 - A deliverable is not `done` until both are passed:
   - `Doc Gate`
   - `Implementation Gate`
 - D01 is a completed discovery baseline and remains doc-only by design.
+- D10 is a post-v1 feasibility deliverable and remains doc-only unless explicitly promoted into implementation scope.
 
 ## Current Deliverable
 - Current Deliverable: `07-state-system-extension-guide`
 - Current Status: `in_progress`
-- Overall Progress: `8/10 implementation deliverables done` (D01, D02, D02b, D03, D04, D05a, D05, D06 complete; D07 in progress)
+- Overall Progress: `8/13 roadmap deliverables done` (D01, D02, D02b, D03, D04, D05a, D05, D06 complete; D07 remains current)
 - Current Gate State:
   - `Doc Gate`: `not_started`
   - `Implementation Gate`: `not_started`
@@ -39,19 +40,29 @@ Allowed values:
 | `05a-obsidian-workspace-bootstrap-and-connectivity` | `done` | Doc + implementation gates passed; real-path validation captured for WSL OpenClaw workspace + local Obsidian vault with enabled/disabled toggle checks |
 | `05-memory-pipeline-and-obsidian-adapter` | `done` | Doc + implementation gates passed; operator runtime evidence confirmed `runtimeReady` obsidian path plus `M/H/N` write/promotion/mutation behavior |
 | `06-integrations-freshrss-spotify` | `done` | Doc + implementation gates passed; operator verification confirmed FreshRSS/Spotify healthy paths, `track_rating` writes, and deterministic Spotify unavailable fallback |
-| `07-state-system-extension-guide` | `in_progress` | Advanced after D06 closeout; implementation work not started yet |
-| `08-test-and-acceptance-matrix` | `not_started` | Final consolidation |
+| `07-state-system-extension-guide` | `in_progress` | Re-scoped to deterministic state runtime, behavior-to-visual mapping, and local state-aware description fallback |
+| `07b-dialog-surface-and-minimal-offline-loop` | `not_started` | Split out from D07 to cover visible chat, bubble output, offline local dialogue, and talk feedback |
+| `07c-shell-settings-and-wardrobe-surface` | `not_started` | Split out from D07 to cover tray/menu settings, roam controls, diagnostics toggle, and first wardrobe slice |
+| `08-test-and-acceptance-matrix` | `not_started` | Final consolidation after D07, D07b, and D07c |
 | `09-decisions-log` | `in_progress` | Seed decisions added |
+| `10-local-brain-and-personality-feasibility` | `not_started` | Post-v1 doc-only research deliverable; non-blocking to v1 closeout |
 
 ## Next 3 Actions
-1. Open D07 and define the baseline state catalog contract, registration rules, and fallback model for config-only vs hook-enabled states.
+1. Implement D07 state runtime scaffolding (`state-runtime.js` + `config/state-catalog.json`) with main-process authoritative snapshots.
 2. Implement the first D07 runtime slice for one simple state (`Reading`) and one complex phase state (`PoolPlay`) without switch-case expansion.
-3. Add deterministic missing-resource fallback behavior and manual verification steps for D07 before considering gate movement.
+3. Add deterministic missing-resource fallback behavior plus local state-aware description fallback before moving on to D07b.
 
 ## Blockers
 - None currently.
 
 ## Last Session Summary
+- Re-scoped Phase 3 so D07 now covers deterministic state runtime only, with follow-on deliverables:
+  - D07b for dialog surface and minimal offline loop
+  - D07c for shell/settings/wardrobe surface
+- Added D10 as a post-v1 doc-only feasibility deliverable for local-brain and structured-trait decisions.
+- Rewrote `README.md` to reflect the current verified runtime, active roadmap, and deferred research areas.
+- Shipped outcome note for this session:
+  - no visible app/runtime change; this session focused on roadmap, deliverable, tracker, ADR, and README restructuring while keeping D07 as the current deliverable.
 - Closed D06 as `done`:
   - live OpenClaw-agent Spotify and FreshRSS healthy paths were manually verified in-app.
   - `track_rating` memory writes were manually verified in-app.
@@ -224,7 +235,7 @@ Allowed values:
 
 ## Documentation Bootstrap Verification Checklist
 - [x] All required files exist in `docs/plan/`.
-- [x] Deliverable docs `01`-`08` plus `02b` and `05a` include required sections.
+- [x] Deliverable docs `01`-`08` plus `02b`, `05a`, `07b`, `07c`, and `10` exist and reflect their delivery mode.
 - [x] `AGENTS.md` contains resume protocol and TODO/progress snapshot.
 - [x] `AGENTS.md` and this tracker reference the same current deliverable/status.
 - [x] Cross-links between tracker, roadmap, and decisions log are valid.

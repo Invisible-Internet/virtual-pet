@@ -9,7 +9,7 @@ Related:
 - **Decision:** Continue with existing Canvas runtime for current roadmap.
 - **Rationale:** Current runtime is stable and already supports drag/fling/sprite state behavior. Renderer rewrite would delay high-value integration work.
 - **Alternatives Considered:** DOM/CSS migration now, Pixi migration now.
-- **Impacted Files/Modules:** `renderer.js`, `renderer-sprite-runtime.js`, planning deliverables D01-D08.
+- **Impacted Files/Modules:** `renderer.js`, `renderer-sprite-runtime.js`, planning deliverables D01-D10.
 - **Confirmation Note (2026-02-26):** Team reaffirmed no renderer migration in current roadmap scope.
 
 ## ADR-0002: Use Capability Registry (Built-in Modules) for v1
@@ -52,7 +52,7 @@ Related:
 - **Decision:** Conversation must remain usable via local chat input/output and bubble UI regardless of OpenClaw/STT/TTS availability; voice is additive, not required for baseline operation.
 - **Rationale:** Keeps interaction dependable in degraded environments and avoids hard dependency on external voice/runtime services.
 - **Alternatives Considered:** Voice-first interaction with no text fallback, OpenClaw-required chat path.
-- **Impacted Files/Modules:** D03 contracts, D04 bridge spec, D07 dialogue visual bindings, D08 acceptance matrix.
+- **Impacted Files/Modules:** D03 contracts, D04 bridge spec, D07b dialog surface and talk-feedback bindings, D08 acceptance matrix.
 
 ## ADR-0008: Introspection and Autonomy Outputs Are Bounded and Auditable
 - **Date:** 2026-02-26
@@ -94,7 +94,7 @@ Related:
 - **Decision:** Add `config/settings.json` as durable settings baseline for external paths (`openClawWorkspaceRoot`, `obsidianVaultRoot`, local fallback roots) and memory adapter mode. Environment variables remain override layer.
 - **Rationale:** Needed for real local integration (including WSL-hosted OpenClaw), predictable portability, and future GUI settings synchronization.
 - **Alternatives Considered:** Environment-variables-only, hard-coded repo-relative paths.
-- **Impacted Files/Modules:** D05 settings/path contracts, D07 settings UI groundwork, runtime bootstrap config loading, D08 path-resolution acceptance tests.
+- **Impacted Files/Modules:** D05 settings/path contracts, D07c settings UI groundwork, runtime bootstrap config loading, D08 path-resolution acceptance tests.
 
 ## ADR-0014: Insert D05a Connectivity/Bootstrap Gate Before D05 Closeout
 - **Date:** 2026-02-26
@@ -109,3 +109,24 @@ Related:
 - **Rationale:** Prevents accidental mutation of external OpenClaw workspaces and keeps ownership boundaries explicit.
 - **Alternatives Considered:** Always auto-create required OpenClaw workspace files during startup.
 - **Impacted Files/Modules:** `memory-pipeline.js`, `scripts/check-workspace-connectivity.js`, D05a workspace governance, D05 closeout criteria.
+
+## ADR-0016: v1 Offline Embodiment Baseline Is Minimal and Deterministic
+- **Date:** `2026-03-02`
+- **Decision:** v1 commits to a minimal offline embodiment loop only: deterministic local Q/A, visible state changes, prop interactions, proactive bounded announcements, and bubble/talk feedback. v1 does not commit to a full offline personality engine.
+- **Rationale:** Preserves delight and resilience without introducing local-brain or personality complexity into the critical path.
+- **Alternatives Considered:** Full rule-based offline personality in v1, local-model dependency in v1, no offline dialog surface beyond logs.
+- **Impacted Files/Modules:** D07 state context fallback, D07b dialog surface and bubble/talk feedback, D07c shell affordances, D08 acceptance checks, `README.md`.
+
+## ADR-0017: Split Phase 3 Scope Across D07, D07b, and D07c
+- **Date:** `2026-03-02`
+- **Decision:** Split the old Phase 3 monolith so D07 owns deterministic state runtime and state-pack mapping, D07b owns dialog surface and minimal offline loop, and D07c owns tray/settings/wardrobe surface.
+- **Rationale:** Keeps each deliverable decision-complete, small enough to verify manually, and aligned with the "spec + implementation slice" workflow.
+- **Alternatives Considered:** Keep all Phase 3 work in D07, split only dialog work, split only shell work.
+- **Impacted Files/Modules:** `00-master-roadmap.md`, `00-progress-tracker.md`, `AGENTS.md`, D07, D07b, D07c, D08.
+
+## ADR-0018: External OpenClaw Remains the Baseline; Local-Brain Work Stays Research-Only
+- **Date:** `2026-03-02`
+- **Decision:** Keep external OpenClaw as the product baseline through v1. Evaluate local providers, bundled OpenClaw, embedded model paths, and structured-trait canon only in the post-v1 D10 feasibility deliverable.
+- **Rationale:** Preserves the current advisory-only architecture, avoids destabilizing near-term implementation, and defers high-risk platform/runtime questions until after v1 validation.
+- **Alternatives Considered:** Commit to Ollama/local-model path now, bundle OpenClaw in the v1 roadmap, make structured traits canonical before feasibility work is complete.
+- **Impacted Files/Modules:** `README.md`, `00-master-roadmap.md`, `00-progress-tracker.md`, `AGENTS.md`, D10.

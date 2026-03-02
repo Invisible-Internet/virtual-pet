@@ -24,7 +24,7 @@ Insert a configuration-first integration layer before D05 gate closeout so runti
 - IPC/config exposure of resolved integration summary.
 
 ## Out of Scope
-- Full settings GUI (tracked later in D07).
+- Full settings GUI (tracked later in D07c).
 - Mandatory OpenClaw Obsidian skill dependency (skill remains optional augmentation).
 
 ## Settings Contract (Implemented)

@@ -7,20 +7,23 @@ Related:
 ## Summary
 This roadmap governs the documentation-guided implementation path for Virtual Pet v2:
 - Keep Canvas runtime baseline.
+- Keep local deterministic authority in control; OpenClaw remains advisory only.
 - Build modular capability architecture with graceful fallbacks.
-- Add extension framework contracts for offline-first props/state packs/context with online OpenClaw enrichment.
+- Add extension framework contracts for offline-first props, state packs, and context with online OpenClaw enrichment.
 - Deliver OpenClaw-first orchestration and immediate memory pipeline support.
-- Use config-first settings/path management for external dependencies (OpenClaw workspace, Obsidian vault, adapter/runtime toggles).
-- Gate progression by both documentation and implementation verification before advancing to the next deliverable.
-- Lock explicit user-visible behavior targets:
-  - Desktop roam across display/work-area bounds and optional user-defined roam zone.
-  - State catalog including `Idle`, `Roam`, `MusicChill`, `MusicDance`, `WatchMode`, `Sleep`.
-  - Taskbar/tray shell with settings menu and wardrobe (costumes/accessories) controls.
-  - Conversational UX with OpenClaw-backed dialogue plus offline-safe fallback chat input/output.
-  - Speech output/input path with basic lip-sync approximation and fallback talk SFX mode.
+- Use config-first settings and path management for external dependencies.
+- Commit to a minimal offline embodiment loop for v1:
+  - drag/fling and movement
+  - visible state changes
+  - prop interactions
+  - local Q/A
+  - proactive bounded announcements
+  - bubble/talk feedback
+- Keep deep offline personality and local-brain work out of the v1 critical path and move them into post-v1 feasibility research.
+- Gate progression by both documentation and implementation verification before advancing to the next implementation deliverable.
 
 ## Execution Mode (Doc + Code)
-For implementation deliverables (D02-D08, including inserted D05a), completion requires dual gates:
+For implementation deliverables (D02-D08, including D02b, D05a, D07b, and D07c), completion requires dual gates:
 1. `Doc Gate`: contract/spec sections are complete and internally consistent.
 2. `Implementation Gate`: at least one concrete runtime slice is implemented with visible/manual verification steps and outcomes.
 
@@ -29,13 +32,14 @@ Definition of `done` for each implementation deliverable:
 - Tracker mirrors status and gate outcomes.
 - User can run or observe at least one new visible app/runtime behavior tied to that deliverable.
 
-Baseline exception:
-- D01 is a completed discovery/planning deliverable and does not require retroactive runtime implementation.
+Doc-only exceptions:
+- D01 is a completed discovery/planning baseline and does not require retroactive runtime implementation.
+- D10 is a post-v1 feasibility/research deliverable and is doc-only unless explicitly promoted into implementation scope.
 
 ## Explicit Feature Targets (Roadmap Commitments)
 1. Movement and Roaming
 - Pet can roam desktop bounds (respecting configured clamp mode).
-- Pet can optionally roam within a designated user region (marquee/zone selection UX defined in docs).
+- Pet can optionally roam within a designated user region.
 2. Renderer Scope
 - Keep existing Canvas renderer/runtime as-is for this roadmap.
 - Do not include DOM/CSS/Pixi renderer migration work in current deliverables.
@@ -45,34 +49,41 @@ Baseline exception:
 - State extension model supports both:
   - Simple config states (single-loop or light variants).
   - Complex phase states (entry/loop/interaction/exit/recovery animation bundles).
-4. Desktop Shell UX
+- Behavior-state ownership remains in the main process and maps into renderer-visible clip/overlay/fx bindings.
+4. Minimal Offline Embodiment
+- Pet remains enjoyable when OpenClaw is offline, disabled, or unavailable.
+- Local fallback dialogue is deterministic, bounded, and state-aware.
+- Bubble/talk feedback is visible even when TTS is unavailable.
+- v1 does not commit to a full offline personality engine.
+5. Desktop Shell UX
 - Tray/taskbar icon interactions are specified.
-- Settings menu contracts are specified (including mode toggles, roaming mode, diagnostics exposure).
-- Wardrobe pipeline is specified (costume/accessory selection and fallback behavior).
-5. Sensor and Integration Focus
+- Settings menu contracts are specified (including roam mode, diagnostics exposure, and accessory toggles).
+- Wardrobe pipeline is specified for costume/accessory selection and fallback behavior.
+6. Sensor and Integration Focus
 - Media sensing contract includes Windows GSMTC source expectations for playback/title/artist metadata.
 - Music mode trigger path is defined from sensor event to visible state transition.
-6. Memory and Introspection
+7. Memory and Introspection
 - Two-domain memory model is documented and testable (`core workspace` + optional `extended vault`).
 - Introspection responses are documented as narrative/technical views without exposing raw reasoning.
-7. Conversation and Speech UX
+8. Conversation and Speech UX
 - User can ask pet questions/commands through chat UI regardless of OpenClaw availability.
 - Pet can proactively tell the user things through bubble/chat outputs based on deterministic triggers.
 - Voice path supports STT/TTS integration points where available.
-- When TTS is unavailable, fallback talk behavior is defined (short canned SFX + text bubble).
-- Pet speech/thought bubble behavior is specified, including offline/degraded mode.
-- Basic lip-sync approximation is specified as non-blocking visual behavior tied to speech activity.
+- When TTS is unavailable, fallback talk behavior is defined (short canned SFX or equivalent talk pulse plus text bubble).
 - OpenClaw request context includes current pet state and bounded state-context metadata when available.
-8. Extension Framework
+9. Extension Framework
 - Hybrid extension packs are supported (manifest-first, optional trusted hook module).
 - Pack discovery is folder-based in v1 (`extensions/` in dev + app-data extension path in installed app).
 - Prop world uses true desktop anchors (Windows-first) and supports menu spawn + drag/drop placement.
 - Behavior arbitration remains core-authoritative for extension-origin actions.
 - Extension context can enrich OpenClaw requests in online mode, with offline-safe local fallback behavior.
-9. Settings and Path Management
-- Runtime path dependencies are configurable via settings file (not hard-coded defaults only).
+10. Settings and Path Management
+- Runtime path dependencies are configurable via settings file.
 - OpenClaw workspace path and Obsidian vault path support Windows-native and WSL UNC-style locations.
 - Environment variables remain override layer, but settings file is the durable user-editable baseline before GUI exists.
+11. Post-v1 Feasibility Research
+- Evaluate whether future local intelligence should remain external OpenClaw, use a local model provider, bundle OpenClaw, embed a local model path, or stay rules/traits-only.
+- Evaluate whether structured traits should become canonical and how they would sync with `SOUL.md` and `IDENTITY.md`.
 
 ## Feature-to-Deliverable Ownership
 | Feature Theme | Primary Deliverable | Validation Deliverable |
@@ -80,21 +91,24 @@ Baseline exception:
 | Extension framework contracts (pack model, trust, permissions, compatibility) | D02b | D08 |
 | Extension runtime services (`extensionRegistry`, `propWorld`, `extensionHookHost`, `permissionManager`, `behaviorArbitrator`, `extensionStore`) | D02, D02b | D08 |
 | Desktop-anchored props and interaction model | D02b, D03, D07 | D08 |
-| Roam modes (desktop + user zone) | D03, D07 | D08 |
+| Roam modes (desktop + user zone) | D03, D07, D07c | D08 |
 | Baseline states + priorities | D03, D07 | D08 |
 | Add-on state packs (simple + complex animation bundles) | D07 | D08 |
-| Tray/settings/wardrobe GUI contracts | D02, D07 | D08 |
-| Sensor normalization (USER_COMMAND/MEDIA/IDLE/TIME) | D03 | D08 |
+| State-to-visual mapping and deterministic fallback | D07 | D08 |
+| Tray/settings/wardrobe GUI contracts | D02, D07c | D08 |
+| Sensor normalization (`USER_COMMAND`, `USER_MESSAGE`, `MEDIA`, `IDLE`, `TIME`) | D03, D07b | D08 |
 | GSMTC media source expectations | D03, D06 | D08 |
-| Conversation (chat/voice) + offline fallback | D03, D04 | D08 |
-| OpenClaw read-only state awareness (`currentState` + context) | D03, D04 | D08 |
-| Bubble/thought balloon + lip-sync approximation | D07 | D08 |
+| Conversation (chat/voice) + offline fallback | D03, D04, D07b | D08 |
+| OpenClaw read-only state awareness (`currentState` + context) | D03, D04, D07 | D08 |
+| Bubble/thought balloon + talk feedback | D07b | D08 |
 | OpenClaw non-authority + fallback policy | D04 | D08 |
 | Memory domains/tiers/identity mutation guardrails | D05 | D08 |
-| Config/settings path model (OpenClaw + Obsidian + adapter) | D05a, D05, D07 | D08 |
+| Config/settings path model (OpenClaw + Obsidian + adapter) | D05a, D05, D07c | D08 |
 | Hobby stream scoring + daily top picks | D06, D05 | D08 |
-| Introspection default/technical mode outputs | D03, D04 | D08 |
+| Introspection default/technical mode outputs | D03, D04, D07b | D08 |
 | MusicMode initial behavior set | D06, D07 | D08 |
+| Minimal offline embodiment loop | D07, D07b, D07c | D08 |
+| Local brain / personality feasibility | D10 | Post-v1 ADR follow-up |
 
 ## Phases and Ordering
 ### Phase 0 - Bootstrap and Alignment
@@ -114,9 +128,14 @@ Baseline exception:
 - `05-memory-pipeline-and-obsidian-adapter`
 - `06-integrations-freshrss-spotify`
 
-### Phase 3 - Extensibility and Validation
+### Phase 3 - Embodiment and Validation
 - `07-state-system-extension-guide`
+- `07b-dialog-surface-and-minimal-offline-loop`
+- `07c-shell-settings-and-wardrobe-surface`
 - `08-test-and-acceptance-matrix`
+
+### Phase 4 - Post-v1 Feasibility Research
+- `10-local-brain-and-personality-feasibility`
 
 ## Deliverable Sequencing
 1. `01-gap-analysis-expansion-vs-current`
@@ -128,7 +147,10 @@ Baseline exception:
 7. `05-memory-pipeline-and-obsidian-adapter`
 8. `06-integrations-freshrss-spotify`
 9. `07-state-system-extension-guide`
-10. `08-test-and-acceptance-matrix`
+10. `07b-dialog-surface-and-minimal-offline-loop`
+11. `07c-shell-settings-and-wardrobe-surface`
+12. `08-test-and-acceptance-matrix`
+13. `10-local-brain-and-personality-feasibility`
 
 ## Exit Criteria Per Phase
 ### Phase 0 Exit
@@ -140,7 +162,7 @@ Baseline exception:
 - Extension framework contracts are frozen for v1 (pack schema, trust/permission model, prop world model, arbitration model, hook boundaries).
 - Event/Intent/Suggestion contracts are frozen.
 - OpenClaw bridge behavior and fallback semantics are frozen.
-- Conversation I/O contracts (text/voice) and non-authority constraints are frozen.
+- Conversation I/O contracts and non-authority constraints are frozen.
 - At least one visible runtime increment is shipped from each Phase 1 deliverable.
 
 ### Phase 2 Exit
@@ -154,11 +176,16 @@ Baseline exception:
 
 ### Phase 3 Exit
 - State extension workflow is documented and validated.
-- End-to-end acceptance matrix is complete with pass/fail criteria.
+- Offline dialogue fallback and bubble/talk feedback are visible and operator-checkable.
 - Desktop shell UX (tray/settings/wardrobe) has explicit acceptance scenarios.
 - Roam/state/introspection scenarios have visible, operator-checkable outcomes.
-- Conversation, speech bubble, and lip-sync fallback scenarios have visible, operator-checkable outcomes.
+- End-to-end acceptance matrix is complete with pass/fail criteria and executed proof rows.
 - At least one visible runtime increment is shipped from each Phase 3 deliverable.
+
+### Phase 4 Exit
+- Local-brain/personality feasibility options are documented with a decision matrix.
+- ADR recommendation is recorded for or against a future local-brain implementation track.
+- No v1 runtime behavior is retroactively expanded without a separate approved deliverable.
 
 ## Risk Register Summary
 | Risk | Impact | Mitigation |
@@ -166,8 +193,9 @@ Baseline exception:
 | Integration coupling to OpenClaw availability | High | Capability registry + degraded mode fallbacks |
 | Memory pipeline writes causing drift/corruption | High | Guarded write targets + promotion thresholds + mutation log |
 | Scope creep from plugin/state flexibility | Medium | Config-first with optional hooks, strict verification gates |
+| Scope creep from offline personality ambitions | High | Commit only to minimal offline embodiment in v1; defer deeper personality/local-model work to D10 |
 | Third-party extension trust and compatibility drift | High | Author-trusted default warning + explicit permission visibility + enable/disable controls + best-effort compatibility warnings |
 | Documentation drift across sessions | Medium | Mandatory tracker + AGENTS snapshot sync at session end |
 | Renderer rewrite risk | High | Keep Canvas baseline for current roadmap |
-| Voice stack/service instability | Medium | Text-first fallback chat + canned talk SFX + degraded mode contracts |
+| Voice stack/service instability | Medium | Text-first fallback chat + deterministic talk feedback + degraded mode contracts |
 | Multi-window prop world complexity | High | Windows-first scope + explicit extension acceptance scenarios + deterministic fallback rules |

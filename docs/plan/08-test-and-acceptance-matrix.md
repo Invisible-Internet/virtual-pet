@@ -1,11 +1,11 @@
 # Deliverable 08: Test and Acceptance Matrix
 
-**Deliverable ID:** `08-test-and-acceptance-matrix`  
-**Status:** `not_started`  
-**Owner:** `Mic + Codex`  
-**Last Updated:** `2026-02-26`  
-**Depends On:** `02b-extension-framework-and-pack-sdk`, `03-pet-core-events-intents-suggestions`, `04-openclaw-bridge-spec`, `05-memory-pipeline-and-obsidian-adapter`, `06-integrations-freshrss-spotify`, `07-state-system-extension-guide`  
-**Blocks:** `Implementation execution`  
+**Deliverable ID:** `08-test-and-acceptance-matrix`
+**Status:** `not_started`
+**Owner:** `Mic + Codex`
+**Last Updated:** `2026-03-02`
+**Depends On:** `02b-extension-framework-and-pack-sdk`, `03-pet-core-events-intents-suggestions`, `04-openclaw-bridge-spec`, `05-memory-pipeline-and-obsidian-adapter`, `06-integrations-freshrss-spotify`, `07-state-system-extension-guide`, `07b-dialog-surface-and-minimal-offline-loop`, `07c-shell-settings-and-wardrobe-surface`
+**Blocks:** `Implementation execution`
 **Verification Gate:** `Matrix covers core runtime/capability degradation/memory/integration failures and includes executed evidence for representative visible scenarios`
 
 ## Objective
@@ -24,7 +24,7 @@ Define complete acceptance and regression matrix for architecture and implementa
 - Performance benchmark automation (beyond defined manual checks for now).
 
 ## Dependencies
-- D03-D07 finalized contracts.
+- D03-D07c finalized contracts.
 
 ## Decisions Locked
 - Dual gating remains active (`Doc Gate` + `Implementation Gate`).
@@ -38,6 +38,10 @@ Define complete acceptance and regression matrix for architecture and implementa
 5. Add session handoff and docs consistency checks.
 6. Add "human-visible proof" column for each test case (what user should see in app/log/output).
 7. Add extension-framework scenarios for pack validity, trust/warning flow, prop world interactions, and offline/online context behavior.
+8. Add explicit executed rows for:
+   - D07 state runtime
+   - D07b dialog surface and offline fallback
+   - D07c shell/settings/wardrobe surface
 
 ## Verification Gate
 Pass when all are true:
@@ -70,6 +74,9 @@ Pass when all are true:
 19. Simple custom state onboarding: a new `Reading`-style state can be added via config and entered without core switch rewrite.
 20. Complex custom state onboarding: a `PoolPlay`-style phase state executes `enter -> loop -> exit -> recover` with deterministic fallback for missing clips.
 21. State-aware dialogue: when asked what pet is doing/reading, response references current state/context in online mode and falls back to local context when OpenClaw is offline.
+22. D07 visual fallback path: forcing a missing state asset sets `visualFallbackUsed=true`, logs a warning, and keeps the pet stable.
+23. D07b dialog surface: `Enter` or `/` opens input, local reply appears in bubble, and drag remains smooth while talk feedback is active.
+24. D07c shell/settings: tray or dev fallback toggles roam mode, diagnostics visibility, and `headphones` accessory without restart.
 
 ## Extension Framework Required Visible Test Targets
 1. Valid pack loads from `extensions/` and appears in extension manager UI.
@@ -90,6 +97,25 @@ Pass when all are true:
 16. Extension scoped KV persistence survives restart within quota.
 17. Regression: drag/fling/size invariants remain unchanged.
 
+## Phase 3 Required Executed Rows
+The executed subset recorded in D08 must include at least one visible pass for each of the following:
+1. D07 state runtime:
+   - `Reading`
+   - `PoolPlay`
+   - missing-asset fallback
+   - local state-aware description fallback
+2. D07b dialog surface and minimal offline loop:
+   - visible input surface
+   - offline local reply
+   - bubble output
+   - talk feedback
+   - proactive announcement output
+3. D07c shell/settings/wardrobe surface:
+   - tray or dev fallback control path
+   - roam-mode switch
+   - diagnostics toggle
+   - accessory toggle
+
 ## Open Questions
 - Whether to add lightweight scripted smoke tests in this deliverable or defer to implementation phase.
 
@@ -98,6 +124,7 @@ Pass when all are true:
 - Execute a representative subset across movement, capability degradation, dialogue fallback, extension path, and memory path.
 - Record outcomes in matrix with timestamp, runner, pass/fail, and evidence reference.
 - Ensure regression checks include drag/fling invariants from existing runtime.
+- Ensure the representative subset includes one executed row each for D07, D07b, and D07c.
 
 ## Visible App Outcome
 - Test matrix includes concrete executed rows (not only planned rows).
@@ -118,3 +145,4 @@ Pass when all are true:
 ## Change Log
 - `2026-02-26`: File created and seeded.
 - `2026-02-26`: Updated for `spec + implementation slice` workflow with mandatory implementation/visible outcome sections and dual-gate status.
+- `2026-03-02`: Expanded dependencies and visible-test coverage to include D07b and D07c, plus explicit executed-row requirements for the split Phase 3 deliverables.
