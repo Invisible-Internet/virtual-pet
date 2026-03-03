@@ -11,6 +11,13 @@ const {
   requestWithTimeout,
 } = require("./openclaw-bridge");
 const {
+  DEFAULT_DIALOG_TEMPLATES_PATH,
+  buildOfflineDialogResponse,
+  classifyOfflineDialogTrigger,
+  createDefaultDialogTemplateCatalog,
+  loadDialogTemplateCatalog,
+} = require("./dialog-runtime");
+const {
   DEFAULT_OPENCLAW_AGENT_ID,
   DEFAULT_OPENCLAW_AGENT_TIMEOUT_MS,
   buildSpotifyNowPlayingPrompt,
@@ -131,6 +138,8 @@ const ACTIVE_FLING_PRESET = Object.prototype.hasOwnProperty.call(FLING_PRESETS, 
   : "default";
 const FLING_CONFIG = FLING_PRESETS[ACTIVE_FLING_PRESET];
 const CAPABILITY_CONTRACT_VERSION = "1.0";
+const DIALOG_HISTORY_LIMIT = 24;
+const DIALOG_TALK_FEEDBACK_MODE = "bubble_pulse";
 const STATE_CATALOG_PATH = DEFAULT_STATE_CATALOG_PATH;
 const CAPABILITY_IDS = Object.freeze({
   renderer: "renderer",
@@ -175,6 +184,8 @@ let extensionPackRegistry = null;
 let latestExtensionSnapshot = null;
 let contractRouter = null;
 let latestContractTrace = null;
+let dialogTemplateCatalog = createDefaultDialogTemplateCatalog();
+let dialogHistory = [];
 let openclawBridge = null;
 let memoryPipeline = null;
 let latestMemorySnapshot = null;
@@ -1850,6 +1861,15 @@ function initializeContractRouter() {
   });
 }
 
+function initializeDialogRuntime() {
+  try {
+    dialogTemplateCatalog = loadDialogTemplateCatalog(DEFAULT_DIALOG_TEMPLATES_PATH);
+  } catch (error) {
+    dialogTemplateCatalog = createDefaultDialogTemplateCatalog();
+    console.warn(`[pet-dialog] failed to load offline templates: ${error?.message || String(error)}`);
+  }
+}
+
 function logStateRuntimeEvent(kind, payload) {
   const safePayload = payload && typeof payload === "object" ? payload : {};
   const stateLabel = safePayload.currentState || safePayload.stateId || "unknown";
@@ -1898,6 +1918,20 @@ function normalizeUserCommandForBridge(payload) {
   if (raw === "bridge-test" || raw === "bridge") return "bridge-test";
   if (raw === "guardrail-test" || raw === "guardrail") return "guardrail-test";
   return raw || "unknown";
+}
+
+function extractUserInputText(payload) {
+  const rawPayload = payload && typeof payload === "object" ? payload : {};
+  if (typeof rawPayload.text === "string" && rawPayload.text.trim().length > 0) {
+    return rawPayload.text.trim();
+  }
+  if (typeof rawPayload.command === "string" && rawPayload.command.trim().length > 0) {
+    return rawPayload.command.trim();
+  }
+  if (typeof rawPayload.type === "string" && rawPayload.type.trim().length > 0) {
+    return rawPayload.type.trim();
+  }
+  return "";
 }
 
 function deriveContractSource() {
@@ -1962,6 +1996,180 @@ function buildBridgeRequestContext() {
     extensionContextSummary: buildExtensionContextSummary(),
     source: deriveContractSource(),
   };
+}
+
+function summarizeDialogStateContext() {
+  const summary = latestStateSnapshot?.contextSummary || buildStatusText();
+  if (typeof summary !== "string" || summary.length <= 0) return "none";
+  return summary.slice(0, 180);
+}
+
+function buildRecentMediaSummary() {
+  if (latestLocalMediaSnapshot?.isPlaying) {
+    const title =
+      typeof latestLocalMediaSnapshot.title === "string" && latestLocalMediaSnapshot.title.trim().length > 0
+        ? latestLocalMediaSnapshot.title.trim()
+        : "unknown track";
+    const artist =
+      typeof latestLocalMediaSnapshot.artist === "string" && latestLocalMediaSnapshot.artist.trim().length > 0
+        ? latestLocalMediaSnapshot.artist.trim()
+        : "unknown artist";
+    const sourceLabel =
+      typeof latestLocalMediaSnapshot.sourceAppLabel === "string" &&
+      latestLocalMediaSnapshot.sourceAppLabel.trim().length > 0
+        ? latestLocalMediaSnapshot.sourceAppLabel.trim()
+        : "Windows Media";
+    const route =
+      typeof latestLocalMediaSnapshot.outputRoute === "string" &&
+      latestLocalMediaSnapshot.outputRoute.trim().length > 0
+        ? latestLocalMediaSnapshot.outputRoute.trim()
+        : "unknown";
+    return `${title} by ${artist} via ${sourceLabel} (${route})`.slice(0, 180);
+  }
+  if (typeof latestIntegrationEvent?.text === "string" && latestIntegrationEvent.text.trim().length > 0) {
+    return latestIntegrationEvent.text.trim().slice(0, 180);
+  }
+  return "no active media";
+}
+
+function buildRecentHobbySummary() {
+  if (latestStateSnapshot?.currentState === "Reading") {
+    const title =
+      typeof latestStateSnapshot?.context?.title === "string" && latestStateSnapshot.context.title.trim().length > 0
+        ? latestStateSnapshot.context.title.trim()
+        : typeof latestStateSnapshot?.context?.titleLabel === "string" &&
+            latestStateSnapshot.context.titleLabel.trim().length > 0
+          ? latestStateSnapshot.context.titleLabel.trim()
+          : "current reading item";
+    const sourceLabel =
+      typeof latestStateSnapshot?.context?.sourceLabel === "string" &&
+      latestStateSnapshot.context.sourceLabel.trim().length > 0
+        ? latestStateSnapshot.context.sourceLabel.trim()
+        : typeof latestStateSnapshot?.context?.itemType === "string" &&
+            latestStateSnapshot.context.itemType.trim().length > 0
+          ? latestStateSnapshot.context.itemType.trim()
+          : "reading";
+    return `${title} from ${sourceLabel}`.slice(0, 180);
+  }
+  if (
+    latestIntegrationEvent?.kind === "freshRssProbe" &&
+    typeof latestIntegrationEvent.summary === "string" &&
+    latestIntegrationEvent.summary.trim().length > 0
+  ) {
+    return latestIntegrationEvent.summary.trim().slice(0, 180);
+  }
+  if (
+    latestIntegrationEvent?.kind === "freshRssProbe" &&
+    typeof latestIntegrationEvent.text === "string" &&
+    latestIntegrationEvent.text.trim().length > 0
+  ) {
+    return latestIntegrationEvent.text.trim().slice(0, 180);
+  }
+  return "no recent hobby updates";
+}
+
+function buildOfflineDialogFallback(promptText, fallbackMode) {
+  const triggerReason = classifyOfflineDialogTrigger(promptText);
+  const preferReading =
+    triggerReason === "reading" || latestStateSnapshot?.currentState === "Reading";
+  const stateDescription = preferReading
+    ? stateRuntime?.describeReading?.()
+    : stateRuntime?.describeActivity?.();
+  const fallbackText =
+    stateDescription?.text ||
+    (preferReading
+      ? buildBridgeFallbackText("state_description", "what-are-you-reading")
+      : buildBridgeFallbackText("state_description", "what-are-you-doing"));
+  return buildOfflineDialogResponse({
+    templates: dialogTemplateCatalog,
+    text: promptText,
+    currentState: latestStateSnapshot?.currentState || "Idle",
+    phase: latestStateSnapshot?.phase || null,
+    triggerReason,
+    source: "offline",
+    fallbackMode,
+    stateDescription: fallbackText,
+    stateContextSummary: summarizeDialogStateContext(),
+    recentMediaSummary: buildRecentMediaSummary(),
+    recentHobbySummary: buildRecentHobbySummary(),
+  });
+}
+
+function createDialogMessageId() {
+  const randomPart = Math.floor(Math.random() * 0xffffff)
+    .toString(16)
+    .padStart(6, "0");
+  return `dlg-${Date.now().toString(36)}-${randomPart}`;
+}
+
+function appendDialogHistoryEntry(entry) {
+  if (!entry || typeof entry !== "object") return null;
+  dialogHistory = [...dialogHistory, entry].slice(-DIALOG_HISTORY_LIMIT);
+  return entry;
+}
+
+function emitDialogMessage(entry) {
+  if (!entry || typeof entry !== "object") return;
+  emitToRenderer("pet:dialog-message", entry);
+}
+
+function recordDialogUserMessage({ correlationId, text }) {
+  const normalizedText = typeof text === "string" ? text.trim() : "";
+  if (!normalizedText) return null;
+  const entry = appendDialogHistoryEntry({
+    messageId: createDialogMessageId(),
+    correlationId,
+    role: "user",
+    kind: "userMessage",
+    channel: "dialog",
+    source: "local_ui",
+    text: normalizedText,
+    fallbackMode: "none",
+    talkFeedbackMode: "none",
+    stateContextSummary: summarizeDialogStateContext(),
+    currentState: latestStateSnapshot?.currentState || "Idle",
+    phase: latestStateSnapshot?.phase || null,
+    ts: Date.now(),
+  });
+  emitDialogMessage(entry);
+  return entry;
+}
+
+function recordDialogSuggestion(suggestion) {
+  if (!suggestion || typeof suggestion !== "object") return null;
+  if (suggestion.type !== "PET_RESPONSE" && suggestion.type !== "PET_ANNOUNCEMENT") return null;
+  const text = typeof suggestion.text === "string" ? suggestion.text.trim() : "";
+  if (!text) return null;
+
+  const entry = appendDialogHistoryEntry({
+    messageId: createDialogMessageId(),
+    correlationId:
+      typeof suggestion.correlationId === "string" && suggestion.correlationId.length > 0
+        ? suggestion.correlationId
+        : createContractCorrelationId(),
+    role: "pet",
+    kind: suggestion.type === "PET_ANNOUNCEMENT" ? "announcement" : "response",
+    channel:
+      typeof suggestion.channel === "string" && suggestion.channel.trim().length > 0
+        ? suggestion.channel.trim()
+        : "bubble",
+    source:
+      typeof suggestion.source === "string" && suggestion.source.trim().length > 0
+        ? suggestion.source.trim()
+        : "offline",
+    text,
+    fallbackMode:
+      typeof suggestion.fallbackMode === "string" && suggestion.fallbackMode.trim().length > 0
+        ? suggestion.fallbackMode.trim()
+        : "none",
+    talkFeedbackMode: DIALOG_TALK_FEEDBACK_MODE,
+    stateContextSummary: summarizeDialogStateContext(),
+    currentState: latestStateSnapshot?.currentState || "Idle",
+    phase: latestStateSnapshot?.phase || null,
+    ts: Number.isFinite(suggestion.ts) ? suggestion.ts : Date.now(),
+  });
+  emitDialogMessage(entry);
+  return entry;
 }
 
 function buildBridgeFallbackText(route, promptText) {
@@ -2076,8 +2284,14 @@ async function requestBridgeDialog({ correlationId, route, promptText }) {
   }
 }
 
-async function buildBridgeCommandContext(payload, correlationId) {
+async function buildUserInputContext(eventType, payload, correlationId) {
   const normalizedCommand = normalizeUserCommandForBridge(payload);
+  const inputText = extractUserInputText(payload);
+  const isGenericUserMessage =
+    eventType === "USER_MESSAGE" &&
+    normalizedCommand !== "status" &&
+    normalizedCommand !== "bridge-test" &&
+    normalizedCommand !== "guardrail-test";
   if (normalizedCommand === "announce-test" || normalizedCommand === "unknown") {
     return {};
   }
@@ -2095,16 +2309,19 @@ async function buildBridgeCommandContext(payload, correlationId) {
   if (
     normalizedCommand !== "status" &&
     normalizedCommand !== "bridge-test" &&
-    normalizedCommand !== "guardrail-test"
+    normalizedCommand !== "guardrail-test" &&
+    !isGenericUserMessage
   ) {
     return {};
   }
 
-  const route = normalizedCommand === "status" ? "introspection_status" : "dialog_user_command";
-  const promptText =
-    typeof payload?.text === "string" && payload.text.trim().length > 0
-      ? payload.text.trim()
-      : normalizedCommand;
+  const route =
+    normalizedCommand === "status"
+      ? "introspection_status"
+      : isGenericUserMessage
+        ? "dialog_user_message"
+        : "dialog_user_command";
+  const promptText = inputText || normalizedCommand;
   const bridgeResult = await requestBridgeDialog({
     correlationId,
     route,
@@ -2116,6 +2333,15 @@ async function buildBridgeCommandContext(payload, correlationId) {
       source: bridgeResult.source,
       statusText: bridgeResult.text,
       bridgeFallbackMode: bridgeResult.fallbackMode,
+    };
+  }
+
+  if (isGenericUserMessage && bridgeResult.source !== "online") {
+    const offlineResult = buildOfflineDialogFallback(promptText, bridgeResult.fallbackMode);
+    return {
+      source: offlineResult.source,
+      bridgeDialogText: offlineResult.text,
+      bridgeFallbackMode: offlineResult.fallbackMode,
     };
   }
 
@@ -2134,19 +2360,22 @@ function extractFirstResponseSuggestion(result) {
 }
 
 function createMemoryObservationFromContractResult(eventType, payload, result, correlationId) {
-  if (eventType === "USER_COMMAND") {
-    const command =
-      typeof payload?.command === "string" && payload.command.trim().length > 0
-        ? payload.command.trim().toLowerCase()
+  if (eventType === "USER_COMMAND" || eventType === "USER_MESSAGE") {
+    const inputText = extractUserInputText(payload);
+    const normalizedInput =
+      typeof inputText === "string" && inputText.trim().length > 0
+        ? inputText.trim().toLowerCase()
         : "unknown";
     const responseSuggestion = extractFirstResponseSuggestion(result);
     return {
       observationType: "question_response",
-      source: "contract_user_command",
+      source: eventType === "USER_MESSAGE" ? "contract_user_message" : "contract_user_command",
       correlationId,
-      evidenceTag: command,
+      evidenceTag: normalizedInput.replace(/\s+/g, "-").slice(0, 80),
       payload: {
-        command,
+        inputType: eventType,
+        command: eventType === "USER_COMMAND" ? normalizedInput : null,
+        text: inputText || "",
         responseText: responseSuggestion?.text || "",
         responseSource: responseSuggestion?.source || "offline",
         suggestionTypes: Array.isArray(result?.suggestions)
@@ -2306,6 +2535,7 @@ function handleContractSuggestions(result) {
   if (!result || !Array.isArray(result.suggestions)) return;
   for (const suggestion of result.suggestions) {
     emitToRenderer("pet:contract-suggestion", suggestion);
+    recordDialogSuggestion(suggestion);
     if (DIAGNOSTICS_ENABLED) {
       emitDiagnostics({
         kind: "contractSuggestion",
@@ -2347,8 +2577,8 @@ async function processPetContractEvent(eventType, payload = {}, context = {}) {
       ? context.correlationId
       : createContractCorrelationId();
   const bridgeContext =
-    eventType === "USER_COMMAND"
-      ? await buildBridgeCommandContext(payload, correlationId)
+    eventType === "USER_COMMAND" || eventType === "USER_MESSAGE"
+      ? await buildUserInputContext(eventType, payload, correlationId)
       : {};
   const result = contractRouter.processEvent(
     {
@@ -3336,6 +3566,47 @@ ipcMain.handle("pet:simulateStateFallback", () => {
   };
 });
 
+ipcMain.handle("pet:getDialogHistory", () => {
+  return dialogHistory.map((entry) => ({ ...entry }));
+});
+
+ipcMain.handle("pet:sendUserMessage", async (_event, payload) => {
+  const text =
+    typeof payload?.text === "string" && payload.text.trim().length > 0
+      ? payload.text.trim()
+      : "";
+  if (!text) {
+    return {
+      ok: false,
+      error: "invalid_text",
+    };
+  }
+
+  const correlationId = createContractCorrelationId();
+  const historyEntry = recordDialogUserMessage({
+    correlationId,
+    text,
+  });
+  const contractResult = await processPetContractEvent(
+    "USER_MESSAGE",
+    {
+      text,
+      command: text,
+      type: text,
+    },
+    {
+      correlationId,
+    }
+  );
+
+  return {
+    ok: Boolean(contractResult?.ok),
+    correlationId,
+    historyEntry,
+    contractResult,
+  };
+});
+
 ipcMain.handle("pet:runUserCommand", (_event, payload) => {
   const command =
     typeof payload?.command === "string" && payload.command.trim().length > 0
@@ -3609,6 +3880,7 @@ app.whenReady().then(async () => {
   initializeDiagnosticsLog();
   initializeRuntimeSettings();
   initializeStateRuntime();
+  initializeDialogRuntime();
   initializeContractRouter();
   await initializeMemoryPipelineRuntime();
   createWindow();

@@ -21,9 +21,9 @@ Allowed values:
 - D10 is a post-v1 feasibility deliverable and remains doc-only unless explicitly promoted into implementation scope.
 
 ## Current Deliverable
-- Current Deliverable: `07b-dialog-surface-and-minimal-offline-loop`
+- Current Deliverable: `07c-shell-settings-and-wardrobe-surface`
 - Current Status: `not_started`
-- Overall Progress: `9/13 roadmap deliverables done` (D01, D02, D02b, D03, D04, D05a, D05, D06, D07 complete; D07b is next)
+- Overall Progress: `10/13 roadmap deliverables done` (D01, D02, D02b, D03, D04, D05a, D05, D06, D07, D07b complete; D07c is next)
 - Current Gate State:
   - `Doc Gate`: `not_started`
   - `Implementation Gate`: `not_started`
@@ -41,21 +41,44 @@ Allowed values:
 | `05-memory-pipeline-and-obsidian-adapter` | `done` | Doc + implementation gates passed; operator runtime evidence confirmed `runtimeReady` obsidian path plus `M/H/N` write/promotion/mutation behavior |
 | `06-integrations-freshrss-spotify` | `done` | Doc + implementation gates passed; operator verification confirmed FreshRSS/Spotify healthy paths, `track_rating` writes, and deterministic Spotify unavailable fallback |
 | `07-state-system-extension-guide` | `done` | Doc + implementation gates passed; operator verification confirmed fling `Roll`, timed `Reading`/FreshRSS return to `Idle`, automatic local-media `MusicChill`, and route-aware music props |
-| `07b-dialog-surface-and-minimal-offline-loop` | `not_started` | Current deliverable; covers visible chat, bubble output, offline local dialogue, and talk feedback |
-| `07c-shell-settings-and-wardrobe-surface` | `not_started` | Split out from D07 to cover tray/menu settings, roam controls, diagnostics toggle, and first wardrobe slice |
+| `07b-dialog-surface-and-minimal-offline-loop` | `done` | Doc + implementation gates passed; operator verification confirmed visible history/bubble output, offline labels, announcement cooldown behavior, and smooth drag/fling during talk feedback |
+| `07c-shell-settings-and-wardrobe-surface` | `not_started` | Current deliverable; covers tray/menu settings, roam controls, diagnostics toggle, and first wardrobe slice |
 | `08-test-and-acceptance-matrix` | `not_started` | Final consolidation after D07, D07b, and D07c |
 | `09-decisions-log` | `in_progress` | Seed decisions added |
 | `10-local-brain-and-personality-feasibility` | `not_started` | Post-v1 doc-only research deliverable; non-blocking to v1 closeout |
 
 ## Next 3 Actions
-1. Start D07b by adding a lightweight visible dialog surface in `index.html` and `renderer.js`, plus preload-safe APIs for `sendUserMessage`, dialog history, and dialog event subscription.
-2. Route `USER_MESSAGE` through the existing contract pipeline with deterministic offline templates and explicit `source` / `fallbackMode` labeling.
-3. Add bubble rendering and non-blocking talk feedback for `PET_RESPONSE` and `PET_ANNOUNCEMENT`, then define the first manual verification steps for online/offline dialog behavior.
+1. Start D07c by wiring the first tray/dev-fallback shell controls for roam mode, diagnostics visibility, and one wardrobe toggle.
+2. Extend the settings stack with persisted shell keys for roam mode, diagnostics visibility, and dialog bubble defaults.
+3. Add one visible accessory or trusted prop control path, then define the first D07c manual verification steps.
 
 ## Blockers
 - None currently.
 
 ## Last Session Summary
+- Closed D07b as `done` after operator manual verification:
+  - visible dialog history appeared in the UI
+  - offline `source` / `fallbackMode` labels were visible in the dialog surface
+  - proactive announcement bubble output and cooldown skip behavior were confirmed
+  - drag/fling remained smooth while talk feedback was active
+- D07b `Implementation Gate` moved to `passed`; D07b is now closed with both gates passed.
+- Current deliverable advanced to `07c-shell-settings-and-wardrobe-surface` per gating rule.
+- Shipped outcome note for this session:
+  - visible app/runtime change delivered: D07b is now closed with a verified dialog surface, deterministic offline fallback replies, shared response/announcement bubble history, and non-blocking talk feedback.
+- Implemented the first D07b runtime slice:
+  - added a visible renderer dialog surface in `index.html` / `renderer.js` with history, bubble, submit flow, and `Enter` / `/` open behavior
+  - added preload-safe dialog APIs:
+    - `sendUserMessage(text)`
+    - `getDialogHistory()`
+    - `onDialogMessage(callback)`
+  - extended the main-process contract path so `USER_MESSAGE` is first-class and reuses existing bridge/state context flow
+  - added deterministic offline dialog templates in `config/dialog/offline-templates.json` via `dialog-runtime.js`
+  - routed `PET_RESPONSE` and `PET_ANNOUNCEMENT` into shared dialog history plus bubble rendering with explicit `source` / `fallbackMode`
+  - added non-blocking talk feedback in the renderer plus deterministic checks in `scripts/check-dialog-runtime.js`
+- Ran `npm run check` successfully after the D07b runtime slice (`check:syntax`, `check:contracts`, `check:layout`, `check:assets` all passed).
+- D07b `Doc Gate` moved to `passed`; `Implementation Gate` remains `in_progress` pending manual in-app verification evidence.
+- Shipped outcome note for this session:
+  - visible app/runtime change delivered: D07b now has a visible dialog surface, text-driven `USER_MESSAGE` routing, deterministic offline local replies, shared bubble/history output for responses and announcements, and talk feedback without changing drag/state authority.
 - Closed D07 as `done` after operator-provided runtime verification:
   - automatic local-media sensing entered `MusicChill` without waiting for Spotify enrichment
   - speaker/headphones route detection was confirmed from the Windows local-media path

@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "templates": {
+    "greeting": [
+      "Hi. I'm in {currentState}{phaseSuffix}, and {stateDescription}",
+      "Hello. Right now I'm in {currentState}{phaseSuffix}. {stateDescription}"
+    ],
+    "music": [
+      "I'm in {currentState}{phaseSuffix}. The latest music cue I have is {recentMediaSummary}",
+      "Right now I'm in {currentState}{phaseSuffix}, and the music context says {recentMediaSummary}"
+    ],
+    "reading": [
+      "I'm in {currentState}{phaseSuffix}. {stateDescription} Latest reading cue: {recentHobbySummary}",
+      "I'm still in {currentState}{phaseSuffix}. {stateDescription} Reading context: {recentHobbySummary}"
+    ],
+    "hobby": [
+      "I'm in {currentState}{phaseSuffix}. The latest hobby cue I have is {recentHobbySummary}",
+      "Right now I'm in {currentState}{phaseSuffix}. Hobby context says {recentHobbySummary}"
+    ],
+    "general": [
+      "I'm in {currentState}{phaseSuffix}. {stateDescription}",
+      "Right now I'm in {currentState}{phaseSuffix}. {stateContextSummary}"
+    ],
+    "fallback": [
+      "I'm here in {currentState}{phaseSuffix}. {stateContextSummary}"
+    ]
+  }
+}

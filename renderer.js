@@ -1,5 +1,15 @@
 ﻿const canvas = document.getElementById("c");
 const ctx = canvas.getContext("2d");
+const dialogPanel = document.getElementById("dialog-panel");
+const dialogHistoryEl = document.getElementById("dialog-history");
+const dialogForm = document.getElementById("dialog-form");
+const dialogInput = document.getElementById("dialog-input");
+const dialogSubmitButton = document.getElementById("dialog-submit");
+const dialogHint = document.getElementById("dialog-hint");
+const dialogBubble = document.getElementById("dialog-bubble");
+const dialogBubbleMeta = document.getElementById("dialog-bubble-meta");
+const dialogBubbleText = document.getElementById("dialog-bubble-text");
+const dialogCloseButton = document.getElementById("dialog-close");
 const visibleBoundsMath = window.PetVisibleBoundsMath || null;
 const spriteRuntimeApi = window.PetSpriteRuntime || null;
 
@@ -143,6 +153,10 @@ const RIG_ROTATION_FLING_HOLD_MS = 700;
 const RIG_ROTATION_FLING_RELEASE_BLEND_MS = 1100;
 const VISIBLE_BOUNDS_EMIT_INTERVAL_MS = 33;
 const VISIBLE_BOUNDS_DELTA_THRESHOLD_PX = 2;
+const DIALOG_HISTORY_LIMIT = 24;
+const DIALOG_HISTORY_VISIBLE_COUNT = 8;
+const DIALOG_BUBBLE_VISIBLE_MS = 9000;
+const DIALOG_TALK_FEEDBACK_MS = 2600;
 const TAIL_STYLES = Object.freeze({
   ribbon: "ribbon",
   segmented: "segmented",
@@ -274,6 +288,11 @@ let latestSpriteHitRect = null;
 let spriteRuntime = null;
 let spriteManifest = null;
 let overlaySpriteEntries = new Map();
+let dialogHistory = [];
+let dialogSurfaceOpen = false;
+let dialogSubmitPending = false;
+let activeBubbleMessage = null;
+let talkFeedbackUntilMs = 0;
 let spriteJumpQueued = false;
 let spriteDragRotation = 0;
 let spriteDragRotationVel = 0;
@@ -309,6 +328,279 @@ function createRuntimeLayoutFallback() {
       },
     },
   };
+}
+
+function isEditableTarget(target) {
+  if (!target || typeof target !== "object") return false;
+  const tagName = typeof target.tagName === "string" ? target.tagName.toLowerCase() : "";
+  return tagName === "input" || tagName === "textarea" || Boolean(target.isContentEditable);
+}
+
+function normalizeDialogEntry(payload = {}) {
+  const text =
+    typeof payload?.text === "string" && payload.text.trim().length > 0
+      ? payload.text.trim()
+      : "";
+  return {
+    messageId:
+      typeof payload?.messageId === "string" && payload.messageId.trim().length > 0
+        ? payload.messageId.trim()
+        : `dialog-${Date.now().toString(36)}`,
+    correlationId:
+      typeof payload?.correlationId === "string" && payload.correlationId.trim().length > 0
+        ? payload.correlationId.trim()
+        : "",
+    role: payload?.role === "user" ? "user" : "pet",
+    kind:
+      typeof payload?.kind === "string" && payload.kind.trim().length > 0
+        ? payload.kind.trim()
+        : "response",
+    channel:
+      typeof payload?.channel === "string" && payload.channel.trim().length > 0
+        ? payload.channel.trim()
+        : "dialog",
+    source:
+      typeof payload?.source === "string" && payload.source.trim().length > 0
+        ? payload.source.trim()
+        : "offline",
+    text,
+    fallbackMode:
+      typeof payload?.fallbackMode === "string" && payload.fallbackMode.trim().length > 0
+        ? payload.fallbackMode.trim()
+        : "none",
+    talkFeedbackMode:
+      typeof payload?.talkFeedbackMode === "string" && payload.talkFeedbackMode.trim().length > 0
+        ? payload.talkFeedbackMode.trim()
+        : "none",
+    stateContextSummary:
+      typeof payload?.stateContextSummary === "string" && payload.stateContextSummary.trim().length > 0
+        ? payload.stateContextSummary.trim()
+        : "",
+    currentState:
+      typeof payload?.currentState === "string" && payload.currentState.trim().length > 0
+        ? payload.currentState.trim()
+        : "Idle",
+    phase:
+      typeof payload?.phase === "string" && payload.phase.trim().length > 0
+        ? payload.phase.trim()
+        : null,
+    ts: Number.isFinite(payload?.ts) ? payload.ts : Date.now(),
+  };
+}
+
+function getDialogStateLabel(entry) {
+  if (!entry?.currentState) return "Idle";
+  return entry.phase ? `${entry.currentState}/${entry.phase}` : entry.currentState;
+}
+
+function appendDialogPill(parent, text, className = "") {
+  if (!parent || !text) return;
+  const pill = document.createElement("span");
+  pill.className = className ? `dialog-history__pill ${className}` : "dialog-history__pill";
+  pill.textContent = text;
+  parent.appendChild(pill);
+}
+
+function renderDialogHistory() {
+  if (!dialogHistoryEl) return;
+  dialogHistoryEl.textContent = "";
+
+  const visibleEntries = dialogHistory.slice(-DIALOG_HISTORY_VISIBLE_COUNT);
+  if (visibleEntries.length <= 0) {
+    const empty = document.createElement("div");
+    empty.className = "dialog-history__empty";
+    empty.textContent = "No dialog yet. Press Enter or / to ask a question.";
+    dialogHistoryEl.appendChild(empty);
+    return;
+  }
+
+  for (const entry of visibleEntries) {
+    const item = document.createElement("div");
+    item.className =
+      entry.role === "user"
+        ? "dialog-history__item dialog-history__item--user"
+        : "dialog-history__item dialog-history__item--pet";
+
+    const meta = document.createElement("div");
+    meta.className = "dialog-history__meta";
+    appendDialogPill(meta, entry.role === "user" ? "you" : entry.kind === "announcement" ? "announce" : "pet");
+    if (entry.role !== "user") {
+      appendDialogPill(meta, entry.source || "offline");
+      appendDialogPill(meta, getDialogStateLabel(entry));
+      if (entry.fallbackMode && entry.fallbackMode !== "none") {
+        appendDialogPill(meta, entry.fallbackMode, "dialog-history__pill--warning");
+      }
+    }
+    item.appendChild(meta);
+
+    const text = document.createElement("div");
+    text.className = "dialog-history__text";
+    text.textContent = entry.text;
+    item.appendChild(text);
+
+    dialogHistoryEl.appendChild(item);
+  }
+
+  dialogHistoryEl.scrollTop = dialogHistoryEl.scrollHeight;
+}
+
+function renderDialogBubble(nowMs = Date.now()) {
+  if (!dialogBubble || !dialogBubbleMeta || !dialogBubbleText) return;
+  const active =
+    activeBubbleMessage &&
+    typeof activeBubbleMessage.text === "string" &&
+    activeBubbleMessage.text.length > 0 &&
+    nowMs - activeBubbleMessage.ts < DIALOG_BUBBLE_VISIBLE_MS;
+
+  dialogBubble.classList.toggle("is-visible", Boolean(active));
+  dialogBubble.classList.toggle("is-speaking", Boolean(active && nowMs < talkFeedbackUntilMs));
+  if (!active) return;
+
+  dialogBubbleMeta.textContent = "";
+  const kindTag = document.createElement("span");
+  kindTag.className = "dialog-bubble__tag";
+  kindTag.textContent = activeBubbleMessage.kind === "announcement" ? "announcement" : "reply";
+  dialogBubbleMeta.appendChild(kindTag);
+
+  const sourceTag = document.createElement("span");
+  sourceTag.className = "dialog-bubble__tag";
+  sourceTag.textContent = activeBubbleMessage.source || "offline";
+  dialogBubbleMeta.appendChild(sourceTag);
+
+  const stateTag = document.createElement("span");
+  stateTag.className = "dialog-bubble__tag";
+  stateTag.textContent = getDialogStateLabel(activeBubbleMessage);
+  dialogBubbleMeta.appendChild(stateTag);
+
+  if (activeBubbleMessage.fallbackMode && activeBubbleMessage.fallbackMode !== "none") {
+    const fallbackTag = document.createElement("span");
+    fallbackTag.className = "dialog-bubble__tag dialog-bubble__tag--warning";
+    fallbackTag.textContent = activeBubbleMessage.fallbackMode;
+    dialogBubbleMeta.appendChild(fallbackTag);
+  }
+
+  dialogBubbleText.textContent = activeBubbleMessage.text;
+}
+
+function syncDialogSurfaceState() {
+  if (dialogPanel) {
+    dialogPanel.classList.toggle("is-open", dialogSurfaceOpen);
+  }
+  if (dialogHint) {
+    dialogHint.classList.toggle("is-hidden", dialogSurfaceOpen);
+  }
+}
+
+function setDialogPending(pending) {
+  dialogSubmitPending = Boolean(pending);
+  if (dialogInput) {
+    dialogInput.disabled = dialogSubmitPending;
+  }
+  if (dialogSubmitButton) {
+    dialogSubmitButton.disabled = dialogSubmitPending;
+  }
+}
+
+function openDialogSurface(options = {}) {
+  dialogSurfaceOpen = true;
+  syncDialogSurfaceState();
+  setMousePassthrough(false);
+  if (dialogInput) {
+    if (
+      typeof options.prefill === "string" &&
+      options.prefill.length > 0 &&
+      dialogInput.value.trim().length <= 0
+    ) {
+      dialogInput.value = options.prefill;
+    }
+    requestAnimationFrame(() => {
+      dialogInput.focus();
+      dialogInput.select();
+    });
+  }
+}
+
+function closeDialogSurface() {
+  dialogSurfaceOpen = false;
+  syncDialogSurfaceState();
+  if (dialogInput) {
+    dialogInput.blur();
+  }
+  syncMouseInteractivityFromGlobalCursor();
+}
+
+function handleDialogMessage(payload) {
+  const entry = normalizeDialogEntry(payload);
+  const existingIndex = dialogHistory.findIndex((item) => item.messageId === entry.messageId);
+  if (existingIndex >= 0) {
+    dialogHistory[existingIndex] = entry;
+  } else {
+    dialogHistory = [...dialogHistory, entry].slice(-DIALOG_HISTORY_LIMIT);
+  }
+  renderDialogHistory();
+
+  if (entry.role === "pet") {
+    activeBubbleMessage = entry;
+    talkFeedbackUntilMs =
+      entry.talkFeedbackMode !== "none" ? Date.now() + DIALOG_TALK_FEEDBACK_MS : 0;
+    renderDialogBubble();
+  }
+}
+
+async function loadDialogHistorySnapshot() {
+  if (typeof window.petAPI.getDialogHistory !== "function") {
+    renderDialogHistory();
+    renderDialogBubble();
+    return;
+  }
+
+  try {
+    const history = await window.petAPI.getDialogHistory();
+    dialogHistory = Array.isArray(history) ? history.map((entry) => normalizeDialogEntry(entry)) : [];
+    activeBubbleMessage =
+      dialogHistory.length > 0
+        ? [...dialogHistory].reverse().find((entry) => entry.role === "pet") || null
+        : null;
+  } catch {
+    dialogHistory = [];
+    activeBubbleMessage = null;
+  }
+
+  renderDialogHistory();
+  renderDialogBubble();
+}
+
+async function submitDialogMessage() {
+  if (dialogSubmitPending) return;
+  if (!dialogInput) return;
+  if (typeof window.petAPI.sendUserMessage !== "function") return;
+
+  const text = dialogInput.value.trim();
+  if (!text) return;
+
+  setDialogPending(true);
+  try {
+    const result = await window.petAPI.sendUserMessage(text);
+    if (!result?.ok) {
+      console.warn("[dialog] send failed:", result?.error || "unknown");
+      return;
+    }
+    dialogInput.value = "";
+    dialogInput.focus();
+  } catch (error) {
+    console.warn("[dialog] send failed:", error);
+  } finally {
+    setDialogPending(false);
+  }
+}
+
+function isTalkFeedbackActive(nowMs = Date.now()) {
+  return Boolean(activeBubbleMessage) && nowMs < talkFeedbackUntilMs;
+}
+
+function getTalkFeedbackStrength(nowMs = performance.now()) {
+  if (!isTalkFeedbackActive()) return 0;
+  return 0.4 + 0.6 * ((Math.sin(nowMs * 0.02) + 1) * 0.5);
 }
 
 async function loadRuntimeConfig() {
@@ -622,6 +914,30 @@ function getSpriteInputState() {
 function onMovementKeyDown(event) {
   if (!event || typeof event.key !== "string") return;
   const key = event.key.toLowerCase();
+  const editableTarget = isEditableTarget(event.target);
+
+  if (editableTarget) {
+    if (key === "escape") {
+      closeDialogSurface();
+      event.preventDefault();
+    }
+    return;
+  }
+
+  if ((key === "enter" || key === "/") && !event.repeat) {
+    openDialogSurface({
+      prefill: key === "/" ? "/" : "",
+    });
+    event.preventDefault();
+    return;
+  }
+
+  if (key === "escape" && dialogSurfaceOpen) {
+    closeDialogSurface();
+    event.preventDefault();
+    return;
+  }
+
   if (key === "w" || key === "arrowup") movementKeys.up = true;
   else if (key === "s" || key === "arrowdown") movementKeys.down = true;
   else if (key === "a" || key === "arrowleft") movementKeys.left = true;
@@ -1337,6 +1653,11 @@ function updateMouseInteractivity(clientX, clientY) {
     return;
   }
 
+  if (dialogSurfaceOpen) {
+    setMousePassthrough(false);
+    return;
+  }
+
   if (!inside) {
     setMousePassthrough(true);
     return;
@@ -1545,6 +1866,11 @@ function updateGaze(nowMs, dtSec, faceX, faceY) {
 }
 
 function syncMouseInteractivityFromGlobalCursor() {
+  if (dialogSurfaceOpen) {
+    setMousePassthrough(false);
+    return;
+  }
+
   const cursor = getCursorInWindowSpacePx();
   if (!cursor) {
     if (!dragging) setMousePassthrough(true);
@@ -2042,6 +2368,7 @@ function getLayerTransforms(nowMs, dtSec) {
       y: bodyY + lag.mouth.y,
       open: currentRenderState === "flying" && speed > 900,
       tense: currentRenderState === "impact",
+      talkPulse: getTalkFeedbackStrength(nowMs),
       bodyRadius,
     },
     fx: {},
@@ -2368,13 +2695,22 @@ function drawEyesLayer(context, transform, layer) {
 function drawMouthLayer(context, transform, layer) {
   context.save();
   const unit = clamp((transform.bodyRadius || 100) / 100, 0.55, 2.4);
+  const talkPulse = clamp01(transform.talkPulse || 0);
   context.strokeStyle = layer.style.stroke;
   context.lineWidth = Math.max(2, 6 * unit);
   context.lineCap = "round";
 
-  if (transform.open) {
+  if (transform.open || talkPulse > 0.14) {
     context.beginPath();
-    context.ellipse(transform.x, transform.y + 42 * unit, 16 * unit, 14 * unit, 0, 0, Math.PI * 2);
+    context.ellipse(
+      transform.x,
+      transform.y + 42 * unit,
+      (16 + talkPulse * 4) * unit,
+      (12 + talkPulse * 8) * unit,
+      0,
+      0,
+      Math.PI * 2
+    );
     context.stroke();
   } else if (transform.tense) {
     context.beginPath();
@@ -2496,6 +2832,10 @@ function drawDebugOverlay(w, h) {
         ? `${latestContractSuggestion.type || "?"} corr=${latestContractSuggestion.correlationId || "n/a"}`
         : "n/a"
     }`,
+    `dialog: ${dialogSurfaceOpen ? "open" : "closed"} history=${dialogHistory.length} bubble=${
+      activeBubbleMessage?.kind || "none"
+    }`,
+    `talk: ${isTalkFeedbackActive() ? "active" : "idle"} source=${activeBubbleMessage?.source || "n/a"} fallback=${activeBubbleMessage?.fallbackMode || "none"}`,
     `memory: ${
       latestMemorySnapshot
         ? `${latestMemorySnapshot.activeAdapterMode || "unknown"} fallback=${latestMemorySnapshot.fallbackReason || "none"}`
@@ -2646,10 +2986,12 @@ function draw() {
     }
   }
   drawBehaviorOverlay(ctx, latestStateSnapshot, nowMs);
+  drawTalkFeedback(ctx, nowMs);
   ctx.restore();
 
   drawBehaviorStateBadge(ctx);
   drawDebugOverlay(w, h);
+  renderDialogBubble();
   requestAnimationFrame(draw);
 }
 
@@ -2841,6 +3183,37 @@ function drawBehaviorStateBadge(context) {
   context.restore();
 }
 
+function drawTalkFeedback(context, nowMs) {
+  if (!isTalkFeedbackActive()) return;
+
+  const bounds = getDesignVisualBounds();
+  const strength = getTalkFeedbackStrength(nowMs);
+  const baseX = bounds.x + bounds.width * 0.58;
+  const baseY = bounds.y + bounds.height * 0.62;
+  const wave = Math.sin(nowMs * 0.014);
+  const rise = 3 + strength * 6;
+
+  context.save();
+  context.globalAlpha = 0.42 + strength * 0.38;
+  for (let index = 0; index < 3; index += 1) {
+    const dotStrength = clamp01(strength - index * 0.18);
+    const dotRadius = 2.2 + dotStrength * 2.8;
+    context.beginPath();
+    context.fillStyle = `rgba(183, 236, 255, ${0.38 + dotStrength * 0.42})`;
+    context.ellipse(
+      baseX + index * 10,
+      baseY - index * rise + wave * (2 + index),
+      dotRadius,
+      dotRadius,
+      0,
+      0,
+      Math.PI * 2
+    );
+    context.fill();
+  }
+  context.restore();
+}
+
 async function init() {
   await loadRuntimeConfig();
   if (typeof window.petAPI.getCapabilitySnapshot === "function") {
@@ -2868,6 +3241,7 @@ async function init() {
       latestStateSnapshot = await window.petAPI.getStateSnapshot();
     } catch {}
   }
+  await loadDialogHistorySnapshot();
   loadOverlaySpriteSheets();
   await loadSpriteRuntime(SPRITE_CHARACTER_ID);
 
@@ -2979,10 +3353,32 @@ async function init() {
     });
   }
 
+  if (typeof window.petAPI.onDialogMessage === "function") {
+    window.petAPI.onDialogMessage((payload) => {
+      if (!payload || typeof payload !== "object") return;
+      handleDialogMessage(payload);
+    });
+  }
+
+  if (dialogForm) {
+    dialogForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      void submitDialogMessage();
+    });
+  }
+
+  if (dialogCloseButton) {
+    dialogCloseButton.addEventListener("click", () => {
+      closeDialogSurface();
+    });
+  }
+
   window.addEventListener("resize", resize);
   window.addEventListener("keydown", onMovementKeyDown);
   window.addEventListener("keyup", onMovementKeyUp);
   window.addEventListener("blur", clearMovementKeys);
+  syncDialogSurfaceState();
+  setDialogPending(false);
   setMousePassthrough(true);
   resize();
   draw();

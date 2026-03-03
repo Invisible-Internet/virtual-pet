@@ -11,7 +11,7 @@ function normalizeText(value) {
   return typeof value === "string" ? value.trim() : "";
 }
 
-function normalizeUserCommand(payload) {
+function normalizeUserInput(payload) {
   const normalizedPayload = payload && typeof payload === "object" ? payload : {};
   const explicitType = normalizeText(normalizedPayload.type).toLowerCase();
   const command = normalizeText(normalizedPayload.command).toLowerCase();
@@ -37,6 +37,15 @@ function normalizeUserCommand(payload) {
     return "guardrail-test";
   }
   return raw || "unknown";
+}
+
+function extractUserInputText(payload) {
+  const normalizedPayload = payload && typeof payload === "object" ? payload : {};
+  return (
+    normalizeText(normalizedPayload.text) ||
+    normalizeText(normalizedPayload.command) ||
+    normalizeText(normalizedPayload.type)
+  );
 }
 
 function asNumber(value, fallback) {
@@ -92,13 +101,15 @@ class PetContractRouter {
   }
 
   _deriveIntents(event, context) {
-    if (event.type === "USER_COMMAND") {
-      const normalizedCommand = normalizeUserCommand(event.payload);
+    if (event.type === "USER_COMMAND" || event.type === "USER_MESSAGE") {
+      const normalizedCommand = normalizeUserInput(event.payload);
+      const inputText = extractUserInputText(event.payload) || normalizedCommand;
       if (normalizedCommand === "status") {
         return [
           {
             type: "INTENT_INTROSPECTION_STATUS",
-            reason: "user_command_status",
+            reason:
+              event.type === "USER_MESSAGE" ? "user_message_status" : "user_command_status",
             correlationId: event.correlationId,
             ts: this._now(),
             payload: {
@@ -112,7 +123,10 @@ class PetContractRouter {
         return [
           {
             type: "INTENT_PROACTIVE_ANNOUNCEMENT",
-            reason: "user_command_announce_test",
+            reason:
+              event.type === "USER_MESSAGE"
+                ? "user_message_announce_test"
+                : "user_command_announce_test",
             correlationId: event.correlationId,
             ts: this._now(),
             payload: {
@@ -131,7 +145,10 @@ class PetContractRouter {
         return [
           {
             type: "INTENT_STATE_DESCRIPTION",
-            reason: "user_command_state_description",
+            reason:
+              event.type === "USER_MESSAGE"
+                ? "user_message_state_description"
+                : "user_command_state_description",
             correlationId: event.correlationId,
             ts: this._now(),
             payload: {
@@ -142,19 +159,23 @@ class PetContractRouter {
         ];
       }
 
-      if (normalizedCommand === "bridge-test" || normalizedCommand === "guardrail-test") {
+      if (
+        event.type === "USER_MESSAGE" ||
+        normalizedCommand === "bridge-test" ||
+        normalizedCommand === "guardrail-test"
+      ) {
         return [
           {
             type: "INTENT_BRIDGE_DIALOG",
-            reason: "user_command_bridge_dialog",
+            reason:
+              event.type === "USER_MESSAGE"
+                ? "user_message_dialog"
+                : "user_command_bridge_dialog",
             correlationId: event.correlationId,
             ts: this._now(),
             payload: {
               command: normalizedCommand,
-              text:
-                normalizeText(event.payload?.text) ||
-                normalizeText(event.payload?.command) ||
-                normalizedCommand,
+              text: inputText || normalizedCommand,
             },
           },
         ];
@@ -162,7 +183,7 @@ class PetContractRouter {
 
       return [
         {
-          type: "INTENT_UNKNOWN_COMMAND",
+            type: "INTENT_UNKNOWN_COMMAND",
           reason: "user_command_unknown",
           correlationId: event.correlationId,
           ts: this._now(),

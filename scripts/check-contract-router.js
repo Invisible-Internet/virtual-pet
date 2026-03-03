@@ -253,6 +253,46 @@ function testBridgeDialogFlow() {
   );
 }
 
+function testUserMessageDialogFlow() {
+  const clock = createClock(5000);
+  const router = createPetContractRouter({
+    now: () => clock.now(),
+  });
+
+  const result = router.processEvent(
+    {
+      type: "USER_MESSAGE",
+      correlationId: "corr-user-message",
+      payload: {
+        text: "tell me something local",
+      },
+      ts: clock.now(),
+    },
+    {
+      source: "offline",
+      bridgeDialogText: "I'm in Idle. Local dialog fallback active.",
+      bridgeFallbackMode: "dialog_offline_template",
+    }
+  );
+
+  assert(result.ok, "user message dialog should return ok=true");
+  assertEqual(result.intents.length, 1, "user message dialog should emit one intent");
+  assertEqual(result.intents[0].type, "INTENT_BRIDGE_DIALOG", "user message intent type mismatch");
+  assertEqual(result.suggestions.length, 1, "user message dialog should emit one suggestion");
+  assertEqual(result.suggestions[0].type, "PET_RESPONSE", "user message suggestion type mismatch");
+  assertEqual(result.suggestions[0].source, "offline", "user message source mismatch");
+  assertEqual(
+    result.suggestions[0].fallbackMode,
+    "dialog_offline_template",
+    "user message fallback mode mismatch"
+  );
+  assertIncludes(
+    result.suggestions[0].text,
+    "Local dialog fallback",
+    "user message response text mismatch"
+  );
+}
+
 function testStateDescriptionFlow() {
   const clock = createClock(5200);
   const router = createPetContractRouter({
@@ -391,6 +431,7 @@ function run() {
   testAnnouncementCooldownFlow();
   testExtensionInteractionFlow();
   testBridgeDialogFlow();
+  testUserMessageDialogFlow();
   testStateDescriptionFlow();
   testMediaMusicModeFlow();
   testFreshRssSummaryFlow();

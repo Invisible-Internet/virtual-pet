@@ -12,12 +12,14 @@ contextBridge.exposeInMainWorld("petAPI", {
   getContractTrace: () => ipcRenderer.invoke("pet:getContractTrace"),
   getMemorySnapshot: () => ipcRenderer.invoke("pet:getMemorySnapshot"),
   getStateSnapshot: () => ipcRenderer.invoke("pet:getStateSnapshot"),
+  getDialogHistory: () => ipcRenderer.invoke("pet:getDialogHistory"),
   triggerBehaviorState: (stateId, options = {}) =>
     ipcRenderer.invoke("pet:triggerBehaviorState", {
       stateId,
       ...options,
     }),
   simulateStateFallback: () => ipcRenderer.invoke("pet:simulateStateFallback"),
+  sendUserMessage: (text) => ipcRenderer.invoke("pet:sendUserMessage", { text }),
   runUserCommand: (command) => ipcRenderer.invoke("pet:runUserCommand", { command }),
   probeLocalMedia: () => ipcRenderer.invoke("pet:probeLocalMedia"),
   probeSpotifyIntegration: () => ipcRenderer.invoke("pet:probeSpotifyIntegration"),
@@ -159,6 +161,18 @@ contextBridge.exposeInMainWorld("petAPI", {
 
     return () => {
       ipcRenderer.removeListener("pet:state", listener);
+    };
+  },
+  onDialogMessage: (callback) => {
+    if (typeof callback !== "function") {
+      return () => {};
+    }
+
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on("pet:dialog-message", listener);
+
+    return () => {
+      ipcRenderer.removeListener("pet:dialog-message", listener);
     };
   },
   onIntegration: (callback) => {

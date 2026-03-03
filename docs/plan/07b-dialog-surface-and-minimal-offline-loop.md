@@ -1,9 +1,9 @@
 # Deliverable 07b: Dialog Surface and Minimal Offline Loop
 
 **Deliverable ID:** `07b-dialog-surface-and-minimal-offline-loop`  
-**Status:** `not_started`  
+**Status:** `done`  
 **Owner:** `Mic + Codex`  
-**Last Updated:** `2026-03-02`  
+**Last Updated:** `2026-03-03`  
 **Depends On:** `03-pet-core-events-intents-suggestions`, `04-openclaw-bridge-spec`, `07-state-system-extension-guide`  
 **Blocks:** `07c-shell-settings-and-wardrobe-surface`, `08-test-and-acceptance-matrix`  
 **Verification Gate:** `Visible chat/bubble path works in both online and offline modes, with deterministic local fallback dialogue and non-blocking talk feedback`
@@ -111,6 +111,19 @@ Pass when all are true:
 - Implement bubble rendering for `PET_RESPONSE` and `PET_ANNOUNCEMENT`.
 - Implement non-blocking talk feedback while a message is visible.
 - Persist enough dialog history to support manual verification and debugging.
+- Current runtime slice shipped:
+  - renderer DOM dialog surface with `Enter` / `/` open path, history list, and text submit flow
+  - preload-safe dialog APIs:
+    - `sendUserMessage(text)`
+    - `getDialogHistory()`
+    - `onDialogMessage(callback)`
+  - first-class `USER_MESSAGE` contract routing in the existing main-process pipeline
+  - deterministic local fallback templates via `dialog-runtime.js` and `config/dialog/offline-templates.json`
+  - shared dialog-history/bubble stream for `PET_RESPONSE` and `PET_ANNOUNCEMENT`
+  - bubble pulse plus non-blocking talk indicator / mouth pulse fallback
+  - deterministic checks:
+    - `scripts/check-contract-router.js`
+    - `scripts/check-dialog-runtime.js`
 
 ## Visible App Outcome
 - User can open a visible dialog input surface and submit a message.
@@ -126,9 +139,11 @@ Pass when all are true:
 5. Confirm drag/fling remains smooth while bubble/talk feedback is active.
 
 ## Gate Status
-- `Doc Gate`: `not_started`
-- `Implementation Gate`: `not_started`
-- `Overall`: `not_started`
+- `Doc Gate`: `passed`
+- `Implementation Gate`: `passed`
+- `Overall`: `done`
 
 ## Change Log
 - `2026-03-02`: File created to split dialog, bubble, and minimal offline embodiment work out of D07 while keeping D07 as the current deliverable.
+- `2026-03-03`: Implemented the first D07b runtime slice with dialog surface, `USER_MESSAGE` routing, offline template fallback, shared dialog history/bubble delivery, talk feedback, and green deterministic checks. Manual in-app verification remains open before the implementation gate can pass.
+- `2026-03-03`: Operator manual verification passed for visible dialog history, offline `source` / `fallbackMode` labels, proactive announcement cooldown behavior, and smooth drag/fling while talk feedback was active. D07b is closed as `done`.

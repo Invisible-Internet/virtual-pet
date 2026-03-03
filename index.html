@@ -3,12 +3,334 @@
   <head>
     <meta charset="utf-8" />
     <style>
-      html, body { margin: 0; width: 100%; height: 100%; background: transparent; overflow: hidden; }
-      canvas { width: 100%; height: 100%; display: block; }
+      :root {
+        color-scheme: light;
+        --dialog-ink: rgba(18, 22, 28, 0.96);
+        --dialog-paper: rgba(249, 243, 230, 0.96);
+        --dialog-paper-shadow: rgba(24, 28, 34, 0.28);
+        --dialog-shell: rgba(11, 16, 24, 0.8);
+        --dialog-shell-border: rgba(196, 216, 240, 0.24);
+        --dialog-shell-line: rgba(196, 216, 240, 0.12);
+        --dialog-accent: rgba(120, 205, 255, 0.92);
+        --dialog-user: rgba(96, 156, 233, 0.18);
+        --dialog-pet: rgba(245, 222, 176, 0.16);
+        --dialog-meta: rgba(205, 219, 236, 0.72);
+        --dialog-warning: rgba(255, 199, 140, 0.84);
+      }
+
+      html, body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        background: transparent;
+        overflow: hidden;
+      }
+
+      body {
+        font-family: Georgia, "Times New Roman", serif;
+      }
+
+      #shell {
+        position: relative;
+        width: 100%;
+        height: 100%;
+      }
+
+      canvas {
+        width: 100%;
+        height: 100%;
+        display: block;
+      }
+
+      #dialog-layer {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+      }
+
+      .dialog-hint {
+        position: absolute;
+        left: 50%;
+        bottom: 10px;
+        transform: translateX(-50%);
+        padding: 6px 10px;
+        border-radius: 999px;
+        background: rgba(12, 18, 26, 0.68);
+        border: 1px solid rgba(197, 215, 239, 0.18);
+        color: rgba(239, 245, 252, 0.9);
+        font: 11px/1.2 Consolas, monospace;
+        letter-spacing: 0.02em;
+        box-shadow: 0 8px 24px rgba(8, 10, 14, 0.2);
+        transition: opacity 160ms ease, transform 160ms ease;
+      }
+
+      .dialog-hint.is-hidden {
+        opacity: 0;
+        transform: translateX(-50%) translateY(6px);
+      }
+
+      .dialog-bubble {
+        position: absolute;
+        top: 10px;
+        left: 50%;
+        width: min(248px, calc(100% - 28px));
+        padding: 10px 12px 12px;
+        border-radius: 18px;
+        background:
+          radial-gradient(circle at top left, rgba(255, 255, 255, 0.72), transparent 52%),
+          linear-gradient(180deg, rgba(255, 252, 244, 0.98), var(--dialog-paper));
+        color: var(--dialog-ink);
+        box-shadow:
+          0 12px 28px var(--dialog-paper-shadow),
+          inset 0 1px 0 rgba(255, 255, 255, 0.8);
+        transform: translateX(-50%) translateY(0) scale(1);
+        transform-origin: 50% 100%;
+        opacity: 0;
+        transition: opacity 180ms ease, transform 180ms ease;
+      }
+
+      .dialog-bubble::after {
+        content: "";
+        position: absolute;
+        left: 50%;
+        bottom: -10px;
+        width: 20px;
+        height: 20px;
+        background: var(--dialog-paper);
+        transform: translateX(-50%) rotate(45deg);
+        border-radius: 0 0 4px 0;
+        box-shadow: 6px 6px 16px rgba(24, 28, 34, 0.12);
+      }
+
+      .dialog-bubble.is-visible {
+        opacity: 1;
+      }
+
+      .dialog-bubble.is-speaking {
+        animation: bubble-pulse 760ms ease-in-out infinite;
+      }
+
+      .dialog-bubble__meta {
+        display: flex;
+        gap: 6px;
+        align-items: center;
+        margin-bottom: 5px;
+        color: rgba(66, 77, 92, 0.78);
+        font: 10px/1.2 Consolas, monospace;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+      }
+
+      .dialog-bubble__tag {
+        padding: 2px 5px;
+        border-radius: 999px;
+        background: rgba(31, 46, 64, 0.1);
+      }
+
+      .dialog-bubble__tag--warning {
+        background: rgba(212, 136, 58, 0.16);
+        color: rgba(128, 70, 22, 0.92);
+      }
+
+      .dialog-bubble__text {
+        font-size: 13px;
+        line-height: 1.32;
+      }
+
+      .dialog-panel {
+        position: absolute;
+        left: 10px;
+        right: 10px;
+        bottom: 12px;
+        padding: 10px;
+        border-radius: 18px;
+        border: 1px solid var(--dialog-shell-border);
+        background:
+          linear-gradient(180deg, rgba(27, 37, 52, 0.9), var(--dialog-shell)),
+          linear-gradient(120deg, rgba(78, 149, 214, 0.08), transparent 60%);
+        box-shadow: 0 18px 40px rgba(7, 10, 16, 0.26);
+        backdrop-filter: blur(12px);
+        opacity: 0;
+        transform: translateY(12px);
+        transition: opacity 180ms ease, transform 180ms ease;
+      }
+
+      .dialog-panel.is-open {
+        opacity: 1;
+        transform: translateY(0);
+        pointer-events: auto;
+      }
+
+      .dialog-panel__topline {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 8px;
+      }
+
+      .dialog-panel__label {
+        color: rgba(245, 249, 255, 0.94);
+        font: 11px/1.2 Consolas, monospace;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+
+      .dialog-panel__close {
+        border: 0;
+        padding: 0;
+        width: 22px;
+        height: 22px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.08);
+        color: rgba(242, 246, 252, 0.86);
+        cursor: pointer;
+        font: 14px/1 Consolas, monospace;
+      }
+
+      .dialog-history {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        max-height: 114px;
+        overflow-y: auto;
+        padding-right: 2px;
+      }
+
+      .dialog-history__empty {
+        padding: 8px 10px;
+        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.04);
+        color: rgba(220, 229, 241, 0.72);
+        font: 12px/1.35 Georgia, serif;
+      }
+
+      .dialog-history__item {
+        padding: 7px 9px 8px;
+        border-radius: 12px;
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        background: rgba(255, 255, 255, 0.04);
+      }
+
+      .dialog-history__item--user {
+        background: var(--dialog-user);
+      }
+
+      .dialog-history__item--pet {
+        background: var(--dialog-pet);
+      }
+
+      .dialog-history__meta {
+        display: flex;
+        gap: 6px;
+        align-items: center;
+        flex-wrap: wrap;
+        margin-bottom: 3px;
+        color: var(--dialog-meta);
+        font: 10px/1.2 Consolas, monospace;
+        letter-spacing: 0.03em;
+      }
+
+      .dialog-history__pill {
+        padding: 1px 5px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.08);
+      }
+
+      .dialog-history__pill--warning {
+        color: var(--dialog-warning);
+        background: rgba(221, 143, 64, 0.14);
+      }
+
+      .dialog-history__text {
+        color: rgba(248, 251, 255, 0.95);
+        font-size: 12px;
+        line-height: 1.32;
+      }
+
+      .dialog-form {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 8px;
+        margin-top: 9px;
+        padding-top: 9px;
+        border-top: 1px solid var(--dialog-shell-line);
+      }
+
+      .dialog-form__input {
+        min-width: 0;
+        padding: 8px 10px;
+        border-radius: 12px;
+        border: 1px solid rgba(173, 203, 233, 0.2);
+        background: rgba(9, 13, 20, 0.42);
+        color: rgba(249, 252, 255, 0.96);
+        font: 13px/1.2 Georgia, serif;
+        outline: none;
+      }
+
+      .dialog-form__input::placeholder {
+        color: rgba(208, 219, 235, 0.54);
+      }
+
+      .dialog-form__input:focus {
+        border-color: rgba(120, 205, 255, 0.48);
+        box-shadow: 0 0 0 1px rgba(120, 205, 255, 0.22);
+      }
+
+      .dialog-form__button {
+        border: 0;
+        padding: 8px 12px;
+        border-radius: 12px;
+        background: linear-gradient(180deg, rgba(133, 210, 255, 0.94), rgba(74, 158, 229, 0.94));
+        color: rgba(12, 20, 30, 0.96);
+        cursor: pointer;
+        font: 11px/1.1 Consolas, monospace;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+      }
+
+      .dialog-form__button[disabled] {
+        cursor: progress;
+        opacity: 0.66;
+      }
+
+      @keyframes bubble-pulse {
+        0%, 100% { transform: translateX(-50%) scale(1); }
+        50% { transform: translateX(-50%) scale(1.018); }
+      }
     </style>
   </head>
   <body>
-    <canvas id="c"></canvas>
+    <div id="shell">
+      <canvas id="c"></canvas>
+      <div id="dialog-layer">
+        <div id="dialog-bubble" class="dialog-bubble" aria-live="polite">
+          <div id="dialog-bubble-meta" class="dialog-bubble__meta"></div>
+          <div id="dialog-bubble-text" class="dialog-bubble__text"></div>
+        </div>
+        <div id="dialog-hint" class="dialog-hint">Press Enter or / to talk</div>
+        <section id="dialog-panel" class="dialog-panel" aria-label="Dialog surface">
+          <div class="dialog-panel__topline">
+            <div class="dialog-panel__label">Local Dialog</div>
+            <button id="dialog-close" class="dialog-panel__close" type="button" aria-label="Close dialog">
+              x
+            </button>
+          </div>
+          <div id="dialog-history" class="dialog-history" role="log" aria-live="polite"></div>
+          <form id="dialog-form" class="dialog-form">
+            <input
+              id="dialog-input"
+              class="dialog-form__input"
+              type="text"
+              maxlength="240"
+              placeholder="Ask what the pet is doing"
+              autocomplete="off"
+            />
+            <button id="dialog-submit" class="dialog-form__button" type="submit">Talk</button>
+          </form>
+        </section>
+      </div>
+    </div>
     <script src="renderer-visible-bounds.js"></script>
     <script src="renderer-sprite-runtime.js"></script>
     <script src="renderer.js"></script>
