@@ -1,148 +1,216 @@
 # Deliverable 08: Test and Acceptance Matrix
 
 **Deliverable ID:** `08-test-and-acceptance-matrix`
-**Status:** `not_started`
+**Status:** `done`
 **Owner:** `Mic + Codex`
-**Last Updated:** `2026-03-02`
-**Depends On:** `02b-extension-framework-and-pack-sdk`, `03-pet-core-events-intents-suggestions`, `04-openclaw-bridge-spec`, `05-memory-pipeline-and-obsidian-adapter`, `06-integrations-freshrss-spotify`, `07-state-system-extension-guide`, `07b-dialog-surface-and-minimal-offline-loop`, `07c-shell-settings-and-wardrobe-surface`
-**Blocks:** `Implementation execution`
+**Last Updated:** `2026-03-03`
+**Depends On:** `02-architecture-capability-registry`, `02b-extension-framework-and-pack-sdk`, `03-pet-core-events-intents-suggestions`, `04-openclaw-bridge-spec`, `05a-obsidian-workspace-bootstrap-and-connectivity`, `05-memory-pipeline-and-obsidian-adapter`, `06-integrations-freshrss-spotify`, `07-state-system-extension-guide`, `07b-dialog-surface-and-minimal-offline-loop`, `07c-shell-settings-and-wardrobe-surface`
+**Blocks:** `Roadmap closeout`
 **Verification Gate:** `Matrix covers core runtime/capability degradation/memory/integration failures and includes executed evidence for representative visible scenarios`
 
 ## Objective
-Define complete acceptance and regression matrix for architecture and implementation milestones.
+Define the acceptance and regression matrix for the shipped runtime, then tie that matrix to actual executed evidence instead of leaving D08 as a placeholder.
 
 ## In Scope
-- Functional acceptance tests by subsystem.
-- Failure-mode tests (OpenClaw unavailable, adapter missing, tool missing).
-- Extension framework acceptance tests (pack loading, trust model, prop world behavior, arbitration, context propagation).
-- Regression checks for existing drag/fling/runtime behavior.
+- Functional acceptance tests by subsystem and deliverable.
+- Failure-mode tests for degradation, missing dependencies, and offline-safe fallback behavior.
+- Extension framework acceptance tests (pack loading, trust warning, prop interaction, arbitration path).
+- Regression checks for drag/fling/fixed-size/runtime invariants.
 - Documentation verification checks.
-- Visible/manual operator tests with unambiguous pass/fail outcomes for each targeted deliverable.
+- Executed evidence links for both automated smoke coverage and prior operator-visible runtime passes.
 
 ## Out of Scope
 - Full CI pipeline implementation.
-- Performance benchmark automation (beyond defined manual checks for now).
+- Performance benchmark automation beyond the manual release checklist.
 
 ## Dependencies
-- D03-D07c finalized contracts.
+- D02-D07c remain the source of truth for their runtime contracts and operator-visible verification notes.
 
 ## Decisions Locked
 - Dual gating remains active (`Doc Gate` + `Implementation Gate`).
-- Existing movement/runtime invariants must remain intact.
+- Existing movement/runtime invariants remain mandatory.
+- D08 adds a lightweight scripted smoke layer instead of a full GUI automation stack.
+- Prior accepted operator-visible evidence from D02b-D07c remains valid input to D08 closeout.
 
-## Implementation Breakdown
-1. Define matrix dimensions (subsystem x scenario x expected outcome).
-2. Add mandatory fallback tests per capability.
-3. Add memory adapter mode tests.
-4. Add integration availability tests.
-5. Add session handoff and docs consistency checks.
-6. Add "human-visible proof" column for each test case (what user should see in app/log/output).
-7. Add extension-framework scenarios for pack validity, trust/warning flow, prop world interactions, and offline/online context behavior.
-8. Add explicit executed rows for:
-   - D07 state runtime
-   - D07b dialog surface and offline fallback
-   - D07c shell/settings/wardrobe surface
+## Execution Cadence And Ownership
+- Automated smoke owner: `Codex / repo maintainer`
+  - Run on any runtime change touching capability, bridge, memory, integration, state, dialog, extension, or movement invariants.
+  - Command: `npm run check:acceptance`
+  - Evidence artifact: [`artifacts/08-acceptance-smoke.md`](./artifacts/08-acceptance-smoke.md)
+- Operator visible suite owner: `operator`
+  - Run on release-candidate passes and after drag/dialog/shell behavior changes.
+  - Evidence source: predecessor deliverable docs plus tracker notes referenced below.
+- Failure handling rule:
+  - D08 does not silently advance on a failing row.
+  - Any failed row must keep `Overall` below `done` and carry an evidence link or blocker note.
 
-## Verification Gate
-Pass when all are true:
-1. Every deliverable has at least one acceptance test and one failure-mode test.
-2. Existing runtime invariants are represented explicitly.
-3. Pass/fail criteria are objective and repeatable.
-4. Matrix has ownership and execution cadence.
-5. Each deliverable has at least one "visible result" acceptance scenario.
-6. Representative tests from each subsystem are actually executed and recorded with evidence links/log snippets.
+## Acceptance Matrix
+| ID | Mode | Scenario | Pass Criteria | Human-Visible Proof |
+| --- | --- | --- | --- | --- |
+| `D02-ACC` | `auto + manual` | Capability registry boots renderer healthy and exposes a coherent snapshot. | Per-capability states and aggregate `runtimeState` match startup results without blocking renderer load. | Diagnostics capability summary and [`artifacts/08-acceptance-smoke.md`](./artifacts/08-acceptance-smoke.md). |
+| `D02-FAIL` | `auto` | Optional capability startup degrades or fails. | Registry captures `reason`/`details`; runtime remains non-fatal and auditable. | Smoke row `D02-capability-registry`. |
+| `D02b-ACC` | `auto + manual` | Valid extension pack loads and prop interaction reaches the core arbitration path. | `sample-foodchase` stays valid/enabled and `INTENT_PROP_INTERACTION` is emitted for `candy`. | Extension manager/runtime log and D02b operator evidence. |
+| `D02b-FAIL` | `auto + manual` | Invalid manifest is skipped without breaking valid packs. | Warning surfaces for invalid pack, valid pack remains usable, trust warning still works on enable. | Warning text plus D02b operator evidence. |
+| `D03-ACC` | `auto + manual` | Event -> intent -> suggestion routing works for `status`, `announce-test`, extension events, media, and hobby summaries. | Correlation IDs survive routing and expected suggestion types are emitted deterministically. | Contract trace/log output and smoke row `D03-contract-router`. |
+| `D03-FAIL` | `auto + manual` | Announcement cooldown suppresses duplicate proactive output. | Second announcement emits `PET_ANNOUNCEMENT_SKIPPED` with `skipReason=cooldown_active`. | Trace/log output and D03 operator evidence. |
+| `D04-ACC` | `auto + manual` | Online bridge request path returns an advisory response without violating local authority. | `bridge-test` returns `PET_RESPONSE`, correlation ID is preserved, and no forbidden action is executed. | In-app log/response plus smoke row `D04-openclaw-bridge`. |
+| `D04-FAIL` | `auto + manual` | Timeout/offline bridge modes degrade deterministically. | `source=offline` fallback is emitted, blocked actions remain blocked, and drag/fling stays responsive. | Offline fallback output, guardrail log, and D04 operator evidence. |
+| `D05a-ACC` | `auto + manual` | Settings/path bootstrap resolves configured OpenClaw and Obsidian roots. | Resolved path summary is coherent, required folders/files can be bootstrapped, and local overrides persist cleanly. | Workspace status output and D05a operator evidence. |
+| `D05a-FAIL` | `auto + manual` | Missing or unsafe path configuration degrades gracefully. | Missing config/path reports `missing_config`, `missing_path`, `not_requested`, or warning text without crashing startup. | `check:workspace` / settings warnings / D05a operator evidence. |
+| `D05-ACC` | `auto + manual` | Observation, promotion, and audit writes succeed in the active memory adapter. | `M`, `H`, and `N` write canonical Markdown artifacts with expected outcomes. | Vault/workspace files and D05 operator evidence. |
+| `D05-FAIL` | `auto + manual` | Obsidian target is unavailable or identity mutation is prohibited. | Adapter falls back or blocks mutation explicitly while preserving audit output and reason codes. | Memory log output and smoke row `D05-memory-pipeline`. |
+| `D06-ACC` | `auto + manual` | Spotify/FreshRSS happy path produces visible suggestions, observations, and hobby ranking output. | `J`, `L`, and `R` produce deterministic event payloads and observation shapes. | Integration FX/logs, observation files, and D06 operator evidence. |
+| `D06-FAIL` | `auto + manual` | Provider/media source is unavailable or ambiguous. | Fallback mode is explicit (`spotify_provider_unavailable`, source fallback, or `unknown` route) and user-visible behavior remains stable. | D06 operator evidence plus smoke rows `D06-integrations` and `D06-local-media-sensor`. |
+| `D07-ACC` | `auto + manual` | State runtime enters `Reading`, `PoolPlay`, `MusicChill`, and temporary FreshRSS reading deterministically. | State/phase/overlay output matches catalog rules and priority ordering stays stable. | Visible overlays/state labels and D07 operator evidence. |
+| `D07-FAIL` | `auto + manual` | Missing state asset or lower-priority automatic event occurs. | `visualFallbackUsed=true` is surfaced, warning reason is logged, and higher-priority/manual states are not preempted. | Warning overlay/log and smoke row `D07-state-runtime`. |
+| `D07b-ACC` | `auto + manual` | Chat input, bubble/history output, and talk feedback work visibly. | `Enter` or `/` opens input, response appears in history/bubble, and talk feedback is visible without blocking drag. | Dialog surface and D07b operator evidence. |
+| `D07b-FAIL` | `auto + manual` | OpenClaw dialog path is unavailable. | Offline template reply includes `source` / `fallbackMode` labels and still provides visible speaking feedback. | Bubble/history metadata, D07b operator evidence, and smoke row `D07b-dialog-runtime`. |
+| `D07c-ACC` | `manual` | Tray/dev fallback shell changes roam mode, diagnostics visibility, and accessories without restart. | Inventory/tray controls persist through settings and visibly change roam/wardrobe/runtime behavior. | Tray or `F6`-`F9` path plus D07c operator evidence. |
+| `D07c-FAIL` | `manual` | Tray path is unavailable or roam zone changes mid-session. | Dev fallback remains usable, settings persist, and custom zone / cross-monitor roam behavior remains non-fatal. | Tray fallback behavior and D07c operator evidence. |
+| `D08-ACC` | `auto + manual` | Acceptance suite produces executed evidence instead of a placeholder checklist. | `npm run check:acceptance` writes a report artifact and D08 maps manual visible rows to concrete evidence links. | [`artifacts/08-acceptance-smoke.md`](./artifacts/08-acceptance-smoke.md) and this file. |
+| `D08-FAIL` | `auto + manual` | A smoke or manual row fails during consolidation. | Failure is surfaced with row ID, evidence, and blocker note; D08 remains below `done`. | Acceptance artifact failure row or tracker blocker note. |
 
-## Required Visible Test Targets
-1. Roaming: pet roams desktop bounds and optional roam zone with clear boundary behavior.
-2. State set: `Idle/Roam/MusicChill/MusicDance/WatchMode/Sleep` can all be entered via deterministic triggers.
-3. State priority: conflict scenario resolves as `Sleep > WatchMode > MusicMode > Roam > Idle`.
-4. Desktop shell: tray/taskbar icon opens settings menu; wardrobe changes visible accessory/costume state.
-5. Media trigger: active media causes music-mode transition with log evidence.
-6. Introspection: default vs technical status outputs are distinct and chain-of-thought safe.
-7. Conversation UI: user can ask via chatbox, pet responds in bubble/chat output with visible correlation to request.
-8. OpenClaw offline fallback: dialogue still works in local fallback mode (text-first).
-9. Voice path: when TTS/STT available, voice in/out path functions without blocking runtime.
-10. Voice fallback: if TTS fails/unavailable, canned talk SFX + text output still provide "pet is talking" feedback.
-11. Lip-sync approximation: during speech activity, visible mouth/talk animation toggles; on fallback it degrades predictably.
-12. Proactive pet messaging: deterministic trigger emits `PET_ANNOUNCEMENT` and visible bubble/chat output with cooldown respected.
-13. Introspection content: technical mode output includes `currentState`, `lastSensorEvent`, and `activeJobs`; narrative mode includes state/mood/media/hobby flavor.
-14. Memory domains: required core workspace + vault path layouts are validated, with graceful degradation when optional vault paths are unavailable.
-15. Hobby flow: daily top `1-3` selection logs scoring reasons and emits memory summary payload.
-16. Music-mode feedback loop: `track_rating (1-10)` appears in observation log and affects next daily summary input.
-17. Media source check: Windows media event includes `source=GSMTC` when available, else deterministic fallback source labeling.
-18. Mutation transparency modes: `silent/logged/brief_notification` produce the expected user-visible notification behavior while preserving audit logs.
-19. Simple custom state onboarding: a new `Reading`-style state can be added via config and entered without core switch rewrite.
-20. Complex custom state onboarding: a `PoolPlay`-style phase state executes `enter -> loop -> exit -> recover` with deterministic fallback for missing clips.
-21. State-aware dialogue: when asked what pet is doing/reading, response references current state/context in online mode and falls back to local context when OpenClaw is offline.
-22. D07 visual fallback path: forcing a missing state asset sets `visualFallbackUsed=true`, logs a warning, and keeps the pet stable.
-23. D07b dialog surface: `Enter` or `/` opens input, local reply appears in bubble, and drag remains smooth while talk feedback is active.
-24. D07c shell/settings: tray or dev fallback toggles roam mode, diagnostics visibility, and `headphones` accessory without restart.
+## Required Visible Target Coverage
+| Target | Covered By |
+| --- | --- |
+| Roaming bounds and optional roam zone behavior | `D07c-ACC`, `D07c-FAIL`, D07c operator evidence |
+| Deterministic core state set entry (`Idle/Roam/MusicChill/...`) | `D07-ACC`, `D07-FAIL`, D07 operator evidence |
+| State priority resolution | `D07-ACC`, `D07-FAIL`, smoke row `D07-state-runtime` |
+| Desktop shell / wardrobe visibility | `D07c-ACC`, D07c operator evidence |
+| Media-triggered music mode | `D06-ACC`, D07 operator evidence |
+| Introspection default vs technical safety | `D03-ACC`, `D04-ACC`, D03 operator evidence |
+| Conversation UI and visible request/response correlation | `D07b-ACC`, D07b operator evidence |
+| Offline dialog fallback | `D07b-FAIL`, `D04-FAIL`, D07b/D04 operator evidence |
+| Voice path when provider exists | conditional follow-on under `D07b-ACC`; text-first path remains the current required fallback |
+| Voice fallback when TTS unavailable | `D07b-FAIL`; talk feedback + bubble output are the accepted v1 floor |
+| Lip-sync / talk animation degradation | `D07b-ACC`, `D07b-FAIL`; talk feedback is the current visible approximation |
+| Proactive messaging with cooldown | `D03-FAIL`, `D07b-ACC`, D03/D07b operator evidence |
+| Technical vs narrative introspection content | `D03-ACC`, `D04-ACC` |
+| Memory path layout validation and graceful degradation | `D05a-ACC`, `D05a-FAIL` |
+| Hobby top `1-3` selection and scoring reasons | `D06-ACC`, D06 operator evidence |
+| `track_rating (1-10)` feeds memory summary input | `D06-ACC`, `D05-ACC`, D06 operator evidence |
+| Windows media `source=GSMTC` or deterministic fallback labeling | `D06-FAIL`, smoke row `D06-local-media-sensor` |
+| Mutation transparency and audit visibility | `D05-FAIL`, D05 operator evidence |
+| Simple custom state onboarding (`Reading`-style) | `D07-ACC`, smoke row `D07-state-runtime` |
+| Complex custom state onboarding (`PoolPlay` phases) | `D07-ACC`, smoke row `D07-state-runtime` |
+| State-aware dialogue online/offline | `D04-ACC`, `D07b-FAIL`, D07 operator evidence |
+| D07 missing-asset fallback | `D07-FAIL`, smoke row `D07-state-runtime` |
+| D07b visible input + bubble + non-blocking talk feedback | `D07b-ACC`, D07b operator evidence |
+| D07c shell/settings toggles without restart | `D07c-ACC`, D07c operator evidence |
 
-## Extension Framework Required Visible Test Targets
-1. Valid pack loads from `extensions/` and appears in extension manager UI.
-2. Invalid manifest yields warning and non-fatal skip.
-3. Version mismatch shows warning and best-effort load behavior.
-4. One-time trust warning shown on first enable; per-extension toggle works.
-5. Spawn candy prop from GUI, drag/drop to desktop anchor, prop persists at coordinates.
-6. Pet navigates to prop and enters mapped extension behavior/state.
-7. Held-food chase behavior: near=`look/follow-head`, far=`chase` transition.
-8. Pool prop triggers wardrobe swap and complex phase behavior (`enter/loop/exit/recover`).
-9. Pool click interaction triggers splash response/effect.
-10. Multiple props can coexist while arbitrator keeps single active behavior authority.
-11. Asking "what are you doing/reading?" returns local context-aware answer offline.
-12. Same question online includes extension/state context in OpenClaw response path.
-13. OpenClaw offline does not break extension interactions or local Q/A.
-14. Disable extension cleanly removes active props/behaviors and reverts to core state logic.
-15. Multi-monitor prop anchors remain stable and pet travel remains clamped correctly.
-16. Extension scoped KV persistence survives restart within quota.
-17. Regression: drag/fling/size invariants remain unchanged.
+## Extension Visible Target Coverage
+| Target | Covered By |
+| --- | --- |
+| Valid pack loads from `extensions/` | `D02b-ACC`, smoke row `D02b-extension-framework` |
+| Invalid manifest warns and skips non-fatally | `D02b-FAIL`, smoke row `D02b-extension-framework` |
+| Version mismatch warning / best-effort behavior | D02b manual/runtime contract coverage |
+| One-time trust warning on first enable | `D02b-FAIL`, smoke row `D02b-extension-framework` |
+| GUI prop spawn / persistence | D07c operator evidence |
+| Pet navigates to prop and mapped state | D02b operator evidence plus D07/D07c prop behavior |
+| Held-food chase near/far transition | extension roadmap contract; covered by D02b runtime contract scope |
+| Pool prop wardrobe swap and phase behavior | `D07-ACC`, D07c operator evidence |
+| Pool click splash/effect | D02b/D07 operator-visible prop behavior notes |
+| Multiple props with single authority | D02b arbitration contract coverage |
+| Offline local context-aware Q/A with extension state | `D07b-FAIL`, D02b operator evidence |
+| Online Q/A with extension/state context | `D04-ACC`, D02b contract coverage |
+| OpenClaw offline does not break extension interactions | `D02b-FAIL`, `D04-FAIL` |
+| Disable extension removes behavior authority cleanly | D02b operator evidence |
+| Multi-monitor prop anchors remain stable | D07c operator evidence |
+| Extension KV persistence survives restart within quota | D02b contract scope; future operator retest if pack storage expands |
+| Drag/fling/size invariants remain unchanged | movement invariants smoke row plus D04/D07b/D07c operator evidence |
 
-## Phase 3 Required Executed Rows
-The executed subset recorded in D08 must include at least one visible pass for each of the following:
-1. D07 state runtime:
-   - `Reading`
-   - `PoolPlay`
-   - missing-asset fallback
-   - local state-aware description fallback
-2. D07b dialog surface and minimal offline loop:
-   - visible input surface
-   - offline local reply
-   - bubble output
-   - talk feedback
-   - proactive announcement output
-3. D07c shell/settings/wardrobe surface:
-   - tray or dev fallback control path
-   - roam-mode switch
-   - diagnostics toggle
-   - accessory toggle
+## Executed Evidence
+### Automated Smoke Executed On `2026-03-03`
+- Command: `npm run check:acceptance`
+- Artifact: [`artifacts/08-acceptance-smoke.md`](./artifacts/08-acceptance-smoke.md)
+- Machine-readable artifact: [`artifacts/08-acceptance-smoke.json`](./artifacts/08-acceptance-smoke.json)
 
-## Open Questions
-- Whether to add lightweight scripted smoke tests in this deliverable or defer to implementation phase.
+| Date | Row IDs | Result | Runner | Evidence |
+| --- | --- | --- | --- | --- |
+| `2026-03-03` | `D02-ACC`, `D02-FAIL` | `passed` | `Codex automated smoke` | Smoke row `D02-capability-registry` -> `[capability-registry] checks passed`. |
+| `2026-03-03` | `D02b-ACC`, `D02b-FAIL` | `passed` | `Codex automated smoke` | Smoke row `D02b-extension-framework` -> `[extension-pack-registry] checks passed`. |
+| `2026-03-03` | movement invariants backing `D04/D07b/D07c` | `passed` | `Codex automated smoke` | Smoke row `Movement-runtime-invariants` -> `[runtime-invariants] checks passed`. |
+| `2026-03-03` | `D03-ACC`, `D03-FAIL` | `passed` | `Codex automated smoke` | Smoke row `D03-contract-router` -> `[contracts] router checks passed`. |
+| `2026-03-03` | `D04-ACC`, partial `D04-FAIL` contract path | `passed` | `Codex automated smoke` | Smoke row `D04-openclaw-bridge` -> `[openclaw-bridge] checks passed`. |
+| `2026-03-03` | `D05-ACC`, `D05-FAIL` | `passed` | `Codex automated smoke` | Smoke row `D05-memory-pipeline` -> `[memory-pipeline] checks passed`. |
+| `2026-03-03` | `D05a-FAIL` deterministic settings path | `passed` | `Codex automated smoke` | Smoke row `D05a-settings-runtime` -> `[settings-runtime] checks passed`. |
+| `2026-03-03` | `D06-ACC`, `D06-FAIL` | `passed` | `Codex automated smoke` | Smoke rows `D06-integrations` and `D06-local-media-sensor`. |
+| `2026-03-03` | `D07-ACC`, `D07-FAIL` | `passed` | `Codex automated smoke` | Smoke row `D07-state-runtime` -> `[state-runtime] checks passed`. |
+| `2026-03-03` | `D07b-FAIL` offline dialog fallback | `passed` | `Codex automated smoke` | Smoke row `D07b-dialog-runtime` -> `[dialog] offline dialog checks passed`. |
+| `2026-03-03` | renderer/layout regression backing D07/D07c | `passed` | `Codex automated smoke` | Smoke rows `Layout-assets` and `Sprite-assets`. |
+
+### Current Manual Retest Status
+| Date | Row IDs | Result | Runner | Evidence |
+| --- | --- | --- | --- | --- |
+| `2026-03-03` | step `2` backing `D07c-FAIL` and movement regression coverage | `failed` | `operator` | Manual D08 sweep reported that dragging/flinging outside a custom roam zone could later snap the pet back toward the zone, roam travel could feel jerky at walk speed, and locomotion direction could stop matching actual desktop travel. Operator console/diagnostic evidence was captured from `npm start`. |
+| `2026-03-03` | step `2` operator re-test after first roam fix | `failed` | `operator` | Operator confirmed smoother roam motion plus correct `zone -> desktop` fallback after manual drag/fling escape, but found a remaining step `2` issue: toggling `desktop -> zone` while a roam leg is already in flight can still cause the pet to pop back to the zone on the next loop instead of traveling there. Console output was captured from `npm start`. |
+| `2026-03-03` | step `2` second follow-up fix | `pending_retest` | `Codex` | Forced roam-mode sync now cancels stale in-flight roam legs, clears stale queued destinations, and queues a desktop-bounded zone-entry leg before zone roaming resumes. This should prevent the mid-travel `desktop -> zone` toggle from snapping instantly to the zone edge. Awaiting operator re-test. |
+| `2026-03-03` | steps `2-7` final manual visible sweep | `passed` | `operator` | Operator confirmed the full D08 manual visible sweep passed after the roam follow-up fixes: drag/fling stayed fixed-size and responsive, `zone <-> desktop` transitions traveled correctly, D07 hotkeys/fallback states worked, dialog/bubble/talk feedback worked, proactive output respected cooldown, and tray/fallback shell toggles worked without restart. Console output was captured from `npm start`. |
+
+### Prior Operator-Visible Rows Reused By D08
+| Date | Row IDs | Result | Runner | Evidence |
+| --- | --- | --- | --- | --- |
+| `2026-02-26` | `D02b-ACC`, `D02b-FAIL` | `passed` | `operator` | [`02b-extension-framework-and-pack-sdk.md`](./02b-extension-framework-and-pack-sdk.md) records valid/invalid pack handling, trust-warning toggle flow, and prop interaction evidence. |
+| `2026-02-26` | `D04-ACC`, `D04-FAIL` | `passed` | `operator` | [`04-openclaw-bridge-spec.md`](./04-openclaw-bridge-spec.md) records online bridge, timeout/offline fallback, blocked-action guardrails, and drag/fling non-blocking confirmation. |
+| `2026-02-27` | `D05a-ACC`, `D05a-FAIL` | `passed` | `operator` | [`05a-obsidian-workspace-bootstrap-and-connectivity.md`](./05a-obsidian-workspace-bootstrap-and-connectivity.md) records real-path validation and disabled/not-requested fallback outcomes. |
+| `2026-02-27` | `D05-ACC`, `D05-FAIL` | `passed` | `operator` | [`05-memory-pipeline-and-obsidian-adapter.md`](./05-memory-pipeline-and-obsidian-adapter.md) records `runtimeReady` plus `M/H/N` writes and blocked mutation audit behavior. |
+| `2026-03-01` | `D06-ACC`, `D06-FAIL` | `passed` | `operator` | [`06-integrations-freshrss-spotify.md`](./06-integrations-freshrss-spotify.md) records healthy Spotify/FreshRSS paths, `track_rating` writes, and deterministic Spotify unavailable fallback. |
+| `2026-03-02` | `D07-ACC`, `D07-FAIL` | `passed` | `operator` | [`07-state-system-extension-guide.md`](./07-state-system-extension-guide.md) records `Reading`, `PoolPlay`, missing-asset fallback, `K`, `J`, `L`, and return-to-`MusicChill` behavior. |
+| `2026-03-03` | `D07b-ACC`, `D07b-FAIL` | `passed` | `operator` | [`07b-dialog-surface-and-minimal-offline-loop.md`](./07b-dialog-surface-and-minimal-offline-loop.md) records visible dialog history, offline labels, proactive announcement cooldown behavior, and smooth drag/fling during talk feedback. |
+| `2026-03-03` | `D07c-ACC`, `D07c-FAIL` | `passed` | `operator` | [`07c-shell-settings-and-wardrobe-surface.md`](./07c-shell-settings-and-wardrobe-surface.md) and [`00-progress-tracker.md`](./00-progress-tracker.md) record tray/inventory workflow, diagnostics toggle, custom zone flow, and acceptable cross-monitor roam behavior. |
+
+## Repeatable Run Path
+### Automated
+1. Run `npm run check:acceptance`.
+2. Confirm the console summary ends with `13/13 automated checks passed`.
+3. Confirm the artifact files were updated:
+   - [`artifacts/08-acceptance-smoke.md`](./artifacts/08-acceptance-smoke.md)
+   - [`artifacts/08-acceptance-smoke.json`](./artifacts/08-acceptance-smoke.json)
+
+### Manual Visible Sweep
+1. Run `npm start`.
+2. Drag and fling the pet; confirm the window stays fixed-size and motion remains responsive.
+3. Press `1`, `2`, `3`, `4`, `K`, `J`, and `L`; confirm D07 visible state transitions and fallback behavior.
+4. Press `Enter` or `/`; submit a short question and confirm bubble/history output plus talk feedback.
+5. Trigger proactive output (`U`) and confirm cooldown skip behavior on immediate repeat.
+6. Use tray controls or `F6`-`F9` fallback controls to change roam mode, diagnostics visibility, and `headphones`.
+7. If tray is unavailable, confirm dev fallback still operates without restart.
+8. If any step fails, record the row ID, visible symptom, and evidence path before changing status.
 
 ## Implementation Slice (Mandatory)
-- Implement a lightweight test execution harness or repeatable manual-run script for core visible scenarios.
-- Execute a representative subset across movement, capability degradation, dialogue fallback, extension path, and memory path.
-- Record outcomes in matrix with timestamp, runner, pass/fail, and evidence reference.
-- Ensure regression checks include drag/fling invariants from existing runtime.
-- Ensure the representative subset includes one executed row each for D07, D07b, and D07c.
+- Added `npm run check:acceptance` as the D08 entry point.
+- Added deterministic D08-only checks for:
+  - capability registry lifecycle coverage
+  - extension discovery/trust/prop interaction coverage
+  - movement/runtime architectural invariants
+- Refactored existing check scripts to export `run()` so D08 can execute them in-process and still remain sandbox-compatible.
+- Added report generation to:
+  - [`artifacts/08-acceptance-smoke.md`](./artifacts/08-acceptance-smoke.md)
+  - [`artifacts/08-acceptance-smoke.json`](./artifacts/08-acceptance-smoke.json)
+- Executed the representative automated subset and linked prior operator-visible passes for D02b-D07c.
 
 ## Visible App Outcome
-- Test matrix includes concrete executed rows (not only planned rows).
-- User can run one command or short checklist and see pass/fail output tied to visible app behavior.
-- At least one degraded-path scenario and one extension-path scenario are demonstrated and recorded.
+- D08 now contains executed evidence instead of a placeholder test list.
+- One command (`npm run check:acceptance`) produces pass/fail output for capability, extension, bridge, memory, integration, state, dialog, and invariant coverage.
+- The manual visible sweep is now short, concrete, and mapped to the actual runtime controls used across D07, D07b, and D07c.
 
 ## Implementation Verification (Manual)
-1. Run the selected smoke/manual suite and capture results in matrix.
-2. Validate one core runtime invariant test (`drag/fling/size`) remains passing.
-3. Validate one offline/degraded bridge scenario and one extension scenario with evidence.
-4. Confirm failed test behavior is explicitly surfaced with actionable notes.
+1. Run `npm run check:acceptance` and verify the artifact summary reports `13/13 automated checks passed`.
+2. Run `npm start` and verify one drag/fling regression pass.
+3. Verify one offline/degraded bridge/dialog scenario (`U`, `Y`, or offline mode) still yields visible fallback output.
+4. Verify one extension or shell path remains visibly usable (`P`, `O`, tray, or `F6`-`F9` fallback).
+5. Confirm any failed row would be captured with an evidence path before D08 is marked `done`.
 
 ## Gate Status
-- `Doc Gate`: `not_started`
-- `Implementation Gate`: `not_started`
-- `Overall`: `not_started`
+- `Doc Gate`: `passed`
+- `Implementation Gate`: `passed`
+- `Overall`: `done`
 
 ## Change Log
 - `2026-02-26`: File created and seeded.
 - `2026-02-26`: Updated for `spec + implementation slice` workflow with mandatory implementation/visible outcome sections and dual-gate status.
 - `2026-03-02`: Expanded dependencies and visible-test coverage to include D07b and D07c, plus explicit executed-row requirements for the split Phase 3 deliverables.
+- `2026-03-03`: Added the D08 acceptance runner (`npm run check:acceptance`), new deterministic capability/extension/invariant checks, automated smoke artifacts, a full acceptance matrix, and executed evidence links for both automated and prior operator-visible passes. `Doc Gate` and `Implementation Gate` are now `passed`; deliverable moves to `review`.
+- `2026-03-03`: Operator D08 step `2` exposed a roam follow-up issue: leaving a custom zone via manual drag/fling could later pull the pet back unexpectedly, walk-speed travel could feel jerky, and roam animation direction could drift from actual motion. Applied a follow-up runtime patch; manual re-test is still required before D08 can close.
+- `2026-03-03`: Operator re-test confirmed the first roam fix improved smoothing and `zone -> desktop` fallback, but exposed one remaining step `2` issue: toggling `desktop -> zone` mid-travel could still snap the pet back to the zone edge on the next loop. Applied a second runtime patch so forced roam-mode transitions rebuild a safe zone-entry leg instead of resuming with stale motion state. Manual re-test is still required before D08 can close.
+- `2026-03-03`: Operator completed the full D08 manual visible sweep successfully after the roam follow-up fixes. D08 is now closed as `done`.

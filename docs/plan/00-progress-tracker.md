@@ -21,12 +21,11 @@ Allowed values:
 - D10 is a post-v1 feasibility deliverable and remains doc-only unless explicitly promoted into implementation scope.
 
 ## Current Deliverable
-- Current Deliverable: `08-test-and-acceptance-matrix`
+- Current Deliverable: `10-local-brain-and-personality-feasibility`
 - Current Status: `not_started`
-- Overall Progress: `11/13 roadmap deliverables done` (D01, D02, D02b, D03, D04, D05a, D05, D06, D07, D07b, D07c complete; D08 is next)
+- Overall Progress: `12/13 roadmap deliverables done` (D01, D02, D02b, D03, D04, D05a, D05, D06, D07, D07b, D07c, and D08 complete; D10 is next)
 - Current Gate State:
-  - `Doc Gate`: `not_started`
-  - `Implementation Gate`: `not_started`
+  - `Research Gate`: `not_started`
 
 ## Deliverable Status Table
 | Deliverable | Status | Notes |
@@ -43,19 +42,80 @@ Allowed values:
 | `07-state-system-extension-guide` | `done` | Doc + implementation gates passed; operator verification confirmed fling `Roll`, timed `Reading`/FreshRSS return to `Idle`, automatic local-media `MusicChill`, and route-aware music props |
 | `07b-dialog-surface-and-minimal-offline-loop` | `done` | Doc + implementation gates passed; operator verification confirmed visible history/bubble output, offline labels, announcement cooldown behavior, and smooth drag/fling during talk feedback |
 | `07c-shell-settings-and-wardrobe-surface` | `done` | Doc + implementation gates passed; operator accepted the tray shell, inventory workflow, diagnostics toggle, custom zone flow, and cross-monitor roam behavior for v1 |
-| `08-test-and-acceptance-matrix` | `not_started` | Current deliverable; final consolidation after D07, D07b, and D07c |
+| `08-test-and-acceptance-matrix` | `done` | Doc + implementation gates passed; automated smoke harness and final operator-visible sweep both passed, closing Phase 3 acceptance coverage |
 | `09-decisions-log` | `in_progress` | Seed decisions added |
 | `10-local-brain-and-personality-feasibility` | `not_started` | Post-v1 doc-only research deliverable; non-blocking to v1 closeout |
 
 ## Next 3 Actions
-1. Start D08 by defining the acceptance-matrix structure and the first executed rows for movement, degraded runtime, memory, integrations, and shell behavior.
-2. Record representative executed evidence for D07, D07b, and now-closed D07c using the existing operator verification history and log snippets.
-3. Define the lightweight repeatable smoke/manual run path that D08 will use for future pass/fail evidence capture.
+1. Start D10 by comparing at least three post-v1 local-brain architecture options against the current external OpenClaw baseline.
+2. Evaluate whether structured traits should become the canonical personality source versus the current Markdown-first memory/identity model.
+3. Draft the D10 recommendation so it can either seed a future implementation branch or explicitly keep local-brain work out of scope.
 
 ## Blockers
-- None currently.
+- None currently; D08 is closed and D10 is a non-blocking research deliverable.
 
 ## Last Session Summary
+- Operator completed the full D08 manual visible sweep successfully:
+  - drag/fling stayed fixed-size and responsive
+  - `zone -> desktop` and mid-travel `desktop -> zone` transitions both behaved correctly
+  - D07 state hotkeys/fallbacks, D07b dialog/bubble/talk feedback, proactive cooldown behavior, and D07c tray/fallback controls all passed
+- D08 is now closed as `done`:
+  - automated acceptance coverage passed (`npm run check:acceptance`, `13/13`)
+  - final operator-visible acceptance sweep passed
+  - Phase 3 acceptance coverage is now complete
+- Advanced the current deliverable to `10-local-brain-and-personality-feasibility`.
+- Verification status after D08 closeout:
+  - `Doc Gate`: `passed`
+  - `Implementation Gate`: `passed`
+  - `Overall`: `done`
+- Shipped outcome note for this session:
+  - visible app/runtime change delivered: D08 is now closed with operator-confirmed acceptance of the acceptance harness, smoother roam movement, correct zone/desktop roam transitions, dialog/proactive output checks, and tray/fallback shell behavior. Current deliverable advances to D10 research.
+- D08 operator re-test narrowed the remaining blocker:
+  - manual `zone -> desktop` fallback after drag/fling escape is now correct
+  - roam movement is noticeably smoother
+  - one remaining step `2` issue persists: toggling `desktop -> zone` while a roam leg is already in flight can still snap the pet back to the zone on the next loop instead of traveling there
+- Applied a second focused roam follow-up fix instead of closing D08:
+  - forced roam-mode sync now cancels stale in-flight roam legs
+  - stale queued roam destinations are cleared before the new mode takes over
+  - switching into zone mode from outside the zone now queues a desktop-bounded zone-entry leg even when the toggle happens mid-motion, preventing the next-loop pop back to the zone edge
+- Re-ran `npm run check` successfully after the second roam follow-up patch.
+- Re-ran `npm run check:acceptance` successfully after the second roam follow-up patch (`13/13 automated checks passed`).
+- D08 manual visible sweep step `2` failed in operator testing:
+  - dragging/flinging outside a custom zone could later pull the pet back toward that zone
+  - walk-speed roam motion could become jerky/halting
+  - locomotion direction could stop matching actual desktop movement
+- Applied a focused roam follow-up fix instead of closing D08:
+  - manual drag/fling leaving a custom roam zone now switches roaming back to `desktop`
+  - queued zone-return travel is cleared when that manual override happens
+  - roam travel now keeps subpixel position state so slow walking does not stall on rounded window coordinates
+  - renderer locomotion direction now follows actual movement for `Walk`/`Run` instead of a stale preferred direction
+- Re-ran `npm run check` successfully after the roam follow-up patch.
+- Re-ran `npm run check:acceptance` successfully after the roam follow-up patch (`13/13 automated checks passed`).
+- D08 remains `review`; operator re-test is still required before `done`.
+- Advanced D08 from `not_started` to `review`.
+- Added a dedicated D08 acceptance entry point: `npm run check:acceptance`.
+- Added new deterministic D08 coverage:
+  - `scripts/check-capability-registry.js`
+  - `scripts/check-extension-pack-registry.js`
+  - `scripts/check-runtime-invariants.js`
+- Added `scripts/run-acceptance-matrix.js`, which executes the representative automated subset in-process and writes:
+  - `docs/plan/artifacts/08-acceptance-smoke.md`
+  - `docs/plan/artifacts/08-acceptance-smoke.json`
+- Refactored existing check scripts to export `run()` so the acceptance harness can execute inside the current sandbox without relying on blocked child-process spawning.
+- Rewrote D08 from a requirements placeholder into an actual acceptance package with:
+  - deliverable/failure matrix rows for D02-D08
+  - execution ownership and cadence
+  - automated executed evidence
+  - reused operator-visible evidence links for D02b-D07c
+  - a short repeatable automated/manual run path
+- Ran `npm run check:acceptance` successfully (`13/13 automated checks passed`).
+- Ran `npm run check` successfully after the D08 harness/doc changes.
+- Verification status for D08 after this session:
+  - `Doc Gate`: `passed`
+  - `Implementation Gate`: `passed`
+  - `Overall`: `review`
+- Shipped outcome note for this session:
+  - visible app/runtime change delivered: manual zone escape now drops back to desktop roam, roam window movement keeps subpixel state for smoother walking, locomotion direction follows actual travel, and mid-travel `desktop -> zone` toggles now rebuild a safe zone-entry leg instead of popping to the zone edge on the next loop. D08 still needs operator re-test before closeout.
 - Closed D07c as `done` after operator manual verification and acceptance instead of reopening for more shell polish.
 - D07c `Implementation Gate` moved to `passed`; D07c is now closed with both gates passed.
 - Advanced the current deliverable to `08-test-and-acceptance-matrix` per gating rule.

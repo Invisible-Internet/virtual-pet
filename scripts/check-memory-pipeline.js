@@ -204,7 +204,13 @@ async function run() {
   console.log("[memory-pipeline] checks passed");
 }
 
-run().catch((error) => {
-  console.error(error.message || String(error));
-  process.exit(1);
-});
+if (require.main === module) {
+  run().catch((error) => {
+    console.error(error.message || String(error));
+    process.exit(1);
+  });
+}
+
+module.exports = {
+  run,
+};

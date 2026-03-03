@@ -237,9 +237,15 @@ function run() {
   console.log("[integration-runtime] checks passed");
 }
 
-try {
-  run();
-} catch (error) {
-  console.error(error.message || String(error));
-  process.exit(1);
+if (require.main === module) {
+  try {
+    run();
+  } catch (error) {
+    console.error(error.message || String(error));
+    process.exit(1);
+  }
 }
+
+module.exports = {
+  run,
+};

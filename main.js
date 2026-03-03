@@ -297,6 +297,8 @@ const roamState = {
   speedPxPerSec: 0,
   clip: "Walk",
   direction: null,
+  x: 0,
+  y: 0,
   lastStepMs: 0,
   nextDecisionAtMs: 0,
 };
@@ -825,6 +827,9 @@ function cancelFling(reason = "cancelled") {
       collided: { x: false, y: false },
       impact: { triggered: false, strength: 0 },
     });
+    if (reason === "belowStopSpeed") {
+      maybeExitZoneRoamAfterManualMove("manual_fling_exit_zone");
+    }
   }
 }
 
@@ -2019,6 +2024,39 @@ function isWindowPositionWithinRange(x, y, range) {
   return x >= range.minX && x <= range.maxX && y >= range.minY && y <= range.maxY;
 }
 
+function getActiveZoneRoamWindowRange(snapshot = latestShellState, petBounds = getRoamPetBounds()) {
+  if (!snapshot || snapshot.roaming?.mode !== ROAMING_MODES.zone) return null;
+  const zoneRect = normalizeRoamZoneRect(snapshot.roaming?.zoneRect);
+  if (!zoneRect) return null;
+  return computeRoamWindowRange(zoneRect, petBounds);
+}
+
+function maybeExitZoneRoamAfterManualMove(reason = "manual_zone_escape") {
+  if (!win || win.isDestroyed()) return false;
+
+  const petBounds = getRoamPetBounds();
+  const activeZoneRange = getActiveZoneRoamWindowRange(latestShellState, petBounds);
+  if (!activeZoneRange) return false;
+
+  const [winX, winY] = win.getPosition();
+  if (isWindowPositionWithinRange(winX, winY, activeZoneRange)) {
+    return false;
+  }
+
+  applyRuntimeSettingsPatch(
+    {
+      roaming: {
+        mode: ROAMING_MODES.desktop,
+      },
+    },
+    reason
+  );
+  roamState.queuedDestination = null;
+  cancelRoamMotion();
+  syncShellRoamingState(reason, true);
+  return true;
+}
+
 function chooseRoamDestination(nowMs = Date.now(), options = {}) {
   if (!win || win.isDestroyed()) return null;
   const [currentWinX, currentWinY] = win.getPosition();
@@ -2073,11 +2111,17 @@ function chooseRoamDestination(nowMs = Date.now(), options = {}) {
   return bestCandidate;
 }
 
-function buildZoneEntryDestination(zoneRect) {
+function buildRoamModeEntryDestination(snapshot = latestShellState) {
   if (!win || win.isDestroyed()) return null;
+  if (snapshot?.roaming?.mode !== ROAMING_MODES.zone) return null;
   const display = getWindowDisplay(win, WINDOW_SIZE);
   const desktopBounds = getDesktopRoamLayout().bounds || getClampArea(display);
-  const zoneBounds = getRoamBounds(display, ROAMING_MODES.zone, "custom", zoneRect);
+  const zoneBounds = getRoamBounds(
+    display,
+    ROAMING_MODES.zone,
+    getRoamZoneLabel(snapshot),
+    snapshot?.roaming?.zoneRect || null
+  );
   const petBounds = getRoamPetBounds();
   const range = computeRoamWindowRange(zoneBounds, petBounds);
   const [winX, winY] = win.getPosition();
@@ -2099,6 +2143,7 @@ function buildZoneEntryDestination(zoneRect) {
 function queueRoamDestination(destination, reason = "roam_queue") {
   if (!destination) return false;
   const nowMs = Date.now();
+  const [winX, winY] = win && !win.isDestroyed() ? win.getPosition() : [0, 0];
   roamState.phase = "rest";
   roamState.destination = null;
   roamState.queuedDestination = {
@@ -2117,17 +2162,20 @@ function queueRoamDestination(destination, reason = "roam_queue") {
   roamState.speedPxPerSec = 0;
   roamState.clip = roamState.queuedDestination.preferRun ? "Run" : "Walk";
   roamState.direction = null;
+  roamState.x = winX;
+  roamState.y = winY;
   roamState.lastStepMs = nowMs;
   roamState.nextDecisionAtMs = nowMs + ROAM_ZONE_ENTRY_DELAY_MS;
   return true;
 }
 
-function queueZoneEntryIfOutside(zoneRect, reason = "roam_zone_entry") {
-  return queueRoamDestination(buildZoneEntryDestination(zoneRect), reason);
+function queueRoamModeEntryIfOutside(snapshot = latestShellState, reason = "roam_zone_entry") {
+  return queueRoamDestination(buildRoamModeEntryDestination(snapshot), reason);
 }
 
 function cancelRoamMotion() {
   const nowMs = Date.now();
+  const [winX, winY] = win && !win.isDestroyed() ? win.getPosition() : [0, 0];
   const shouldEmitStop = roamState.phase === "moving" && !dragging && !flingState.active;
   roamState.phase = "idle";
   roamState.destination = null;
@@ -2136,6 +2184,8 @@ function cancelRoamMotion() {
   roamState.speedPxPerSec = 0;
   roamState.clip = roamState.queuedDestination?.preferRun ? "Run" : "Walk";
   roamState.direction = null;
+  roamState.x = winX;
+  roamState.y = winY;
   roamState.lastStepMs = nowMs;
   roamState.nextDecisionAtMs = roamState.queuedDestination ? nowMs + ROAM_ZONE_ENTRY_DELAY_MS : 0;
   if (shouldEmitStop) {
@@ -2167,6 +2217,7 @@ function enterAmbientRestState(reason = "roam_rest", stateId = pickAmbientRestSt
 
 function scheduleRoamDecision(reason = "roam_schedule", delayMs = null, force = false) {
   const nowMs = Date.now();
+  const [winX, winY] = win && !win.isDestroyed() ? win.getPosition() : [0, 0];
   if (!force && roamState.nextDecisionAtMs > nowMs && roamState.phase !== "moving") {
     return latestStateSnapshot;
   }
@@ -2178,6 +2229,8 @@ function scheduleRoamDecision(reason = "roam_schedule", delayMs = null, force = 
   roamState.speedPxPerSec = 0;
   roamState.clip = "Walk";
   roamState.direction = null;
+  roamState.x = winX;
+  roamState.y = winY;
   roamState.lastStepMs = nowMs;
   roamState.nextDecisionAtMs =
     nowMs +
@@ -2247,6 +2300,8 @@ function beginRoamLeg(nowMs = Date.now()) {
   roamState.speedPxPerSec = shouldRun ? ROAM_RUN_SPEED_PX_PER_SEC : ROAM_WALK_SPEED_PX_PER_SEC;
   roamState.clip = shouldRun ? "Run" : "Walk";
   roamState.direction = direction;
+  roamState.x = winX;
+  roamState.y = winY;
   roamState.lastStepMs = nowMs;
   roamState.nextDecisionAtMs = 0;
   return stateRuntime.activateState("Roam", {
@@ -2267,6 +2322,7 @@ function beginRoamLeg(nowMs = Date.now()) {
 
 function finishRoamLeg(reason = "roam_leg_complete", nowMs = Date.now()) {
   const queuedDestination = roamState.queuedDestination ? { ...roamState.queuedDestination } : null;
+  const [winX, winY] = win && !win.isDestroyed() ? win.getPosition() : [0, 0];
   scheduleRoamDecision(reason, randomBetween(ROAM_REST_MIN_MS, ROAM_REST_MAX_MS), true);
   if (queuedDestination) {
     roamState.queuedDestination = queuedDestination;
@@ -2274,6 +2330,8 @@ function finishRoamLeg(reason = "roam_leg_complete", nowMs = Date.now()) {
     roamState.nextDecisionAtMs = nowMs + ROAM_ZONE_ENTRY_DELAY_MS;
   }
   enterAmbientRestState(reason);
+  roamState.x = winX;
+  roamState.y = winY;
   roamState.lastStepMs = nowMs;
   resetMotionSampleFromWindow();
   emitMotionState({
@@ -2319,13 +2377,19 @@ function stepRoam() {
 
   const dtSec = Math.max(0.001, Math.min(0.05, (nowMs - roamState.lastStepMs) / 1000));
   roamState.lastStepMs = nowMs;
+  if (!Number.isFinite(roamState.x) || !Number.isFinite(roamState.y)) {
+    const [winX, winY] = win.getPosition();
+    roamState.x = winX;
+    roamState.y = winY;
+  }
 
-  const [winX, winY] = win.getPosition();
-  const dx = roamState.destination.x - winX;
-  const dy = roamState.destination.y - winY;
+  const dx = roamState.destination.x - roamState.x;
+  const dy = roamState.destination.y - roamState.y;
   const remainingDistance = Math.hypot(dx, dy);
   if (remainingDistance <= ROAM_ARRIVAL_THRESHOLD_PX) {
     applyWindowBounds(roamState.destination.x, roamState.destination.y);
+    roamState.x = roamState.destination.x;
+    roamState.y = roamState.destination.y;
     finishRoamLeg("roam_arrived", nowMs);
     return;
   }
@@ -2347,13 +2411,16 @@ function stepRoam() {
     vx: dx * velocityScale,
     vy: dy * velocityScale,
   };
-  const targetX = winX + moveX;
-  const targetY = winY + moveY;
+  // Keep subpixel roam position so slow walk speeds do not stall on integer window coordinates.
+  const targetX = roamState.x + moveX;
+  const targetY = roamState.y + moveY;
   const clamped = clampWindowPosition(targetX, targetY, roamBounds, petBounds);
-  const collidedX = Math.abs(targetX - clamped.x) > 0.5;
-  const collidedY = Math.abs(targetY - clamped.y) > 0.5;
+  const collidedX = Math.abs(targetX - clamped.x) > 0.001;
+  const collidedY = Math.abs(targetY - clamped.y) > 0.001;
 
   applyWindowBounds(clamped.x, clamped.y);
+  roamState.x = clamped.x;
+  roamState.y = clamped.y;
   emitMotionState({
     velocityOverride,
     collided: {
@@ -2371,6 +2438,8 @@ function stepRoam() {
   }
   if (remainingDistance - stepDistance <= ROAM_ARRIVAL_THRESHOLD_PX) {
     applyWindowBounds(roamState.destination.x, roamState.destination.y);
+    roamState.x = roamState.destination.x;
+    roamState.y = roamState.destination.y;
     finishRoamLeg("roam_arrived", nowMs);
   }
 }
@@ -2866,7 +2935,7 @@ function commitRoamZoneSelection(rawRect) {
     },
     "shell_commit_roam_zone"
   );
-  queueZoneEntryIfOutside(rect, "shell_commit_roam_zone");
+  queueRoamModeEntryIfOutside(snapshot, "shell_commit_roam_zone");
   syncShellRoamingState("shell_commit_roam_zone", true);
   closeZoneSelectorWindow();
   return {
@@ -2885,16 +2954,28 @@ function syncShellRoamingState(reason = "shell_roam_sync", force = false) {
   if (!isAmbientStateId(currentState)) {
     return latestStateSnapshot;
   }
-  if (roamState.phase === "moving") {
+  const targetStateId = getPreferredRoamStateId(latestShellState);
+  if (force) {
+    cancelRoamMotion();
+    roamState.queuedDestination = null;
+    if (
+      latestShellState.roaming?.mode === ROAMING_MODES.zone &&
+      !queueRoamModeEntryIfOutside(latestShellState, reason)
+    ) {
+      scheduleInitialRoamDecision(reason, true);
+    } else if (latestShellState.roaming?.mode !== ROAMING_MODES.zone) {
+      scheduleInitialRoamDecision(reason, true);
+    }
+    if (currentState === "Roam") {
+      return enterAmbientRestState(reason, targetStateId);
+    }
+    if (currentState !== targetStateId) {
+      return enterAmbientRestState(reason, targetStateId);
+    }
     return latestStateSnapshot;
   }
-  const targetStateId = getPreferredRoamStateId(latestShellState);
-  if (
-    force &&
-    latestShellState.roaming?.mode === ROAMING_MODES.zone &&
-    latestShellState.roaming?.zoneRect
-  ) {
-    queueZoneEntryIfOutside(latestShellState.roaming.zoneRect, reason);
+  if (roamState.phase === "moving") {
+    return latestStateSnapshot;
   }
   if (roamState.queuedDestination) {
     roamState.phase = "rest";
@@ -4960,6 +5041,7 @@ ipcMain.on("pet:endDrag", () => {
     emitDiagnostics(payload);
   }
 
+  maybeExitZoneRoamAfterManualMove("manual_drag_exit_zone");
   maybeStartFlingFromSamples();
   if (!flingState.active) {
     emitMotionState({

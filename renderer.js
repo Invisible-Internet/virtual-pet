@@ -1062,7 +1062,8 @@ function getSpriteInputState() {
     motionVY,
     motionSpeed,
     preferredState: preferBehaviorVisual ? behaviorVisual?.clip || "" : "",
-    preferredDirection: preferBehaviorVisual ? behaviorVisual?.direction || "" : "",
+    preferredDirection:
+      preferBehaviorVisual && !behaviorLocomotionClip ? behaviorVisual?.direction || "" : "",
     preservePreferredPhase: preferBehaviorVisual && Boolean(latestStateSnapshot?.phase),
   };
 }

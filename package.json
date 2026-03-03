@@ -9,6 +9,7 @@
     "check:contracts": "node scripts/check-contract-router.js && node scripts/check-dialog-runtime.js && node scripts/check-openclaw-agent-probe.js && node scripts/check-openclaw-bridge.js && node scripts/check-memory-pipeline.js && node scripts/check-state-runtime.js && node scripts/check-settings-runtime.js && node scripts/check-integration-runtime.js && node scripts/check-windows-media-sensor.js",
     "check:layout": "node scripts/check-layout.js",
     "check:assets": "node scripts/check-assets.js",
+    "check:acceptance": "node scripts/run-acceptance-matrix.js",
     "check:workspace": "node scripts/check-workspace-connectivity.js",
     "bootstrap:openclaw-workspace": "node scripts/check-workspace-connectivity.js --bootstrap-openclaw",
     "bootstrap:obsidian-vault": "node scripts/check-workspace-connectivity.js --bootstrap-obsidian",

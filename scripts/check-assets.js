@@ -155,4 +155,15 @@ function main() {
   console.log("[assets] checks passed");
 }
 
-main();
+if (require.main === module) {
+  try {
+    main();
+  } catch (error) {
+    console.error(error.message || String(error));
+    process.exit(1);
+  }
+}
+
+module.exports = {
+  run: main,
+};

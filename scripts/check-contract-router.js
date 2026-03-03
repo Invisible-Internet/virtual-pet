@@ -438,9 +438,15 @@ function run() {
   console.log("[contracts] router checks passed");
 }
 
-try {
-  run();
-} catch (error) {
-  console.error(error.message);
-  process.exit(1);
+if (require.main === module) {
+  try {
+    run();
+  } catch (error) {
+    console.error(error.message);
+    process.exit(1);
+  }
 }
+
+module.exports = {
+  run,
+};
