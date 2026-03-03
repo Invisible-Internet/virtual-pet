@@ -4,12 +4,16 @@ Related:
 - Workflow: [`00-development-workflow.md`](./00-development-workflow.md)
 - Progress Tracker: [`00-progress-tracker.md`](./00-progress-tracker.md)
 - Decisions Log: [`09-decisions-log.md`](./09-decisions-log.md)
+- Post-v1 Family Rough-In: [`11-15-post-v1-roadmap-rough-in.md`](./11-15-post-v1-roadmap-rough-in.md)
 
 ## Current State
 - D01-D10 are complete historical v1 records.
 - The v1 roadmap is closed.
 - No post-v1 deliverable is active.
 - The next real feature slice will start at `11a`.
+- The next detailed planning target is `11a-openclaw-memory-observability-surface`.
+- Post-v1 families `11` through `15` are roughed in here:
+  - [`11-15-post-v1-roadmap-rough-in.md`](./11-15-post-v1-roadmap-rough-in.md)
 - Future work should be created through the post-v1 workflow and deliverable template:
   - [`00-development-workflow.md`](./00-development-workflow.md)
   - [`templates/deliverable-template.md`](./templates/deliverable-template.md)
@@ -25,11 +29,27 @@ Related:
 
 ### Naming
 - Use family-plus-slice naming:
-  - `11a-openclaw-obsidian-provider-observability-surface`
-  - `11b-provider-repair-actions`
-  - `11c-persona-aware-offline-dialog`
+  - `11a-openclaw-memory-observability-surface`
+  - `12a-real-openclaw-dialog-parity`
+  - `13a-offline-identity-and-recent-recall`
 - Integer = feature family
 - Letter suffix = smallest showcase-first slice
+
+## Post-v1 Families 11-15 Rough-In
+The agreed post-v1 family order is:
+1. `11` Observability / Setup / Provenance
+2. `12` Conversation / Bridge
+3. `13` Memory / Persona Continuity
+4. `14` Embodiment / Autonomy
+5. `15` Extension Showcase
+
+This family rough-in is preserved in:
+- [`11-15-post-v1-roadmap-rough-in.md`](./11-15-post-v1-roadmap-rough-in.md)
+
+Current planning guidance:
+- `11` is the next family to detail fully.
+- `11a-openclaw-memory-observability-surface` is the next planning target.
+- `12` through `15` remain rough placeholders until dedicated planning sessions lock their slice-level specs.
 
 ### Status Schema
 - `queued`

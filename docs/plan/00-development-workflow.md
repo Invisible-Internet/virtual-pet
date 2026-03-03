@@ -39,9 +39,9 @@ This workflow is not intended to retrofit the historical v1 deliverable files.
 
 ## Naming Rules
 Future deliverables use a family-plus-slice format:
-- `11a-openclaw-obsidian-provider-observability-surface`
-- `11b-provider-repair-actions`
-- `11c-persona-aware-offline-dialog`
+- `11a-openclaw-memory-observability-surface`
+- `12a-real-openclaw-dialog-parity`
+- `13a-offline-identity-and-recent-recall`
 
 Rules:
 - Integer = feature family
@@ -177,7 +177,7 @@ Instead:
 
 ## Example Walkthrough
 Hypothetical slice:
-- `11a-openclaw-obsidian-provider-observability-surface`
+- `11a-openclaw-memory-observability-surface`
 
 Good showcase promise:
 - "User can open one visible diagnostics surface and immediately see OpenClaw status, model/provider status, Obsidian status, and active fallback mode."

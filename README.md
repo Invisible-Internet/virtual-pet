@@ -4,6 +4,7 @@
 
 ## Current Project State
 - The v1 roadmap is complete through D10.
+- The post-v1 family roadmap is roughed in through families `11`-`15`.
 - The shipped app already includes:
   - fixed-size drag/fling desktop movement
   - roaming and user-defined roam zones
@@ -16,6 +17,7 @@
   - Spotify, FreshRSS, and local media sensing slices
   - acceptance coverage with automated smoke checks plus operator-visible evidence
 - There is currently no active post-v1 deliverable. Future work starts through the post-v1 workflow in `docs/plan`.
+- The next detailed planning target is `11a-openclaw-memory-observability-surface`.
 
 ## Architecture Principles
 - Local deterministic authority stays in control.
@@ -38,6 +40,7 @@
 - Deliverable template: [`docs/plan/templates/deliverable-template.md`](./docs/plan/templates/deliverable-template.md)
 - Tracker: [`docs/plan/00-progress-tracker.md`](./docs/plan/00-progress-tracker.md)
 - Roadmap: [`docs/plan/00-master-roadmap.md`](./docs/plan/00-master-roadmap.md)
+- Post-v1 family rough-in: [`docs/plan/11-15-post-v1-roadmap-rough-in.md`](./docs/plan/11-15-post-v1-roadmap-rough-in.md)
 - Decisions log: [`docs/plan/09-decisions-log.md`](./docs/plan/09-decisions-log.md)
 - v1 tracker archive: [`docs/plan/archive/00-progress-tracker-v1-history.md`](./docs/plan/archive/00-progress-tracker-v1-history.md)
 

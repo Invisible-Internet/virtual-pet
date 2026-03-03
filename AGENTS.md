@@ -92,7 +92,7 @@ This section defines the mandatory startup and handoff protocol for all work aft
 1. Read `AGENTS.md` first.
 2. Read `docs/plan/00-progress-tracker.md`.
 3. If `Current Deliverable` is not `none`, open that deliverable and follow its current status and gates.
-4. If `Current Deliverable` is `none`, read `docs/plan/00-development-workflow.md` and create/spec a new deliverable before coding.
+4. If `Current Deliverable` is `none`, read `docs/plan/00-development-workflow.md`, then consult `docs/plan/11-15-post-v1-roadmap-rough-in.md` before creating/specifying the next deliverable.
 
 ### Post-v1 Status Schema
 - `queued`
@@ -128,6 +128,7 @@ Historical v1 deliverables keep their original status wording and are not retrof
 - Workflow State: `idle`
 - Current Status: `n/a` (no active post-v1 deliverable)
 - Last Completed Deliverable: `D10`
+- Next Detailed Target: `11a-openclaw-memory-observability-surface`
 - Current Gate State:
   - `Spec Gate`: `n/a`
   - `Build Gate`: `n/a`
@@ -135,6 +136,19 @@ Historical v1 deliverables keep their original status wording and are not retrof
 - Historical Note:
   - D01-D10 are complete historical v1 records.
   - Detailed v1 session history lives in `docs/plan/archive/00-progress-tracker-v1-history.md`.
+
+### Post-v1 Roadmap Snapshot
+- Rough-in doc: `docs/plan/11-15-post-v1-roadmap-rough-in.md`
+- Locked family order:
+  - `11` Observability / Setup / Provenance
+  - `12` Conversation / Bridge
+  - `13` Memory / Persona Continuity
+  - `14` Embodiment / Autonomy
+  - `15` Extension Showcase
+- Planning rule:
+  - `11` is the next family to detail fully.
+  - `11a-openclaw-memory-observability-surface` is the next planning target unless the user explicitly reprioritizes.
+  - `12` through `15` remain rough placeholders and must not be treated as spec-passed deliverables yet.
 
 ### Session-End Sync Rule
 - At the end of every working session, update:
