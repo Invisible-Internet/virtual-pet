@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Roam Zone Selector</title>
+    <style>
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        overflow: hidden;
+        background: rgba(5, 10, 16, 0.18);
+        color: #eff6ff;
+        font-family: "Trebuchet MS", "Gill Sans", sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      .zone-root {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        cursor: crosshair;
+      }
+
+      .hud {
+        position: absolute;
+        top: 18px;
+        left: 18px;
+        z-index: 2;
+        max-width: 420px;
+        padding: 14px 16px;
+        border: 1px solid rgba(171, 213, 255, 0.22);
+        border-radius: 18px;
+        background: rgba(8, 14, 22, 0.84);
+        box-shadow: 0 14px 24px rgba(0, 0, 0, 0.28);
+      }
+
+      .eyebrow {
+        margin: 0 0 6px;
+        color: #7dd6ff;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.22em;
+        text-transform: uppercase;
+      }
+
+      h1 {
+        margin: 0 0 6px;
+        font-size: 24px;
+      }
+
+      p {
+        margin: 0;
+        color: #c7d6e8;
+        line-height: 1.45;
+      }
+
+      .hint {
+        margin-top: 10px;
+        color: #9bb0c9;
+        font-size: 13px;
+      }
+
+      .hint[data-tone="warning"] {
+        color: #ffd4a8;
+      }
+
+      .hint[data-tone="ok"] {
+        color: #b6f2c7;
+      }
+
+      .cancel-button {
+        position: absolute;
+        top: 18px;
+        right: 18px;
+        z-index: 2;
+        min-height: 38px;
+        padding: 0 14px;
+        border: 1px solid rgba(171, 213, 255, 0.22);
+        border-radius: 999px;
+        background: rgba(8, 14, 22, 0.84);
+        color: #eff6ff;
+        font: inherit;
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        cursor: pointer;
+      }
+
+      .selection-box,
+      .ghost-box {
+        position: absolute;
+        border-radius: 18px;
+        pointer-events: none;
+      }
+
+      .selection-box {
+        border: 2px solid rgba(125, 214, 255, 0.96);
+        background: rgba(125, 214, 255, 0.12);
+        box-shadow: 0 0 0 9999px rgba(6, 10, 16, 0.12);
+      }
+
+      .ghost-box {
+        border: 1px dashed rgba(255, 244, 179, 0.7);
+        background: rgba(255, 244, 179, 0.06);
+      }
+    </style>
+  </head>
+  <body>
+    <main id="zone-root" class="zone-root">
+      <section class="hud" aria-live="polite">
+        <p class="eyebrow">Roam Zone</p>
+        <h1>Draw A Roam Area</h1>
+        <p>Drag a marquee over the desktop area where the pet should wander. Press <strong>Esc</strong> to cancel.</p>
+        <p id="hint-label" class="hint" data-tone="muted">Drag a box over the desktop area to define the roam zone.</p>
+      </section>
+      <button id="cancel-button" class="cancel-button" type="button">Cancel</button>
+      <div id="ghost-box" class="ghost-box" hidden aria-hidden="true"></div>
+      <div id="selection-box" class="selection-box" hidden aria-hidden="true"></div>
+    </main>
+    <script src="zone-selector-renderer.js"></script>
+  </body>
+</html>

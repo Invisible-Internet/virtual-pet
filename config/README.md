@@ -16,6 +16,20 @@
 - Keep API tokens in environment variables or local override files only.
 - Do not commit auth tokens to tracked settings files.
 
+## Shell Settings
+- `roaming.mode`: `desktop` or `zone`
+- `roaming.zone`: current named zone target for zone roam mode
+- `ui.diagnosticsEnabled`: renderer diagnostics overlay visibility
+- `wardrobe.activeAccessories`: trusted accessory ids such as `headphones`
+- `inventory.quickProps`: trusted quick prop ids such as `poolRing`
+- `dialog.alwaysShowBubble`: keep the speech bubble visible outside the dialog panel
+
+## Runtime Writes
+- Shell/tray actions write to the override layer, not the tracked base config:
+  - dev: `config/settings.local.json`
+  - packaged: `%APPDATA%/virtual-pet/settings.json`
+- Environment variables still override those persisted values at runtime.
+
 ## Manual Commands
 - Connectivity and prerequisite check:
   - `node scripts/check-workspace-connectivity.js`

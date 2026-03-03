@@ -123,15 +123,15 @@ Status schema:
 | `06-integrations-freshrss-spotify` | `done` | `docs/plan/06-integrations-freshrss-spotify.md` |
 | `07-state-system-extension-guide` | `done` | `docs/plan/07-state-system-extension-guide.md` |
 | `07b-dialog-surface-and-minimal-offline-loop` | `done` | `docs/plan/07b-dialog-surface-and-minimal-offline-loop.md` |
-| `07c-shell-settings-and-wardrobe-surface` | `not_started` | `docs/plan/07c-shell-settings-and-wardrobe-surface.md` |
+| `07c-shell-settings-and-wardrobe-surface` | `done` | `docs/plan/07c-shell-settings-and-wardrobe-surface.md` |
 | `08-test-and-acceptance-matrix` | `not_started` | `docs/plan/08-test-and-acceptance-matrix.md` |
 | `09-decisions-log` | `in_progress` | `docs/plan/09-decisions-log.md` |
 | `10-local-brain-and-personality-feasibility` | `not_started` | `docs/plan/10-local-brain-and-personality-feasibility.md` |
 
 ### Current Progress Snapshot
-- Current Deliverable: `07c-shell-settings-and-wardrobe-surface`
+- Current Deliverable: `08-test-and-acceptance-matrix`
 - Current Status: `not_started`
-- Overall Progress: `10/13 roadmap deliverables done` (D01, D02, D02b, D03, D04, D05a, D05, D06, D07, D07b complete; D07c is next)
+- Overall Progress: `11/13 roadmap deliverables done` (D01, D02, D02b, D03, D04, D05a, D05, D06, D07, D07b, D07c complete; D08 is next)
 - Gate Snapshot: `Doc Gate=not_started`, `Implementation Gate=not_started`.
 - Scope Note: roadmap now explicitly tracks roam modes, baseline state set/priority, tray/settings/wardrobe surface, memory/introspection contracts, and visible acceptance tests.
 - Scope Note: roadmap also explicitly tracks conversation UX (chat/voice), speech bubble/dialog fallback, and lip-sync approximation with degraded-mode behavior.
@@ -148,10 +148,11 @@ Status schema:
 - Scope Note: D04 is re-closed as `done` (doc + implementation gates passed) after operator-confirmed degraded-mode drag/fling stability.
 - Scope Note: D06 is closed as `done` after operator-confirmed Spotify/FreshRSS healthy paths, `track_rating` writes, and deterministic Spotify unavailable fallback.
 - Scope Note: D07 is now closed as `done` after operator-confirmed local-media `MusicChill`, temporary `Reading`/FreshRSS return-to-idle behavior, route-aware props, and preserved fling `Roll`.
+- Scope Note: D07c is now closed as `done` after operator-confirmed tray shell, inventory workflow, diagnostics toggle, custom zone flow, and acceptable cross-monitor roam behavior; remaining polish can be revisited later.
 - Scope Note: Phase 3 is now split across D07 (state runtime), D07b (dialog surface + minimal offline loop), and D07c (shell/settings/wardrobe surface).
 - Scope Note: v1 now explicitly commits to a minimal offline embodiment loop while deferring deeper personality/local-model work to D10 feasibility research.
 - Scope Note: D10 is a post-v1, doc-only research deliverable; external OpenClaw remains the current product baseline.
-- Shipped Outcome (This Session): visible app/runtime change delivered and verified: D07b is now closed with a visible dialog surface, deterministic offline fallback replies, shared response/announcement bubble history, announcement cooldown behavior, and smooth drag/fling during talk feedback. Current deliverable advances to D07c.
+- Shipped Outcome (This Session): visible app/runtime change delivered: D07c is now closed with a working tray/inventory shell surface, persisted shell toggles, separate prop windows, custom roam zones, and acceptable cross-monitor desktop roaming for v1. Current deliverable advances to D08 for acceptance-matrix consolidation.
 
 ### Gating Rule
 - Do not advance to the next deliverable until the current deliverable is marked `done`, its verification gate is explicitly marked passed, and its implementation slice is explicitly marked passed in its file and mirrored in `docs/plan/00-progress-tracker.md`.

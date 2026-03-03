@@ -3,7 +3,10 @@
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
-const { loadRuntimeSettings } = require("../settings-runtime");
+const {
+  loadRuntimeSettings,
+  persistRuntimeSettingsPatch,
+} = require("../settings-runtime");
 
 function assert(condition, message) {
   if (!condition) {
@@ -76,6 +79,23 @@ async function testLayeredPrecedenceAndEnvOverrides() {
       openClawWorkspaceRoot: null,
       obsidianVaultRoot: null,
     },
+    roaming: {
+      mode: "desktop",
+      zone: "desk-center",
+      zoneRect: null,
+    },
+    ui: {
+      diagnosticsEnabled: false,
+    },
+    wardrobe: {
+      activeAccessories: [],
+    },
+    inventory: {
+      quickProps: [],
+    },
+    dialog: {
+      alwaysShowBubble: true,
+    },
   };
   const localSettings = {
     integrations: {
@@ -100,6 +120,28 @@ async function testLayeredPrecedenceAndEnvOverrides() {
       baseUrl: "http://localhost:19999/bridge/dialog",
       timeoutMs: 1500,
     },
+    roaming: {
+      mode: "zone",
+      zone: "desk-left",
+      zoneRect: {
+        x: 120,
+        y: 140,
+        width: 640,
+        height: 420,
+      },
+    },
+    ui: {
+      diagnosticsEnabled: true,
+    },
+    wardrobe: {
+      activeAccessories: ["headphones"],
+    },
+    inventory: {
+      quickProps: ["poolRing"],
+    },
+    dialog: {
+      alwaysShowBubble: false,
+    },
   };
   await writeJson(path.join(root, "config", "settings.json"), baseSettings);
   await writeJson(path.join(root, "config", "settings.local.json"), localSettings);
@@ -119,6 +161,12 @@ async function testLayeredPrecedenceAndEnvOverrides() {
       PET_SPOTIFY_BACKGROUND_ENRICHMENT: "0",
       PET_LOCAL_MEDIA_ENABLED: "0",
       PET_LOCAL_MEDIA_TIMEOUT_MS: "900",
+      PET_ROAMING_MODE: "desktop",
+      PET_ROAMING_ZONE: "desk-right",
+      PET_UI_DIAGNOSTICS_ENABLED: "0",
+      PET_WARDROBE_ACCESSORIES: "headphones",
+      PET_INVENTORY_QUICK_PROPS: "poolRing",
+      PET_DIALOG_ALWAYS_SHOW_BUBBLE: "1",
     },
   });
 
@@ -136,6 +184,28 @@ async function testLayeredPrecedenceAndEnvOverrides() {
   assert(loaded.settings.sensors.media.enabled === false, "env should override local media enabled");
   assert(loaded.settings.sensors.media.pollIntervalMs === 4000, "local file should override media cadence");
   assert(loaded.settings.sensors.media.probeTimeoutMs === 900, "env should override media timeout");
+  assert(loaded.settings.roaming.mode === "desktop", "env should override roaming.mode");
+  assert(loaded.settings.roaming.zone === "desk-right", "env should override roaming.zone");
+  assert(
+    loaded.settings.roaming.zoneRect &&
+      loaded.settings.roaming.zoneRect.width === 640 &&
+      loaded.settings.roaming.zoneRect.height === 420,
+    "local file should preserve roaming.zoneRect when env does not override it"
+  );
+  assert(loaded.settings.ui.diagnosticsEnabled === false, "env should override ui.diagnosticsEnabled");
+  assert(
+    Array.isArray(loaded.settings.wardrobe.activeAccessories) &&
+      loaded.settings.wardrobe.activeAccessories.length === 1 &&
+      loaded.settings.wardrobe.activeAccessories[0] === "headphones",
+    "wardrobe.activeAccessories should normalize the supported accessory list"
+  );
+  assert(
+    Array.isArray(loaded.settings.inventory.quickProps) &&
+      loaded.settings.inventory.quickProps.length === 1 &&
+      loaded.settings.inventory.quickProps[0] === "poolRing",
+    "inventory.quickProps should normalize the supported quick props"
+  );
+  assert(loaded.settings.dialog.alwaysShowBubble === true, "env should override dialog.alwaysShowBubble");
   assert(loaded.settings.openclaw.transport === "http", "transport should resolve to HTTP");
   assert(loaded.settings.openclaw.baseUrl === "https://remote.example.com/bridge/dialog", "env baseUrl should win");
   assert(loaded.settings.openclaw.agentId === "session-main", "env agentId should win");
@@ -151,6 +221,11 @@ async function testLayeredPrecedenceAndEnvOverrides() {
     "env source map should mark spotify background enrichment"
   );
   assert(loaded.sourceMap["sensors.media.enabled"] === "env", "env source map should mark local media enabled");
+  assert(loaded.sourceMap["roaming.mode"] === "env", "env source map should mark roaming.mode");
+  assert(
+    loaded.sourceMap["ui.diagnosticsEnabled"] === "env",
+    "env source map should mark ui.diagnosticsEnabled"
+  );
   assert(loaded.sourceMap["openclaw.agentId"] === "env", "env source map should mark openclaw.agentId");
   assert(loaded.sourceMap["openclaw.baseUrl"] === "env", "env source map should mark openclaw.baseUrl");
 }
@@ -215,10 +290,82 @@ async function testPolicyWarnings() {
   );
 }
 
+async function testPersistRuntimeSettingsPatch() {
+  const root = await makeTempProjectRoot("persist");
+  await writeJson(path.join(root, "config", "settings.json"), {
+    ui: {
+      diagnosticsEnabled: false,
+    },
+    dialog: {
+      alwaysShowBubble: true,
+    },
+  });
+
+  const persisted = persistRuntimeSettingsPatch({
+    projectRoot: root,
+    patch: {
+      roaming: {
+        mode: "zone",
+        zone: "desk-left",
+        zoneRect: {
+          x: 220,
+          y: 180,
+          width: 700,
+          height: 460,
+        },
+      },
+      ui: {
+        diagnosticsEnabled: true,
+      },
+      wardrobe: {
+        activeAccessories: ["headphones"],
+      },
+      inventory: {
+        quickProps: ["poolRing"],
+      },
+      dialog: {
+        alwaysShowBubble: false,
+      },
+    },
+  });
+
+  assert(
+    persisted.overridePath.endsWith(path.join("config", "settings.local.json")),
+    "persisted override path should target config/settings.local.json in dev mode"
+  );
+
+  const loaded = loadRuntimeSettings({
+    projectRoot: root,
+    env: {},
+  });
+  assert(loaded.settings.roaming.mode === "zone", "persisted roaming.mode should load back");
+  assert(loaded.settings.roaming.zone === "desk-left", "persisted roaming.zone should load back");
+  assert(
+    loaded.settings.roaming.zoneRect &&
+      loaded.settings.roaming.zoneRect.x === 220 &&
+      loaded.settings.roaming.zoneRect.width === 700,
+    "persisted roaming.zoneRect should load back"
+  );
+  assert(loaded.settings.ui.diagnosticsEnabled === true, "persisted diagnostics setting should load back");
+  assert(
+    loaded.settings.dialog.alwaysShowBubble === false,
+    "persisted dialog bubble setting should load back"
+  );
+  assert(
+    loaded.settings.wardrobe.activeAccessories.includes("headphones"),
+    "persisted active accessory should load back"
+  );
+  assert(
+    loaded.settings.inventory.quickProps.includes("poolRing"),
+    "persisted quick prop should load back"
+  );
+}
+
 async function run() {
   await testLayeredPrecedenceAndEnvOverrides();
   await testInvalidLocalJsonHandled();
   await testPolicyWarnings();
+  await testPersistRuntimeSettingsPatch();
   console.log("[settings-runtime] checks passed");
 }
 

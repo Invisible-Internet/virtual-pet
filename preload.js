@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld("petAPI", {
   getMemorySnapshot: () => ipcRenderer.invoke("pet:getMemorySnapshot"),
   getStateSnapshot: () => ipcRenderer.invoke("pet:getStateSnapshot"),
   getDialogHistory: () => ipcRenderer.invoke("pet:getDialogHistory"),
+  getShellState: () => ipcRenderer.invoke("pet:getShellState"),
   triggerBehaviorState: (stateId, options = {}) =>
     ipcRenderer.invoke("pet:triggerBehaviorState", {
       stateId,
@@ -21,6 +22,7 @@ contextBridge.exposeInMainWorld("petAPI", {
   simulateStateFallback: () => ipcRenderer.invoke("pet:simulateStateFallback"),
   sendUserMessage: (text) => ipcRenderer.invoke("pet:sendUserMessage", { text }),
   runUserCommand: (command) => ipcRenderer.invoke("pet:runUserCommand", { command }),
+  runShellAction: (actionId) => ipcRenderer.invoke("pet:runShellAction", { actionId }),
   probeLocalMedia: () => ipcRenderer.invoke("pet:probeLocalMedia"),
   probeSpotifyIntegration: () => ipcRenderer.invoke("pet:probeSpotifyIntegration"),
   probeFreshRssIntegration: () => ipcRenderer.invoke("pet:probeFreshRssIntegration"),
@@ -161,6 +163,18 @@ contextBridge.exposeInMainWorld("petAPI", {
 
     return () => {
       ipcRenderer.removeListener("pet:state", listener);
+    };
+  },
+  onShellState: (callback) => {
+    if (typeof callback !== "function") {
+      return () => {};
+    }
+
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on("pet:shell-state", listener);
+
+    return () => {
+      ipcRenderer.removeListener("pet:shell-state", listener);
     };
   },
   onDialogMessage: (callback) => {

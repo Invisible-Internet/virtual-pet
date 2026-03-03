@@ -21,9 +21,9 @@ Allowed values:
 - D10 is a post-v1 feasibility deliverable and remains doc-only unless explicitly promoted into implementation scope.
 
 ## Current Deliverable
-- Current Deliverable: `07c-shell-settings-and-wardrobe-surface`
+- Current Deliverable: `08-test-and-acceptance-matrix`
 - Current Status: `not_started`
-- Overall Progress: `10/13 roadmap deliverables done` (D01, D02, D02b, D03, D04, D05a, D05, D06, D07, D07b complete; D07c is next)
+- Overall Progress: `11/13 roadmap deliverables done` (D01, D02, D02b, D03, D04, D05a, D05, D06, D07, D07b, D07c complete; D08 is next)
 - Current Gate State:
   - `Doc Gate`: `not_started`
   - `Implementation Gate`: `not_started`
@@ -42,20 +42,79 @@ Allowed values:
 | `06-integrations-freshrss-spotify` | `done` | Doc + implementation gates passed; operator verification confirmed FreshRSS/Spotify healthy paths, `track_rating` writes, and deterministic Spotify unavailable fallback |
 | `07-state-system-extension-guide` | `done` | Doc + implementation gates passed; operator verification confirmed fling `Roll`, timed `Reading`/FreshRSS return to `Idle`, automatic local-media `MusicChill`, and route-aware music props |
 | `07b-dialog-surface-and-minimal-offline-loop` | `done` | Doc + implementation gates passed; operator verification confirmed visible history/bubble output, offline labels, announcement cooldown behavior, and smooth drag/fling during talk feedback |
-| `07c-shell-settings-and-wardrobe-surface` | `not_started` | Current deliverable; covers tray/menu settings, roam controls, diagnostics toggle, and first wardrobe slice |
-| `08-test-and-acceptance-matrix` | `not_started` | Final consolidation after D07, D07b, and D07c |
+| `07c-shell-settings-and-wardrobe-surface` | `done` | Doc + implementation gates passed; operator accepted the tray shell, inventory workflow, diagnostics toggle, custom zone flow, and cross-monitor roam behavior for v1 |
+| `08-test-and-acceptance-matrix` | `not_started` | Current deliverable; final consolidation after D07, D07b, and D07c |
 | `09-decisions-log` | `in_progress` | Seed decisions added |
 | `10-local-brain-and-personality-feasibility` | `not_started` | Post-v1 doc-only research deliverable; non-blocking to v1 closeout |
 
 ## Next 3 Actions
-1. Start D07c by wiring the first tray/dev-fallback shell controls for roam mode, diagnostics visibility, and one wardrobe toggle.
-2. Extend the settings stack with persisted shell keys for roam mode, diagnostics visibility, and dialog bubble defaults.
-3. Add one visible accessory or trusted prop control path, then define the first D07c manual verification steps.
+1. Start D08 by defining the acceptance-matrix structure and the first executed rows for movement, degraded runtime, memory, integrations, and shell behavior.
+2. Record representative executed evidence for D07, D07b, and now-closed D07c using the existing operator verification history and log snippets.
+3. Define the lightweight repeatable smoke/manual run path that D08 will use for future pass/fail evidence capture.
 
 ## Blockers
 - None currently.
 
 ## Last Session Summary
+- Closed D07c as `done` after operator manual verification and acceptance instead of reopening for more shell polish.
+- D07c `Implementation Gate` moved to `passed`; D07c is now closed with both gates passed.
+- Advanced the current deliverable to `08-test-and-acceptance-matrix` per gating rule.
+- Operator-confirmed D07c acceptance covered the tray shell, inventory resize/scroll behavior, pool-ring return flow, diagnostics toggle, custom roam-zone flow, and acceptable cross-monitor roam/facing/run behavior.
+- Shipped outcome note for this session:
+  - visible app/runtime change delivered: D07c is now closed with a working tray/inventory shell surface, persisted shell toggles, separate prop windows, custom roam zones, and acceptable cross-monitor desktop roaming for v1. Further polish is explicitly deferred.
+- Corrected D07c again after another operator feedback pass instead of advancing the deliverable.
+- Refined D07c desktop roaming again after operator feedback so autonomous travel now uses a virtual multi-monitor roam envelope, allowing one roam leg to cross monitor seams without stopping at the edge and popping to a later position.
+- Kept desktop roam endpoints anchored to real display work areas while reusing the wider virtual-desktop travel bounds, so zone-entry travel can also run across monitors instead of snapping once it reaches a seam.
+- Added an explicit diagonal-aware roam-facing override so `Roam` clip direction tracks the actual movement leg instead of falling back to a near-cardinal sprite choice.
+- Increased `Run` travel speed relative to `Walk` so long roam legs no longer look like the sprite is running in place.
+- Tightened the roam controller so autonomous legs use stable pet bounds during planning/execution, queued zone-entry travel can bring the pet into a newly drawn marquee area, and shell roam sync no longer interrupts an active movement leg.
+- Fixed a follow-up D07c main-process crash where roam planning normalized static pet bounds without a timestamp, producing a null clamp payload and an uncaught exception during roam-range calculation.
+- Fixed a second roam execution bug where fractional step positions were falsely treated as clamp collisions, causing `Roam` to collapse immediately back into `WatchMode` / `Idle` with no visible travel.
+- Corrected custom-zone entry so the pet can travel across the desktop into the marquee instead of snapping to the nearest in-zone clamp point on the first step.
+- Simplified renderer-visible bounds reporting to the stable character-sized box so the diagnostics hitbox no longer resizes with each sprite frame.
+- Updated the inventory chrome so the outer window can be transparent, the drag/header area is visually distinct, the extra `Shell Surface` label is gone, and the close control is now a compact `X`.
+- Flattened the inventory shell further by removing the title-bar badges, removing the bottom helper bar, and letting the curved panel fill the full window area without the surrounding padded shadow.
+- Ran `npm run check` successfully after the latest D07c correction pass.
+- Verification status for D07c after this session:
+  - `Doc Gate`: `passed`
+  - `Implementation Gate`: `in_progress`
+  - manual in-app verification is still pending for real roam travel, zone-entry travel, inventory chrome, and preserved drag/fling behavior
+- Shipped outcome note for this session:
+  - visible app/runtime change delivered: D07c now keeps roam travel continuous across monitor seams, publishes diagonal-aware roam-facing, runs noticeably faster on long legs, still enters newly drawn roam zones by travelling into them, uses a stable character-sized diagnostics bounds box, and presents the inventory popup as a flatter full-window shell with no badge row or footer bar.
+- Corrected D07c after a second operator feedback pass instead of advancing the deliverable.
+- Implemented the third D07c runtime slice:
+  - replaced constant-velocity bounce roaming with destination-based legs that choose `Walk` or `Run`, travel smoothly to a point, then idle/watch before deciding again
+  - updated renderer locomotion input so sprite-sheet direction follows actual autonomous motion instead of keyboard-only input
+  - added persisted `roaming.zoneRect` support plus a transparent marquee zone-selector window for custom zone drawing
+  - made the inventory window scrollable and resizable, and split it into roaming, accessories, props, costumes, and snacks sections
+  - added a desktop-side pool-ring return control so placed props can be stowed without reopening inventory
+  - enlarged and re-laid out the pool-ring prop window to prevent the visual from clipping
+  - renamed the tray bubble toggle to `Pin Latest Speech Bubble` for clearer operator intent
+- Added automated settings coverage for persisted custom roam rectangles and syntax coverage for the new zone-selector preload/renderer files.
+- Ran `npm run check` successfully after the D07c correction pass (`check:syntax`, `check:contracts`, `check:layout`, `check:assets` all passed).
+- Verification status for D07c after this session:
+  - `Doc Gate`: `passed`
+  - `Implementation Gate`: `in_progress`
+  - manual in-app verification is still pending for smooth roam, custom zone drawing, prop return, and inventory resize/scroll behavior
+- Shipped outcome note for this session:
+  - visible app/runtime change delivered: D07c now has destination-based roam legs with rest phases, a marquee-drawn custom zone flow, a scrollable/resizable inventory with category scaffolding, and pool-ring prop windows that can be returned from the desktop.
+- Reworked D07c after operator manual feedback instead of advancing the deliverable.
+- Implemented the second D07c runtime slice:
+  - kept the persisted shell settings keys for `roaming.mode`, `roaming.zone`, `ui.diagnosticsEnabled`, `wardrobe.activeAccessories`, `inventory.quickProps`, and `dialog.alwaysShowBubble`
+  - switched the tray surface to a visible PNG-backed icon plus shell-level actions (`Inventory...`, roam, diagnostics, bubble, quit)
+  - added an inventory popup GUI with icon-driven wardrobe and prop controls
+  - changed the pool-ring quick prop from an in-renderer overlay into a separate transparent desktop window that can be dragged independently from the pet
+  - started real autonomous desktop roaming for the `Roam` state instead of only changing the animation/state label
+  - fixed `always-show-bubble` so the last pet bubble remains visible until replaced
+  - revised dev fallback hotkeys to `F6`-`F9` around the inventory-first shell path
+- Added automated coverage for the new settings persistence path in `scripts/check-settings-runtime.js`.
+- Ran `npm run check` successfully after the D07c slice (`check:syntax`, `check:contracts`, `check:layout`, `check:assets` all passed).
+- Verification status for D07c after this session:
+  - `Doc Gate`: `passed`
+  - `Implementation Gate`: `in_progress`
+  - manual in-app tray/dev-fallback verification is still pending
+- Shipped outcome note for this session:
+  - visible app/runtime change delivered: D07c now has a visible tray icon, inventory popup GUI, autonomous roaming, a visible headphones wardrobe toggle, separate draggable pool-ring prop windows, and a working always-show-bubble toggle.
 - Closed D07b as `done` after operator manual verification:
   - visible dialog history appeared in the UI
   - offline `source` / `fallbackMode` labels were visible in the dialog surface

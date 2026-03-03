@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Virtual Pet Inventory</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg-top: #172335;
+        --bg-bottom: #0b1018;
+        --panel: rgba(10, 14, 22, 0.84);
+        --line: rgba(171, 213, 255, 0.16);
+        --line-strong: rgba(171, 213, 255, 0.34);
+        --text: #eff6ff;
+        --muted: #9bb0c9;
+        --accent: #7dd6ff;
+        --accent-strong: #b9f1ff;
+        --ok: #b6f2c7;
+        --warning: #ffd4a8;
+        --live: #fff4b3;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        background: transparent;
+        color: var(--text);
+        font-family: "Trebuchet MS", "Gill Sans", sans-serif;
+      }
+
+      body {
+        padding: 0;
+        overflow: hidden;
+      }
+
+      .inventory-shell {
+        display: grid;
+        grid-template-rows: auto 1fr;
+        gap: 10px;
+        width: 100%;
+        height: 100%;
+        padding: 12px;
+        border: 1px solid var(--line);
+        border-radius: 20px;
+        background:
+          radial-gradient(circle at top right, rgba(96, 184, 255, 0.24), transparent 34%),
+          radial-gradient(circle at bottom left, rgba(255, 202, 122, 0.18), transparent 30%),
+          linear-gradient(180deg, rgba(9, 13, 19, 0.9), rgba(13, 18, 27, 0.94));
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+        overflow: hidden;
+      }
+
+      .inventory-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 10px 12px;
+        border: 1px solid var(--line-strong);
+        border-radius: 14px;
+        background: linear-gradient(180deg, rgba(33, 47, 68, 0.92), rgba(17, 27, 39, 0.96));
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+        -webkit-app-region: drag;
+      }
+
+      h1 {
+        margin: 0;
+        font-family: Georgia, "Times New Roman", serif;
+        font-size: 28px;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+      }
+
+      .inventory-scroll {
+        display: grid;
+        gap: 16px;
+        min-height: 0;
+        padding: 0 4px 0 0;
+        overflow: auto;
+      }
+
+      .inventory-scroll::-webkit-scrollbar {
+        width: 10px;
+      }
+
+      .inventory-scroll::-webkit-scrollbar-thumb {
+        border-radius: 999px;
+        background: rgba(171, 213, 255, 0.24);
+      }
+
+      .meta-pill,
+      .chip {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 26px;
+        padding: 0 10px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.04);
+        color: var(--accent-strong);
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .meta-pill[data-tone="warning"] {
+        color: var(--warning);
+      }
+
+      .window-button,
+      .minor-button,
+      .card-button,
+      .card-surface {
+        border: 0;
+        color: inherit;
+        font: inherit;
+        cursor: pointer;
+        -webkit-app-region: no-drag;
+      }
+
+      .window-button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 40px;
+        height: 40px;
+        padding: 0;
+        border-radius: 12px;
+        border: 1px solid var(--line-strong);
+        background: rgba(255, 255, 255, 0.08);
+        color: var(--text);
+        font-size: 18px;
+        font-weight: 700;
+        line-height: 1;
+      }
+
+      .window-button:hover,
+      .minor-button:hover,
+      .card-button:hover,
+      .card-surface:hover {
+        filter: brightness(1.08);
+      }
+
+      .section {
+        display: grid;
+        gap: 10px;
+      }
+
+      .section-header {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 10px;
+      }
+
+      .section-header h2 {
+        margin: 0;
+        font-family: Georgia, "Times New Roman", serif;
+        font-size: 18px;
+      }
+
+      .section-header p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .card-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+        gap: 12px;
+      }
+
+      .inventory-card {
+        display: grid;
+        gap: 10px;
+        min-height: 162px;
+        padding: 14px;
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        background: linear-gradient(180deg, rgba(17, 26, 37, 0.88), rgba(9, 14, 20, 0.96));
+      }
+
+      .inventory-card.is-active,
+      .card-surface.is-active,
+      .card-button.is-active {
+        border-color: rgba(125, 214, 255, 0.5);
+        box-shadow: inset 0 0 0 1px rgba(125, 214, 255, 0.18);
+      }
+
+      .inventory-card.is-planned {
+        background: linear-gradient(180deg, rgba(20, 24, 32, 0.76), rgba(9, 12, 18, 0.9));
+      }
+
+      .card-button,
+      .card-surface {
+        display: grid;
+        gap: 10px;
+        width: 100%;
+        height: 100%;
+        padding: 0;
+        background: transparent;
+        text-align: left;
+      }
+
+      .card-surface.is-dragging {
+        transform: translateY(-2px);
+      }
+
+      .card-top {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .card-icon {
+        border-radius: 18px;
+        border: 1px solid var(--line-strong);
+        background-color: rgba(255, 255, 255, 0.04);
+        background-repeat: no-repeat;
+        background-position: 0 0;
+        background-size: 400% 100%;
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+      }
+
+      .card-icon--headphones {
+        width: 82px;
+        height: 82px;
+        background-image: url("assets/overlays/headphones-sheet.svg");
+      }
+
+      .card-icon--pool-ring {
+        width: 112px;
+        height: 82px;
+        background-image: url("assets/overlays/pool-ring-sheet.svg");
+      }
+
+      .card-icon--zone {
+        width: 82px;
+        height: 82px;
+        background:
+          linear-gradient(135deg, rgba(125, 214, 255, 0.26), rgba(12, 18, 28, 0.1)),
+          linear-gradient(90deg, transparent 49%, rgba(255, 255, 255, 0.18) 50%, transparent 51%),
+          linear-gradient(0deg, transparent 49%, rgba(255, 255, 255, 0.18) 50%, transparent 51%);
+      }
+
+      .card-icon--costume,
+      .card-icon--snack {
+        width: 82px;
+        height: 82px;
+        background:
+          linear-gradient(135deg, rgba(255, 255, 255, 0.08), rgba(12, 18, 28, 0.08)),
+          radial-gradient(circle at 50% 50%, rgba(125, 214, 255, 0.22), transparent 55%);
+      }
+
+      .card-title {
+        display: block;
+        font-size: 20px;
+        font-weight: 700;
+      }
+
+      .card-note {
+        display: block;
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.45;
+      }
+
+      .minor-button {
+        margin-top: auto;
+        min-height: 38px;
+        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.08);
+        color: var(--text);
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+
+      .minor-button:disabled {
+        cursor: default;
+        opacity: 0.45;
+        filter: none;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="inventory-shell">
+      <header class="inventory-header">
+        <div>
+          <h1>Inventory</h1>
+        </div>
+        <button
+          id="close-window"
+          class="window-button"
+          type="button"
+          aria-label="Close inventory"
+          title="Close inventory"
+        >
+          X
+        </button>
+      </header>
+
+      <section class="inventory-scroll">
+        <section class="section">
+          <div class="section-header">
+            <h2>Roaming</h2>
+            <p>Switch between desktop roaming and a drawn custom zone.</p>
+          </div>
+          <div class="card-grid">
+            <article class="inventory-card">
+              <button id="roam-desktop" class="card-button" type="button">
+                <span class="card-top">
+                  <span class="card-icon card-icon--zone" aria-hidden="true"></span>
+                  <span id="roam-desktop-chip" class="chip">Idle</span>
+                </span>
+                <span class="card-title">Desktop Roam</span>
+                <span class="card-note">Let the pet choose a destination anywhere in the active desktop area.</span>
+              </button>
+            </article>
+            <article class="inventory-card">
+              <button id="roam-zone" class="card-button" type="button">
+                <span class="card-top">
+                  <span class="card-icon card-icon--zone" aria-hidden="true"></span>
+                  <span id="roam-zone-chip" class="chip">Zone</span>
+                </span>
+                <span class="card-title">Zone Roam</span>
+                <span class="card-note">Keep roaming inside the current zone. Draw a new one whenever you need.</span>
+              </button>
+              <button id="draw-roam-zone" class="minor-button" type="button">Draw Zone</button>
+            </article>
+          </div>
+        </section>
+
+        <section class="section">
+          <div class="section-header">
+            <h2>Accessories</h2>
+            <p>Click an icon to equip or stow it.</p>
+          </div>
+          <div class="card-grid">
+            <article class="inventory-card">
+              <button id="toggle-headphones" class="card-button" type="button">
+                <span class="card-top">
+                  <span class="card-icon card-icon--headphones" aria-hidden="true"></span>
+                  <span id="headphones-chip" class="chip">Stowed</span>
+                </span>
+                <span class="card-title">Headphones</span>
+                <span class="card-note">Visible accessory toggle for the current wardrobe slice.</span>
+              </button>
+            </article>
+          </div>
+        </section>
+
+        <section class="section">
+          <div class="section-header">
+            <h2>Props</h2>
+            <p>Press, drag, and release to place a prop on the desktop.</p>
+          </div>
+          <div class="card-grid">
+            <article class="inventory-card">
+              <button id="drag-pool-ring" class="card-surface" type="button">
+                <span class="card-top">
+                  <span class="card-icon card-icon--pool-ring" aria-hidden="true"></span>
+                  <span id="pool-ring-chip" class="chip">Stowed</span>
+                </span>
+                <span class="card-title">Pool Ring</span>
+                <span class="card-note">Spawns a separate desktop prop window that can be dragged or returned later.</span>
+              </button>
+              <button id="remove-pool-ring" class="minor-button" type="button">Return To Inventory</button>
+            </article>
+          </div>
+        </section>
+
+        <section class="section">
+          <div class="section-header">
+            <h2>Costumes</h2>
+            <p>Reserved for full-body sprite sets and alternate animation packs.</p>
+          </div>
+          <div class="card-grid">
+            <article class="inventory-card is-planned">
+              <span class="card-top">
+                <span class="card-icon card-icon--costume" aria-hidden="true"></span>
+                <span class="chip">Planned</span>
+              </span>
+              <span class="card-title">Costume Rack</span>
+              <span class="card-note">This section is scaffolded for future eight-direction costume packs and state-specific sheets.</span>
+            </article>
+          </div>
+        </section>
+
+        <section class="section">
+          <div class="section-header">
+            <h2>Snacks</h2>
+            <p>Reserved for placed food items that can be chased, carried, and consumed.</p>
+          </div>
+          <div class="card-grid">
+            <article class="inventory-card is-planned">
+              <span class="card-top">
+                <span class="card-icon card-icon--snack" aria-hidden="true"></span>
+                <span class="chip">Empty</span>
+              </span>
+              <span class="card-title">Snack Shelf</span>
+              <span class="card-note">No snack items are stocked yet, but this section is ready for temporary consumable props.</span>
+            </article>
+          </div>
+        </section>
+      </section>
+    </main>
+    <script src="inventory-renderer.js"></script>
+  </body>
+</html>

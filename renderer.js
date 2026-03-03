@@ -157,6 +157,48 @@ const DIALOG_HISTORY_LIMIT = 24;
 const DIALOG_HISTORY_VISIBLE_COUNT = 8;
 const DIALOG_BUBBLE_VISIBLE_MS = 9000;
 const DIALOG_TALK_FEEDBACK_MS = 2600;
+const SHELL_ACTIONS = Object.freeze({
+  openInventory: "open-inventory",
+  roamDesktop: "roam-desktop",
+  roamZone: "roam-zone",
+  toggleDiagnostics: "toggle-diagnostics",
+  toggleHeadphones: "toggle-headphones",
+  togglePoolRing: "toggle-pool-ring",
+  toggleAlwaysShowBubble: "toggle-always-show-bubble",
+});
+const DEFAULT_SHELL_STATE = Object.freeze({
+  roaming: Object.freeze({
+    mode: "desktop",
+    zone: "desk-center",
+    zoneRect: null,
+  }),
+  ui: Object.freeze({
+    diagnosticsEnabled: false,
+  }),
+  wardrobe: Object.freeze({
+    activeAccessories: Object.freeze([]),
+    hasHeadphones: false,
+  }),
+  inventory: Object.freeze({
+    quickProps: Object.freeze([]),
+    hasPoolRing: false,
+  }),
+  dialog: Object.freeze({
+    alwaysShowBubble: true,
+  }),
+  inventoryUi: Object.freeze({
+    open: false,
+  }),
+  tray: Object.freeze({
+    available: false,
+    supported: true,
+    error: null,
+  }),
+  devFallback: Object.freeze({
+    enabled: true,
+    hotkeys: Object.freeze(["F6", "F7", "F8", "F9"]),
+  }),
+});
 const TAIL_STYLES = Object.freeze({
   ribbon: "ribbon",
   segmented: "segmented",
@@ -248,6 +290,7 @@ let latestMemorySnapshot = null;
 let latestMemoryEvent = null;
 let latestIntegrationEvent = null;
 let latestStateSnapshot = null;
+let latestShellState = { ...DEFAULT_SHELL_STATE };
 let diagnosticsEnabled = false;
 let latestMotion = { ...DEFAULT_MOTION };
 let currentRenderState = "idle";
@@ -334,6 +377,95 @@ function isEditableTarget(target) {
   if (!target || typeof target !== "object") return false;
   const tagName = typeof target.tagName === "string" ? target.tagName.toLowerCase() : "";
   return tagName === "input" || tagName === "textarea" || Boolean(target.isContentEditable);
+}
+
+function normalizeStringArray(value) {
+  const rawValues =
+    Array.isArray(value) ? value : typeof value === "string" ? value.split(",") : [];
+  const normalized = [];
+  const seen = new Set();
+  for (const entry of rawValues) {
+    const trimmed = typeof entry === "string" ? entry.trim() : "";
+    if (!trimmed || seen.has(trimmed)) continue;
+    seen.add(trimmed);
+    normalized.push(trimmed);
+  }
+  return normalized;
+}
+
+function normalizeShellState(payload = {}) {
+  const roaming = payload?.roaming && typeof payload.roaming === "object" ? payload.roaming : {};
+  const ui = payload?.ui && typeof payload.ui === "object" ? payload.ui : {};
+  const wardrobe = payload?.wardrobe && typeof payload.wardrobe === "object" ? payload.wardrobe : {};
+  const inventory = payload?.inventory && typeof payload.inventory === "object" ? payload.inventory : {};
+  const dialog = payload?.dialog && typeof payload.dialog === "object" ? payload.dialog : {};
+  const inventoryUi =
+    payload?.inventoryUi && typeof payload.inventoryUi === "object" ? payload.inventoryUi : {};
+  const tray = payload?.tray && typeof payload.tray === "object" ? payload.tray : {};
+  const devFallback =
+    payload?.devFallback && typeof payload.devFallback === "object" ? payload.devFallback : {};
+  const activeAccessories = normalizeStringArray(wardrobe.activeAccessories);
+  const quickProps = normalizeStringArray(inventory.quickProps);
+  return {
+    roaming: {
+      mode: roaming.mode === "zone" ? "zone" : "desktop",
+      zone:
+        typeof roaming.zone === "string" && roaming.zone.trim().length > 0
+          ? roaming.zone.trim()
+          : DEFAULT_SHELL_STATE.roaming.zone,
+      zoneRect:
+        Number.isFinite(Number(roaming.zoneRect?.x)) &&
+        Number.isFinite(Number(roaming.zoneRect?.y)) &&
+        Number.isFinite(Number(roaming.zoneRect?.width)) &&
+        Number.isFinite(Number(roaming.zoneRect?.height))
+          ? {
+              x: Math.round(Number(roaming.zoneRect.x)),
+              y: Math.round(Number(roaming.zoneRect.y)),
+              width: Math.round(Number(roaming.zoneRect.width)),
+              height: Math.round(Number(roaming.zoneRect.height)),
+            }
+          : null,
+    },
+    ui: {
+      diagnosticsEnabled: Boolean(ui.diagnosticsEnabled),
+    },
+    wardrobe: {
+      activeAccessories,
+      hasHeadphones: activeAccessories.includes("headphones"),
+    },
+    inventory: {
+      quickProps,
+      hasPoolRing: quickProps.includes("poolRing"),
+    },
+    dialog: {
+      alwaysShowBubble: dialog.alwaysShowBubble !== false,
+    },
+    inventoryUi: {
+      open: Boolean(inventoryUi.open),
+    },
+    tray: {
+      available: Boolean(tray.available),
+      supported: tray.supported !== false,
+      error: typeof tray.error === "string" && tray.error.trim().length > 0 ? tray.error.trim() : null,
+    },
+    devFallback: {
+      enabled: devFallback.enabled !== false,
+      hotkeys:
+        normalizeStringArray(devFallback.hotkeys).length > 0
+          ? normalizeStringArray(devFallback.hotkeys)
+          : [...DEFAULT_SHELL_STATE.devFallback.hotkeys],
+    },
+  };
+}
+
+function syncShellState(payload) {
+  latestShellState = normalizeShellState(payload);
+  diagnosticsEnabled = Boolean(latestShellState.ui.diagnosticsEnabled);
+  renderDialogBubble();
+}
+
+function shouldAlwaysShowBubble() {
+  return latestShellState?.dialog?.alwaysShowBubble !== false;
 }
 
 function normalizeDialogEntry(payload = {}) {
@@ -446,11 +578,14 @@ function renderDialogHistory() {
 
 function renderDialogBubble(nowMs = Date.now()) {
   if (!dialogBubble || !dialogBubbleMeta || !dialogBubbleText) return;
+  const bubbleIsFresh =
+    activeBubbleMessage &&
+    nowMs - activeBubbleMessage.ts < DIALOG_BUBBLE_VISIBLE_MS;
   const active =
+    (shouldAlwaysShowBubble() || dialogSurfaceOpen || bubbleIsFresh) &&
     activeBubbleMessage &&
     typeof activeBubbleMessage.text === "string" &&
-    activeBubbleMessage.text.length > 0 &&
-    nowMs - activeBubbleMessage.ts < DIALOG_BUBBLE_VISIBLE_MS;
+    activeBubbleMessage.text.length > 0;
 
   dialogBubble.classList.toggle("is-visible", Boolean(active));
   dialogBubble.classList.toggle("is-speaking", Boolean(active && nowMs < talkFeedbackUntilMs));
@@ -608,7 +743,11 @@ async function loadRuntimeConfig() {
 
   try {
     const config = await window.petAPI.getConfig();
-    diagnosticsEnabled = Boolean(config?.diagnosticsEnabled);
+    if (config?.shellState) {
+      syncShellState(config.shellState);
+    } else {
+      diagnosticsEnabled = Boolean(config?.diagnosticsEnabled);
+    }
     if (config?.capabilitySummary || config?.capabilityRuntimeState) {
       latestCapabilitySnapshot = {
         runtimeState: config.capabilityRuntimeState || "unknown",
@@ -844,14 +983,14 @@ function computeVisibleBoundsForFrame(layerTransforms, windowWidth, windowHeight
 function maybeEmitVisibleBounds(visibleBounds, nowMs) {
   if (typeof window.petAPI.setVisibleBounds !== "function") return;
   if (nowMs - lastVisibleBoundsSentMs < VISIBLE_BOUNDS_EMIT_INTERVAL_MS) return;
-  if (!visibleBounds) return;
+  const stableBounds = visibleBounds || getDesignVisualBounds();
 
   const scale = getLayoutScale();
   const nextBounds = {
-    x: Math.round(visibleBounds.x * scale),
-    y: Math.round(visibleBounds.y * scale),
-    width: Math.max(1, Math.round(visibleBounds.width * scale)),
-    height: Math.max(1, Math.round(visibleBounds.height * scale)),
+    x: Math.round(stableBounds.x * scale),
+    y: Math.round(stableBounds.y * scale),
+    width: Math.max(1, Math.round(stableBounds.width * scale)),
+    height: Math.max(1, Math.round(stableBounds.height * scale)),
     tMs: Date.now(),
   };
 
@@ -879,8 +1018,8 @@ function pointInRect(px, py, rect) {
 }
 
 function getSpriteInputState() {
-  const moveX = (movementKeys.right ? 1 : 0) - (movementKeys.left ? 1 : 0);
-  const moveY = (movementKeys.down ? 1 : 0) - (movementKeys.up ? 1 : 0);
+  let moveX = (movementKeys.right ? 1 : 0) - (movementKeys.left ? 1 : 0);
+  let moveY = (movementKeys.down ? 1 : 0) - (movementKeys.up ? 1 : 0);
   const jumpPressed = spriteJumpQueued;
   const behaviorVisual = getBehaviorVisualBinding();
   const preferBehaviorVisual = Boolean(
@@ -892,19 +1031,36 @@ function getSpriteInputState() {
         behaviorVisual?.clip !== "IdleReady"
       )
   );
+  const motionVX = latestMotion.velocity?.vx || 0;
+  const motionVY = latestMotion.velocity?.vy || 0;
+  const motionSpeed = latestMotion.velocity?.speed || 0;
+  const behaviorLocomotionClip =
+    behaviorVisual?.clip === "Walk" || behaviorVisual?.clip === "Run"
+      ? behaviorVisual.clip
+      : "";
+  if (
+    moveX === 0 &&
+    moveY === 0 &&
+    preferBehaviorVisual &&
+    behaviorLocomotionClip &&
+    motionSpeed > 1
+  ) {
+    moveX = motionVX / motionSpeed;
+    moveY = motionVY / motionSpeed;
+  }
   spriteJumpQueued = false;
   return {
     moveX,
     moveY,
-    running: movementKeys.run,
+    running: movementKeys.run || behaviorLocomotionClip === "Run",
     jumpPressed,
     dragging: Boolean(latestMotion.dragging),
     flinging: Boolean(latestMotion.flinging),
     dragVX: latestMotion.velocity?.vx || 0,
     dragVY: latestMotion.velocity?.vy || 0,
-    motionVX: latestMotion.velocity?.vx || 0,
-    motionVY: latestMotion.velocity?.vy || 0,
-    motionSpeed: latestMotion.velocity?.speed || 0,
+    motionVX,
+    motionVY,
+    motionSpeed,
     preferredState: preferBehaviorVisual ? behaviorVisual?.clip || "" : "",
     preferredDirection: preferBehaviorVisual ? behaviorVisual?.direction || "" : "",
     preservePreferredPhase: preferBehaviorVisual && Boolean(latestStateSnapshot?.phase),
@@ -936,6 +1092,33 @@ function onMovementKeyDown(event) {
     closeDialogSurface();
     event.preventDefault();
     return;
+  }
+
+  if (!event.repeat && latestShellState?.devFallback?.enabled) {
+    if (key === "f6") {
+      void runShellAction(SHELL_ACTIONS.openInventory);
+      event.preventDefault();
+      return;
+    }
+    if (key === "f7") {
+      void runShellAction(
+        latestShellState?.roaming?.mode === "zone"
+          ? SHELL_ACTIONS.roamDesktop
+          : SHELL_ACTIONS.roamZone
+      );
+      event.preventDefault();
+      return;
+    }
+    if (key === "f8") {
+      void runShellAction(SHELL_ACTIONS.toggleDiagnostics);
+      event.preventDefault();
+      return;
+    }
+    if (key === "f9") {
+      void runShellAction(SHELL_ACTIONS.toggleAlwaysShowBubble);
+      event.preventDefault();
+      return;
+    }
   }
 
   if (key === "w" || key === "arrowup") movementKeys.up = true;
@@ -1202,6 +1385,23 @@ async function runPetUserCommand(command) {
     );
   } catch (error) {
     console.warn("[contract] user command failed:", error);
+  }
+}
+
+async function runShellAction(actionId) {
+  if (typeof window.petAPI.runShellAction !== "function") return;
+  try {
+    const result = await window.petAPI.runShellAction(actionId);
+    if (!result?.ok) {
+      console.warn("[shell] action failed:", result?.error || "unknown");
+      return;
+    }
+    if (result.shellState && typeof result.shellState === "object") {
+      syncShellState(result.shellState);
+    }
+    console.info(`[shell] action=${actionId}`);
+  } catch (error) {
+    console.warn("[shell] action failed:", error);
   }
 }
 
@@ -2835,6 +3035,13 @@ function drawDebugOverlay(w, h) {
     `dialog: ${dialogSurfaceOpen ? "open" : "closed"} history=${dialogHistory.length} bubble=${
       activeBubbleMessage?.kind || "none"
     }`,
+    `shell: roam=${latestShellState?.roaming?.mode || "desktop"}${
+      latestShellState?.roaming?.mode === "zone" ? `:${latestShellState?.roaming?.zone || "desk-center"}` : ""
+    } diag=${latestShellState?.ui?.diagnosticsEnabled ? "on" : "off"} acc=${
+      latestShellState?.wardrobe?.activeAccessories?.join("+") || "none"
+    } prop=${latestShellState?.inventory?.quickProps?.join("+") || "none"} tray=${
+      latestShellState?.tray?.available ? "ready" : latestShellState?.devFallback?.enabled ? "fallback" : "missing"
+    }`,
     `talk: ${isTalkFeedbackActive() ? "active" : "idle"} source=${activeBubbleMessage?.source || "n/a"} fallback=${activeBubbleMessage?.fallbackMode || "none"}`,
     `memory: ${
       latestMemorySnapshot
@@ -2945,9 +3152,7 @@ function draw() {
     layerTransforms = getSpriteLayerTransforms();
     latestRigState = layerTransforms;
     spriteFrame = updateSpriteFrame(nowMs, dtSec, layerTransforms);
-    latestVisibleBounds = spriteFrame
-      ? computeSpriteVisibleBounds(spriteFrame.transform, spriteFrame.global, w, h)
-      : getDesignVisualBounds();
+    latestVisibleBounds = getDesignVisualBounds();
   } else {
     spriteDragRotation = 0;
     spriteDragRotationVel = 0;
@@ -2955,7 +3160,7 @@ function draw() {
     updateFx(dtSec);
     layerTransforms = getLayerTransforms(nowMs, dtSec);
     latestRigState = layerTransforms;
-    latestVisibleBounds = computeVisibleBoundsForFrame(layerTransforms, w, h);
+    latestVisibleBounds = getDesignVisualBounds();
   }
 
   maybeEmitVisibleBounds(latestVisibleBounds, nowMs);
@@ -2986,6 +3191,7 @@ function draw() {
     }
   }
   drawBehaviorOverlay(ctx, latestStateSnapshot, nowMs);
+  drawShellWardrobeOverlay(ctx);
   drawTalkFeedback(ctx, nowMs);
   ctx.restore();
 
@@ -3143,6 +3349,19 @@ function drawBehaviorOverlay(context, snapshot, nowMs) {
   context.restore();
 }
 
+function drawShellWardrobeOverlay(context) {
+  if (!latestShellState?.wardrobe?.hasHeadphones) return;
+  if (latestStateSnapshot?.visual?.overlay === "headphones") return;
+
+  const bounds = getDesignVisualBounds();
+  const centerX = bounds.x + bounds.width * 0.5;
+  const centerY = bounds.y + bounds.height * 0.5;
+  context.save();
+  context.globalAlpha = 0.96;
+  drawProceduralBehaviorOverlay(context, "headphones", bounds, centerX, centerY);
+  context.restore();
+}
+
 function drawBehaviorStateBadge(context) {
   const snapshot = latestStateSnapshot;
   if (!snapshot) return;
@@ -3239,6 +3458,11 @@ async function init() {
   if (typeof window.petAPI.getStateSnapshot === "function") {
     try {
       latestStateSnapshot = await window.petAPI.getStateSnapshot();
+    } catch {}
+  }
+  if (typeof window.petAPI.getShellState === "function") {
+    try {
+      syncShellState(await window.petAPI.getShellState());
     } catch {}
   }
   await loadDialogHistorySnapshot();
@@ -3340,6 +3564,14 @@ async function init() {
     window.petAPI.onState((payload) => {
       if (!payload || typeof payload !== "object") return;
       latestStateSnapshot = payload;
+      latestDiagnostics = payload;
+    });
+  }
+
+  if (typeof window.petAPI.onShellState === "function") {
+    window.petAPI.onShellState((payload) => {
+      if (!payload || typeof payload !== "object") return;
+      syncShellState(payload);
       latestDiagnostics = payload;
     });
   }

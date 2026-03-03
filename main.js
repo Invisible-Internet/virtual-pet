@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, screen } = require("electron");
+const { app, BrowserWindow, Menu, Tray, ipcMain, nativeImage, screen } = require("electron");
 const fs = require("fs");
 const path = require("path");
 const { CAPABILITY_STATES, createCapabilityRegistry } = require("./capability-registry");
@@ -49,7 +49,12 @@ const {
   createMemoryPipeline,
 } = require("./memory-pipeline");
 const { DEFAULT_STATE_CATALOG_PATH, createStateRuntime } = require("./state-runtime");
-const { loadRuntimeSettings } = require("./settings-runtime");
+const {
+  DEFAULT_ROAMING_ZONE,
+  loadRuntimeSettings,
+  persistRuntimeSettingsPatch,
+  ROAMING_MODES,
+} = require("./settings-runtime");
 const { BASE_LAYOUT, computePetLayout } = require("./pet-layout");
 const {
   normalizePetBounds,
@@ -59,7 +64,7 @@ const {
 } = require("./main-clamp");
 
 // Master diagnostics toggle: controls console logs, file logs, and renderer overlay.
-const DIAGNOSTICS_ENABLED = false;
+let DIAGNOSTICS_ENABLED = false;
 const CLAMP_TO_WORK_AREA = true;
 const DRAG_LOG_SAMPLE_EVERY = 8;
 const MAX_LOG_FILE_BYTES = 5 * 1024 * 1024;
@@ -72,6 +77,47 @@ const MOTION_POSITION_EPSILON = 0.25;
 const MOTION_VELOCITY_EPSILON = 0.5;
 const CHARACTER_ASSETS_ROOT = path.join(__dirname, "assets", "characters");
 const DEFAULT_CHARACTER_ID = "girl";
+const INVENTORY_WINDOW_SIZE = Object.freeze({
+  width: 520,
+  height: 560,
+});
+const INVENTORY_WINDOW_MIN_SIZE = Object.freeze({
+  width: 460,
+  height: 420,
+});
+const PROP_WINDOW_SPECS = Object.freeze({
+  poolRing: Object.freeze({
+    propId: "poolRing",
+    label: "Pool Ring",
+    windowSize: Object.freeze({
+      width: 196,
+      height: 176,
+    }),
+    visualBounds: Object.freeze({
+      x: 20,
+      y: 20,
+      width: 156,
+      height: 112,
+    }),
+  }),
+});
+const TRAY_ICON_PNG_BASE64 =
+  "iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAMcSURBVFhH7VdLaFNBFO3SnZ/3QguCqb6XWPzQotRmpmJDxQ9qRS1+KgWrYiutlhgQA35BURBFCoK6KIIKdSEGxCLSRd2ULupCRCy6iRt1IwR0Ia5GzsQX37t3krwEu/PAWbzMzDl35t75pK7uP2pEJCZbLKc96RHftM8/RTTaMS8Sk32WK8csV/y0XalKMGu58vj8aMcCqlEzIGi58qvBrAxF3nYTKQRO9UIDs7AdMc3Fq6AjZ+uXtzVS7YrAINuVOSZYE0UedUI9SkLPvIL5UtmtmncPFRnr6GF9WBBx0US9GJCzcsu+Zl9aDY1/VBffK8bhiU9qff8VNsbHXMXiROEYBqrFzZvV/tvjzNTEw4+m1ZLWLqYBWo68RT2LwOxN1Q6x9KsvzKgcMzM/jGnBFo5EWxuotwa2Gx0AHrw7wQzCcCD7jmlpOvIa9dawXPmCdhZHLgRET01+VsMvc8ysVNuWM3dMAcxSb135phPOv/SDzz+ohY1rNXtHJwNGpdqQCqoJsh2xyG1P0E7Iod8Ewp7JnhtPQrcZa8ERuwIB4AfaaV1vJiAE7h15pg3OvfkVug1ppNrYbcEADAWYPHGdmdTCbedHWQCWIy4FArCXiQO0Ey3AWomJUG3LFZlAADiraadV248xsVrYtOkQCwATDgSAw4F1cqWuYk8IlY6tRg38RP77Hk4FvutXJJkuij4QAGC6A5A/z7xhZVJF27rUwNO3zBjMzHxXLd0n9U5AQeI3HN9UE6ct9dZAYdDOiB6XD8TjnT3FrbZ6Z7/aevaeOvr4ta78DYNXlR0Xug2BIuDTU9/0HUI1bVfcp94aSIPpMEIOsZQIAqaekYlYAZhj9rg5qRZY9v2I24oOAFGQuG4hjJlhiTtTN/VKYPYIzDuG0V7KHG9G6hlAYRX4jQgiHTsuP2C59xM5Ny974SZkR7AJqFBTKvzEK2hjekQXKS4cfJuqPUC69coBnSsFUQ3ZyRcGhcMJz2suGJZ6EtXMnOJPTYxR4ZDMhsp5GGDrYP+WKtC/FHn976maZ3i1KLwdEink1WPhew5N5wq/AcDTFGocRNoxAAAAAElFTkSuQmCC";
+const ROAM_STEP_INTERVAL_MS = 16;
+const ROAM_INITIAL_DELAY_MIN_MS = 1200;
+const ROAM_INITIAL_DELAY_MAX_MS = 2400;
+const ROAM_REST_MIN_MS = 2200;
+const ROAM_REST_MAX_MS = 6200;
+const ROAM_TARGET_MIN_DISTANCE_PX = 120;
+const ROAM_TARGET_RETRY_COUNT = 10;
+const ROAM_ARRIVAL_THRESHOLD_PX = 3;
+const ROAM_WALK_SPEED_PX_PER_SEC = 88;
+const ROAM_RUN_SPEED_PX_PER_SEC = 224;
+const ROAM_RUN_DISTANCE_THRESHOLD_PX = 360;
+const ROAM_ZONE_ENTRY_DELAY_MS = 140;
+const MIN_ROAM_ZONE_RECT_SIZE = 120;
+const ROAM_ZONE_INSET_RATIO = 0.22;
+const ROAM_DIAGONAL_DIRECTION_RATIO = 0.18;
 const REQUIRED_SPRITE_DIRECTIONS = Object.freeze([
   "Down",
   "DownRight",
@@ -157,6 +203,22 @@ const CAPABILITY_TEST_FLAGS = Object.freeze({
   sensorsFail: process.env.PET_FORCE_SENSORS_FAIL === "1",
   openclawFail: process.env.PET_FORCE_OPENCLAW_FAIL === "1",
 });
+const SHELL_ACTIONS = Object.freeze({
+  openInventory: "open-inventory",
+  roamDesktop: "roam-desktop",
+  roamZone: "roam-zone",
+  selectRoamZone: "select-roam-zone",
+  toggleDiagnostics: "toggle-diagnostics",
+  toggleHeadphones: "toggle-headphones",
+  togglePoolRing: "toggle-pool-ring",
+  toggleAlwaysShowBubble: "toggle-always-show-bubble",
+});
+const SHELL_ACCESSORY_IDS = Object.freeze({
+  headphones: "headphones",
+});
+const SHELL_QUICK_PROP_IDS = Object.freeze({
+  poolRing: "poolRing",
+});
 const EXTENSION_TEST_FLAGS = Object.freeze({
   disableAll: process.env.PET_DISABLE_EXTENSIONS === "1",
 });
@@ -208,6 +270,15 @@ let localMediaProbeInFlight = false;
 let spotifyBackgroundProbeInFlight = false;
 let freshRssBackgroundProbeInFlight = false;
 let lastSpotifyBackgroundProbeAt = 0;
+let shellTray = null;
+let latestShellState = null;
+let shellTraySupported = true;
+let shellTrayError = null;
+let inventoryWin = null;
+let zoneSelectorWin = null;
+let roamTimer = null;
+let appIsQuitting = false;
+const propWindows = new Map();
 
 const flingState = {
   active: false,
@@ -216,6 +287,18 @@ const flingState = {
   lastStepMs: 0,
   x: 0,
   y: 0,
+};
+const roamState = {
+  phase: "idle",
+  destination: null,
+  queuedDestination: null,
+  roamBounds: null,
+  petBounds: null,
+  speedPxPerSec: 0,
+  clip: "Walk",
+  direction: null,
+  lastStepMs: 0,
+  nextDecisionAtMs: 0,
 };
 
 const PET_LAYOUT = computePetLayout(BASE_LAYOUT);
@@ -544,6 +627,34 @@ function emitToRenderer(channel, payload) {
   win.webContents.send(channel, payload);
 }
 
+function emitToWindow(targetWindow, channel, payload) {
+  if (!targetWindow || targetWindow.isDestroyed()) return;
+  targetWindow.webContents.send(channel, payload);
+}
+
+function getWindowCenterPoint(targetWindow, windowSize = null) {
+  if (!targetWindow || targetWindow.isDestroyed()) return { x: 0, y: 0 };
+  const bounds = targetWindow.getContentBounds();
+  const size = windowSize || bounds;
+  return {
+    x: Math.round(bounds.x + size.width * 0.5),
+    y: Math.round(bounds.y + size.height * 0.5),
+  };
+}
+
+function applyFixedContentBounds(targetWindow, size, targetX, targetY) {
+  if (!targetWindow || targetWindow.isDestroyed()) return;
+  targetWindow.setContentBounds(
+    {
+      x: Math.round(targetX),
+      y: Math.round(targetY),
+      width: size.width,
+      height: size.height,
+    },
+    false
+  );
+}
+
 function resetMotionSampleFromWindow() {
   if (!win || win.isDestroyed()) return;
   const [x, y] = win.getPosition();
@@ -650,15 +761,7 @@ function applyWindowBounds(targetX, targetY) {
   }
 
   if (!DIAGNOSTICS_ENABLED) {
-    win.setContentBounds(
-      {
-        x: Math.round(targetX),
-        y: Math.round(targetY),
-        width: WINDOW_SIZE.width,
-        height: WINDOW_SIZE.height,
-      },
-      false
-    );
+    applyFixedContentBounds(win, WINDOW_SIZE, targetX, targetY);
     return {
       windowBefore: null,
       windowAfter: null,
@@ -673,15 +776,7 @@ function applyWindowBounds(targetX, targetY) {
   const sizeCorrected =
     contentBefore.width !== WINDOW_SIZE.width || contentBefore.height !== WINDOW_SIZE.height;
 
-  win.setContentBounds(
-    {
-      x: Math.round(targetX),
-      y: Math.round(targetY),
-      width: WINDOW_SIZE.width,
-      height: WINDOW_SIZE.height,
-    },
-    false
-  );
+  applyFixedContentBounds(win, WINDOW_SIZE, targetX, targetY);
 
   const windowAfter = win.getBounds();
   const contentAfter = win.getContentBounds();
@@ -1007,6 +1102,12 @@ function emitStateSnapshot(snapshot) {
       force: true,
       trigger: "idle-resume",
     });
+  } else if (
+    previousSnapshot &&
+    previousSnapshot.currentState !== snapshot.currentState &&
+    snapshot.currentState === "Idle"
+  ) {
+    syncShellRoamingState("idle_resume_shell_roam");
   }
 }
 
@@ -1262,13 +1363,7 @@ function initializeCapabilityRegistry() {
     degradedPolicy: {
       fallback: "logOnlyPropWorld",
     },
-    start: () => ({
-      state: CAPABILITY_STATES.degraded,
-      reason: "logOnlyPropWorld",
-      details: {
-        mode: "logOnly",
-      },
-    }),
+    start: () => derivePropWorldCapabilityState(),
   });
 
   const snapshot = capabilityRegistry.getSnapshot();
@@ -1360,6 +1455,17 @@ function deriveExtensionRegistryState(snapshot) {
   };
 }
 
+function derivePropWorldCapabilityState() {
+  return {
+    state: CAPABILITY_STATES.healthy,
+    reason: "trustedQuickPropsActive",
+    details: {
+      mode: "trustedQuickProps",
+      quickProps: Object.values(SHELL_QUICK_PROP_IDS),
+    },
+  };
+}
+
 function refreshExtensionCapabilityStates() {
   const extensionState = deriveExtensionRegistryState(latestExtensionSnapshot);
   updateCapabilityState(
@@ -1387,11 +1493,9 @@ function refreshExtensionCapabilityStates() {
   );
   updateCapabilityState(
     CAPABILITY_IDS.propWorld,
-    CAPABILITY_STATES.degraded,
-    "logOnlyPropWorld",
-    {
-      mode: "logOnly",
-    }
+    derivePropWorldCapabilityState().state,
+    derivePropWorldCapabilityState().reason,
+    derivePropWorldCapabilityState().details
   );
 }
 
@@ -1431,6 +1535,11 @@ function buildRuntimeSettingsSummary() {
   const memory = settings.memory && typeof settings.memory === "object" ? settings.memory : {};
   const openclaw = settings.openclaw && typeof settings.openclaw === "object" ? settings.openclaw : {};
   const paths = settings.paths && typeof settings.paths === "object" ? settings.paths : {};
+  const roaming = settings.roaming && typeof settings.roaming === "object" ? settings.roaming : {};
+  const ui = settings.ui && typeof settings.ui === "object" ? settings.ui : {};
+  const wardrobe = settings.wardrobe && typeof settings.wardrobe === "object" ? settings.wardrobe : {};
+  const inventory = settings.inventory && typeof settings.inventory === "object" ? settings.inventory : {};
+  const dialog = settings.dialog && typeof settings.dialog === "object" ? settings.dialog : {};
   const resolvedPaths =
     runtimeSettingsResolvedPaths && typeof runtimeSettingsResolvedPaths === "object"
       ? runtimeSettingsResolvedPaths
@@ -1507,11 +1616,104 @@ function buildRuntimeSettingsSummary() {
       openClawWorkspaceRoot: paths.openClawWorkspaceRoot || null,
       obsidianVaultRoot: paths.obsidianVaultRoot || null,
     },
+    roaming: {
+      mode: roaming.mode === ROAMING_MODES.zone ? ROAMING_MODES.zone : ROAMING_MODES.desktop,
+      zone:
+        typeof roaming.zone === "string" && roaming.zone.trim().length > 0
+          ? roaming.zone.trim()
+          : DEFAULT_ROAMING_ZONE,
+      zoneRect: normalizeRoamZoneRect(roaming.zoneRect),
+    },
+    ui: {
+      diagnosticsEnabled: Boolean(ui.diagnosticsEnabled),
+    },
+    wardrobe: {
+      activeAccessories: Array.isArray(wardrobe.activeAccessories)
+        ? wardrobe.activeAccessories.filter((entry) => typeof entry === "string" && entry.trim().length > 0)
+        : [],
+    },
+    inventory: {
+      quickProps: Array.isArray(inventory.quickProps)
+        ? inventory.quickProps.filter((entry) => typeof entry === "string" && entry.trim().length > 0)
+        : [],
+    },
+    dialog: {
+      alwaysShowBubble: dialog.alwaysShowBubble !== false,
+    },
     resolvedPaths,
   };
 }
 
-function initializeRuntimeSettings() {
+function buildShellStateSnapshot() {
+  const settings = buildRuntimeSettingsSummary();
+  const accessories = settings.wardrobe?.activeAccessories || [];
+  const quickProps = settings.inventory?.quickProps || [];
+  const trayAvailable = Boolean(shellTray);
+  return {
+    kind: "shellState",
+    ts: Date.now(),
+    roaming: {
+      mode: settings.roaming?.mode || ROAMING_MODES.desktop,
+      zone: settings.roaming?.zone || DEFAULT_ROAMING_ZONE,
+      zoneRect: normalizeRoamZoneRect(settings.roaming?.zoneRect),
+    },
+    ui: {
+      diagnosticsEnabled: Boolean(settings.ui?.diagnosticsEnabled),
+    },
+    wardrobe: {
+      activeAccessories: [...accessories],
+      hasHeadphones: accessories.includes(SHELL_ACCESSORY_IDS.headphones),
+    },
+    inventory: {
+      quickProps: [...quickProps],
+      hasPoolRing: quickProps.includes(SHELL_QUICK_PROP_IDS.poolRing),
+    },
+    dialog: {
+      alwaysShowBubble: settings.dialog?.alwaysShowBubble !== false,
+    },
+    inventoryUi: {
+      open: Boolean(inventoryWin && !inventoryWin.isDestroyed()),
+    },
+    tray: {
+      available: trayAvailable,
+      supported: shellTraySupported,
+      error: shellTrayError,
+    },
+    devFallback: {
+      enabled: !trayAvailable,
+      hotkeys: ["F6", "F7", "F8", "F9"],
+    },
+  };
+}
+
+function emitShellState(snapshot = buildShellStateSnapshot()) {
+  latestShellState = snapshot;
+  emitToRenderer("pet:shell-state", snapshot);
+  emitToWindow(inventoryWin, "pet:shell-state", snapshot);
+  syncShellQuickPropWindows();
+  return snapshot;
+}
+
+function setDiagnosticsEnabled(nextEnabled, reason = "settings_update") {
+  const previousEnabled = DIAGNOSTICS_ENABLED;
+  DIAGNOSTICS_ENABLED = Boolean(nextEnabled);
+  if (previousEnabled === DIAGNOSTICS_ENABLED) return;
+
+  if (DIAGNOSTICS_ENABLED) {
+    initializeDiagnosticsLog();
+    logDiagnostics("diagnostics-enabled", {
+      kind: "shellDiagnosticsToggle",
+      reason,
+      enabled: true,
+    });
+    return;
+  }
+
+  console.log(`[pet-shell] diagnostics disabled (${reason})`);
+  closeDiagnosticsLog();
+}
+
+function initializeRuntimeSettings(reason = "startup") {
   const loaded = loadRuntimeSettings({
     app,
     projectRoot: __dirname,
@@ -1537,6 +1739,1399 @@ function initializeRuntimeSettings() {
     for (const error of runtimeSettingsValidationErrors) {
       console.warn(error);
     }
+  }
+  setDiagnosticsEnabled(Boolean(runtimeSettings?.ui?.diagnosticsEnabled), reason);
+}
+
+function createShellTrayIcon() {
+  return nativeImage
+    .createFromBuffer(Buffer.from(TRAY_ICON_PNG_BASE64, "base64"))
+    .resize({ width: 16, height: 16, quality: "best" });
+}
+
+function toggleMembership(list, value) {
+  const source = Array.isArray(list) ? list.filter((entry) => typeof entry === "string") : [];
+  return source.includes(value) ? source.filter((entry) => entry !== value) : [...source, value];
+}
+
+function randomBetween(min, max) {
+  return min + Math.random() * (max - min);
+}
+
+function getPropWindowSpec(propId) {
+  return Object.prototype.hasOwnProperty.call(PROP_WINDOW_SPECS, propId)
+    ? PROP_WINDOW_SPECS[propId]
+    : null;
+}
+
+function buildPropWindowModel(propId) {
+  const spec = getPropWindowSpec(propId);
+  if (!spec) return null;
+  return {
+    propId: spec.propId,
+    label: spec.label,
+    windowSize: spec.windowSize,
+    visualBounds: spec.visualBounds,
+  };
+}
+
+function getWindowDisplay(targetWindow, windowSize = null) {
+  const center = getWindowCenterPoint(targetWindow, windowSize);
+  return screen.getDisplayNearestPoint(center);
+}
+
+function findPropWindowRecordByWebContentsId(webContentsId) {
+  if (!Number.isFinite(Number(webContentsId))) return null;
+  for (const record of propWindows.values()) {
+    if (!record?.window || record.window.isDestroyed()) continue;
+    if (record.window.webContents.id === webContentsId) {
+      return record;
+    }
+  }
+  return null;
+}
+
+function getDefaultInventoryWindowPosition() {
+  const margin = 28;
+  if (win && !win.isDestroyed()) {
+    const [petX, petY] = win.getPosition();
+    const display = getWindowDisplay(win, WINDOW_SIZE);
+    const area = getClampArea(display);
+    const preferredX = petX + WINDOW_SIZE.width + margin;
+    const preferredY = petY + margin;
+    return {
+      x: Math.max(
+        area.x + margin,
+        Math.min(preferredX, area.x + area.width - INVENTORY_WINDOW_SIZE.width - margin)
+      ),
+      y: Math.max(
+        area.y + margin,
+        Math.min(preferredY, area.y + area.height - INVENTORY_WINDOW_SIZE.height - margin)
+      ),
+    };
+  }
+
+  const area = getClampArea(screen.getPrimaryDisplay());
+  return {
+    x: area.x + Math.max(margin, Math.round(area.width * 0.16)),
+    y: area.y + Math.max(margin, Math.round(area.height * 0.12)),
+  };
+}
+
+function normalizeRoamZoneRect(rect) {
+  if (!rect || typeof rect !== "object") return null;
+  const x = Number(rect.x);
+  const y = Number(rect.y);
+  const width = Number(rect.width);
+  const height = Number(rect.height);
+  if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(width) || !Number.isFinite(height)) {
+    return null;
+  }
+  if (width < MIN_ROAM_ZONE_RECT_SIZE || height < MIN_ROAM_ZONE_RECT_SIZE) {
+    return null;
+  }
+  return {
+    x: Math.round(x),
+    y: Math.round(y),
+    width: Math.round(width),
+    height: Math.round(height),
+  };
+}
+
+function getRoamZoneLabel(snapshot = latestShellState) {
+  if (snapshot?.roaming?.zoneRect) return "custom";
+  return snapshot?.roaming?.zone || DEFAULT_ROAMING_ZONE;
+}
+
+function getRoamPetBounds(nowMs = Date.now()) {
+  const sourceBounds = getActivePetVisualBounds(nowMs) || PET_VISUAL_BOUNDS;
+  const normalized = normalizePetBounds(
+    {
+      ...sourceBounds,
+      tMs: nowMs,
+    },
+    WINDOW_SIZE
+  );
+  if (normalized) return normalized;
+  return {
+    ...PET_VISUAL_BOUNDS,
+    tMs: nowMs,
+  };
+}
+
+function isAmbientStateId(stateId) {
+  return stateId === "Idle" || stateId === "Roam" || stateId === "WatchMode";
+}
+
+function pickAmbientRestStateId() {
+  return Math.random() < 0.55 ? "WatchMode" : "Idle";
+}
+
+function getBoundsUnion(boundsList) {
+  if (!Array.isArray(boundsList) || boundsList.length <= 0) return null;
+  let minX = Number.POSITIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+  for (const bounds of boundsList) {
+    if (
+      !bounds ||
+      !Number.isFinite(bounds.x) ||
+      !Number.isFinite(bounds.y) ||
+      !Number.isFinite(bounds.width) ||
+      !Number.isFinite(bounds.height) ||
+      bounds.width <= 0 ||
+      bounds.height <= 0
+    ) {
+      continue;
+    }
+    minX = Math.min(minX, bounds.x);
+    minY = Math.min(minY, bounds.y);
+    maxX = Math.max(maxX, bounds.x + bounds.width);
+    maxY = Math.max(maxY, bounds.y + bounds.height);
+  }
+  if (!Number.isFinite(minX) || !Number.isFinite(minY) || !Number.isFinite(maxX) || !Number.isFinite(maxY)) {
+    return null;
+  }
+  return {
+    x: Math.round(minX),
+    y: Math.round(minY),
+    width: Math.max(1, Math.round(maxX - minX)),
+    height: Math.max(1, Math.round(maxY - minY)),
+  };
+}
+
+function getDesktopRoamLayout() {
+  const areas = screen
+    .getAllDisplays()
+    .map((display) => summarizeBounds(getClampArea(display)))
+    .filter((bounds) => bounds.width > 0 && bounds.height > 0);
+  if (areas.length > 0) {
+    return {
+      areas,
+      bounds: getBoundsUnion(areas),
+    };
+  }
+
+  const fallbackDisplay = screen.getPrimaryDisplay();
+  const fallbackBounds = summarizeBounds(getClampArea(fallbackDisplay));
+  return {
+    areas: [fallbackBounds],
+    bounds: fallbackBounds,
+  };
+}
+
+function pickRoamSamplingArea(areas) {
+  if (!Array.isArray(areas) || areas.length <= 0) return null;
+  let totalArea = 0;
+  const weightedAreas = areas.map((area) => {
+    const weight = Math.max(1, Math.round(area.width * area.height));
+    totalArea += weight;
+    return {
+      area,
+      weight,
+    };
+  });
+  let remaining = randomBetween(0, Math.max(1, totalArea));
+  for (const entry of weightedAreas) {
+    remaining -= entry.weight;
+    if (remaining <= 0) {
+      return entry.area;
+    }
+  }
+  return weightedAreas[weightedAreas.length - 1]?.area || null;
+}
+
+function resolveRoamVisualDirection(dx, dy, fallbackDirection = "Down") {
+  const absX = Math.abs(dx);
+  const absY = Math.abs(dy);
+  if (absX < 0.001 && absY < 0.001) {
+    return fallbackDirection;
+  }
+
+  const dominantAxis = Math.max(absX, absY);
+  const diagonalRatio = dominantAxis > 0 ? Math.min(absX, absY) / dominantAxis : 0;
+  if (diagonalRatio >= ROAM_DIAGONAL_DIRECTION_RATIO) {
+    if (dx >= 0 && dy >= 0) return "DownRight";
+    if (dx >= 0 && dy < 0) return "UpRight";
+    if (dx < 0 && dy < 0) return "UpLeft";
+    return "DownLeft";
+  }
+
+  if (absX >= absY) {
+    return dx >= 0 ? "Right" : "Left";
+  }
+  return dy >= 0 ? "Down" : "Up";
+}
+
+function getRoamBounds(display, mode, zone, zoneRect = null) {
+  const normalizedZoneRect = normalizeRoamZoneRect(zoneRect);
+  if (mode === ROAMING_MODES.zone && normalizedZoneRect) {
+    return normalizedZoneRect;
+  }
+  const clampArea = getClampArea(display);
+  if (mode !== ROAMING_MODES.zone) {
+    return clampArea;
+  }
+
+  const width = Math.max(420, Math.round(clampArea.width * (1 - ROAM_ZONE_INSET_RATIO * 2)));
+  const height = Math.max(320, Math.round(clampArea.height * (1 - ROAM_ZONE_INSET_RATIO * 2)));
+  let x = clampArea.x + Math.round((clampArea.width - width) * 0.5);
+  if (zone === "desk-left") {
+    x = clampArea.x + Math.round(clampArea.width * 0.08);
+  } else if (zone === "desk-right") {
+    x = clampArea.x + clampArea.width - width - Math.round(clampArea.width * 0.08);
+  }
+  const y = clampArea.y + Math.round((clampArea.height - height) * 0.5);
+  return {
+    x,
+    y,
+    width,
+    height,
+  };
+}
+
+function computeRoamWindowRange(roamBounds, petBounds) {
+  if (!roamBounds || !petBounds) {
+    return {
+      minX: 0,
+      maxX: 0,
+      minY: 0,
+      maxY: 0,
+    };
+  }
+  const minX = Math.round(roamBounds.x - petBounds.x);
+  const maxX = Math.round(roamBounds.x + roamBounds.width - petBounds.x - petBounds.width);
+  const minY = Math.round(roamBounds.y - petBounds.y);
+  const maxY = Math.round(roamBounds.y + roamBounds.height - petBounds.y - petBounds.height);
+  if (maxX >= minX && maxY >= minY) {
+    return { minX, maxX, minY, maxY };
+  }
+  return {
+    minX: minX,
+    maxX: minX,
+    minY: minY,
+    maxY: minY,
+  };
+}
+
+function isWindowPositionWithinRange(x, y, range) {
+  return x >= range.minX && x <= range.maxX && y >= range.minY && y <= range.maxY;
+}
+
+function chooseRoamDestination(nowMs = Date.now(), options = {}) {
+  if (!win || win.isDestroyed()) return null;
+  const [currentWinX, currentWinY] = win.getPosition();
+  const winX = Number.isFinite(Number(options.fromX)) ? Math.round(Number(options.fromX)) : currentWinX;
+  const winY = Number.isFinite(Number(options.fromY)) ? Math.round(Number(options.fromY)) : currentWinY;
+  const display = options.display || getWindowDisplay(win, WINDOW_SIZE);
+  const roamMode = options.mode || latestShellState?.roaming?.mode || ROAMING_MODES.desktop;
+  const roamZone = options.zone || getRoamZoneLabel(latestShellState);
+  const roamZoneRect =
+    Object.prototype.hasOwnProperty.call(options, "zoneRect")
+      ? options.zoneRect
+      : latestShellState?.roaming?.zoneRect || null;
+  const desktopRoamLayout = roamMode === ROAMING_MODES.desktop ? getDesktopRoamLayout() : null;
+  const roamBounds =
+    options.roamBounds ||
+    desktopRoamLayout?.bounds ||
+    getRoamBounds(display, roamMode, roamZone, roamZoneRect);
+  const samplingAreas =
+    Array.isArray(options.samplingAreas) && options.samplingAreas.length > 0
+      ? options.samplingAreas
+      : desktopRoamLayout?.areas || [roamBounds];
+  const petBounds = options.petBounds || getRoamPetBounds();
+  const minDistancePx = Number.isFinite(Number(options.minDistancePx))
+    ? Math.max(0, Math.round(Number(options.minDistancePx)))
+    : ROAM_TARGET_MIN_DISTANCE_PX;
+  let bestCandidate = null;
+  for (let attempt = 0; attempt < ROAM_TARGET_RETRY_COUNT; attempt += 1) {
+    const samplingArea = pickRoamSamplingArea(samplingAreas) || roamBounds;
+    const range = computeRoamWindowRange(samplingArea, petBounds);
+    const candidate = {
+      x: Math.round(randomBetween(range.minX, range.maxX)),
+      y: Math.round(randomBetween(range.minY, range.maxY)),
+    };
+    const distance = Math.hypot(candidate.x - winX, candidate.y - winY);
+    if (distance >= minDistancePx) {
+      return {
+        ...candidate,
+        distance,
+        bounds: roamBounds,
+        petBounds,
+      };
+    }
+    if (!bestCandidate || distance > bestCandidate.distance) {
+      bestCandidate = {
+        ...candidate,
+        distance,
+        bounds: roamBounds,
+        petBounds,
+      };
+    }
+  }
+  return bestCandidate;
+}
+
+function buildZoneEntryDestination(zoneRect) {
+  if (!win || win.isDestroyed()) return null;
+  const display = getWindowDisplay(win, WINDOW_SIZE);
+  const desktopBounds = getDesktopRoamLayout().bounds || getClampArea(display);
+  const zoneBounds = getRoamBounds(display, ROAMING_MODES.zone, "custom", zoneRect);
+  const petBounds = getRoamPetBounds();
+  const range = computeRoamWindowRange(zoneBounds, petBounds);
+  const [winX, winY] = win.getPosition();
+  if (isWindowPositionWithinRange(winX, winY, range)) {
+    return null;
+  }
+  const targetX = Math.max(range.minX, Math.min(winX, range.maxX));
+  const targetY = Math.max(range.minY, Math.min(winY, range.maxY));
+  return {
+    x: targetX,
+    y: targetY,
+    distance: Math.hypot(targetX - winX, targetY - winY),
+    bounds: desktopBounds,
+    petBounds,
+    preferRun: true,
+  };
+}
+
+function queueRoamDestination(destination, reason = "roam_queue") {
+  if (!destination) return false;
+  const nowMs = Date.now();
+  roamState.phase = "rest";
+  roamState.destination = null;
+  roamState.queuedDestination = {
+    x: Math.round(destination.x),
+    y: Math.round(destination.y),
+    distance: Number.isFinite(Number(destination.distance))
+      ? Math.max(0, Number(destination.distance))
+      : null,
+    bounds: destination.bounds ? summarizeBounds(destination.bounds) : null,
+    petBounds: destination.petBounds ? summarizeBounds(destination.petBounds) : null,
+    preferRun: destination.preferRun === true,
+    reason,
+  };
+  roamState.roamBounds = null;
+  roamState.petBounds = null;
+  roamState.speedPxPerSec = 0;
+  roamState.clip = roamState.queuedDestination.preferRun ? "Run" : "Walk";
+  roamState.direction = null;
+  roamState.lastStepMs = nowMs;
+  roamState.nextDecisionAtMs = nowMs + ROAM_ZONE_ENTRY_DELAY_MS;
+  return true;
+}
+
+function queueZoneEntryIfOutside(zoneRect, reason = "roam_zone_entry") {
+  return queueRoamDestination(buildZoneEntryDestination(zoneRect), reason);
+}
+
+function cancelRoamMotion() {
+  const nowMs = Date.now();
+  const shouldEmitStop = roamState.phase === "moving" && !dragging && !flingState.active;
+  roamState.phase = "idle";
+  roamState.destination = null;
+  roamState.roamBounds = null;
+  roamState.petBounds = null;
+  roamState.speedPxPerSec = 0;
+  roamState.clip = roamState.queuedDestination?.preferRun ? "Run" : "Walk";
+  roamState.direction = null;
+  roamState.lastStepMs = nowMs;
+  roamState.nextDecisionAtMs = roamState.queuedDestination ? nowMs + ROAM_ZONE_ENTRY_DELAY_MS : 0;
+  if (shouldEmitStop) {
+    resetMotionSampleFromWindow();
+    emitMotionState({
+      velocityOverride: {
+        vx: 0,
+        vy: 0,
+      },
+    });
+  }
+}
+
+function enterAmbientRestState(reason = "roam_rest", stateId = pickAmbientRestStateId()) {
+  if (!stateRuntime || !latestShellState) return latestStateSnapshot;
+  const currentState = latestStateSnapshot?.currentState || "Idle";
+  if (!isAmbientStateId(currentState)) return latestStateSnapshot;
+  if (currentState === stateId) return latestStateSnapshot;
+  return stateRuntime.activateState(stateId, {
+    source: "shell",
+    reason,
+    trigger: "roam",
+    context: {
+      roamMode: latestShellState.roaming?.mode || ROAMING_MODES.desktop,
+      roamZone: getRoamZoneLabel(latestShellState),
+    },
+  });
+}
+
+function scheduleRoamDecision(reason = "roam_schedule", delayMs = null, force = false) {
+  const nowMs = Date.now();
+  if (!force && roamState.nextDecisionAtMs > nowMs && roamState.phase !== "moving") {
+    return latestStateSnapshot;
+  }
+  roamState.phase = "rest";
+  roamState.destination = null;
+  roamState.queuedDestination = null;
+  roamState.roamBounds = null;
+  roamState.petBounds = null;
+  roamState.speedPxPerSec = 0;
+  roamState.clip = "Walk";
+  roamState.direction = null;
+  roamState.lastStepMs = nowMs;
+  roamState.nextDecisionAtMs =
+    nowMs +
+    Math.round(
+      Number.isFinite(delayMs)
+        ? delayMs
+        : randomBetween(ROAM_REST_MIN_MS, ROAM_REST_MAX_MS)
+    );
+  if (latestStateSnapshot?.currentState === "Roam") {
+    enterAmbientRestState(reason);
+  }
+  return latestStateSnapshot;
+}
+
+function scheduleInitialRoamDecision(reason = "roam_initial_schedule", force = false) {
+  return scheduleRoamDecision(
+    reason,
+    randomBetween(ROAM_INITIAL_DELAY_MIN_MS, ROAM_INITIAL_DELAY_MAX_MS),
+    force
+  );
+}
+
+function beginRoamLeg(nowMs = Date.now()) {
+  if (!stateRuntime || !latestShellState) return latestStateSnapshot;
+  const [winX, winY] = win.getPosition();
+  const queuedDestination = roamState.queuedDestination;
+  const destination =
+    queuedDestination ||
+    chooseRoamDestination(nowMs, {
+      petBounds: getRoamPetBounds(),
+    });
+  if (
+    !destination ||
+    destination.distance <
+      (queuedDestination ? ROAM_ARRIVAL_THRESHOLD_PX : ROAM_TARGET_MIN_DISTANCE_PX)
+  ) {
+    roamState.queuedDestination = null;
+    scheduleRoamDecision("roam_leg_retry", randomBetween(ROAM_REST_MIN_MS, ROAM_REST_MAX_MS), true);
+    enterAmbientRestState("roam_leg_retry");
+    return latestStateSnapshot;
+  }
+  const shouldRun =
+    queuedDestination?.preferRun === true ||
+    (destination.distance >= ROAM_RUN_DISTANCE_THRESHOLD_PX && Math.random() < 0.55);
+  const roamBounds =
+    destination.bounds ||
+    getRoamBounds(
+      getWindowDisplay(win, WINDOW_SIZE),
+      latestShellState?.roaming?.mode || ROAMING_MODES.desktop,
+      getRoamZoneLabel(latestShellState),
+      latestShellState?.roaming?.zoneRect || null
+    );
+  const petBounds = destination.petBounds || getRoamPetBounds();
+  const direction = resolveRoamVisualDirection(
+    destination.x - winX,
+    destination.y - winY,
+    roamState.direction || "Down"
+  );
+  roamState.phase = "moving";
+  roamState.destination = {
+    x: destination.x,
+    y: destination.y,
+  };
+  roamState.queuedDestination = null;
+  roamState.roamBounds = summarizeBounds(roamBounds);
+  roamState.petBounds = summarizeBounds(petBounds);
+  roamState.speedPxPerSec = shouldRun ? ROAM_RUN_SPEED_PX_PER_SEC : ROAM_WALK_SPEED_PX_PER_SEC;
+  roamState.clip = shouldRun ? "Run" : "Walk";
+  roamState.direction = direction;
+  roamState.lastStepMs = nowMs;
+  roamState.nextDecisionAtMs = 0;
+  return stateRuntime.activateState("Roam", {
+    source: "shell",
+    reason: "roam_leg_start",
+    trigger: "roam",
+    context: {
+      roamMode: latestShellState.roaming?.mode || ROAMING_MODES.desktop,
+      roamZone: getRoamZoneLabel(latestShellState),
+      roamDistance: Math.round(destination.distance),
+    },
+    visualOverrides: {
+      clip: roamState.clip,
+      direction,
+    },
+  });
+}
+
+function finishRoamLeg(reason = "roam_leg_complete", nowMs = Date.now()) {
+  const queuedDestination = roamState.queuedDestination ? { ...roamState.queuedDestination } : null;
+  scheduleRoamDecision(reason, randomBetween(ROAM_REST_MIN_MS, ROAM_REST_MAX_MS), true);
+  if (queuedDestination) {
+    roamState.queuedDestination = queuedDestination;
+    roamState.clip = queuedDestination.preferRun ? "Run" : "Walk";
+    roamState.nextDecisionAtMs = nowMs + ROAM_ZONE_ENTRY_DELAY_MS;
+  }
+  enterAmbientRestState(reason);
+  roamState.lastStepMs = nowMs;
+  resetMotionSampleFromWindow();
+  emitMotionState({
+    velocityOverride: {
+      vx: 0,
+      vy: 0,
+    },
+  });
+}
+
+function shouldRoamAutonomously() {
+  if (!win || win.isDestroyed()) return false;
+  if (dragging || flingState.active) return false;
+  return isAmbientStateId(latestStateSnapshot?.currentState || "Idle");
+}
+
+function stepRoam() {
+  if (!shouldRoamAutonomously()) {
+    cancelRoamMotion();
+    return;
+  }
+
+  const nowMs = Date.now();
+  if (roamState.phase !== "moving") {
+    if (roamState.nextDecisionAtMs <= 0) {
+      if (roamState.queuedDestination) {
+        roamState.nextDecisionAtMs = nowMs + ROAM_ZONE_ENTRY_DELAY_MS;
+      } else {
+        scheduleInitialRoamDecision("roam_controller_start");
+      }
+      return;
+    }
+    if (nowMs >= roamState.nextDecisionAtMs) {
+      beginRoamLeg(nowMs);
+    }
+    return;
+  }
+
+  if (!roamState.destination) {
+    finishRoamLeg("roam_missing_destination", nowMs);
+    return;
+  }
+
+  const dtSec = Math.max(0.001, Math.min(0.05, (nowMs - roamState.lastStepMs) / 1000));
+  roamState.lastStepMs = nowMs;
+
+  const [winX, winY] = win.getPosition();
+  const dx = roamState.destination.x - winX;
+  const dy = roamState.destination.y - winY;
+  const remainingDistance = Math.hypot(dx, dy);
+  if (remainingDistance <= ROAM_ARRIVAL_THRESHOLD_PX) {
+    applyWindowBounds(roamState.destination.x, roamState.destination.y);
+    finishRoamLeg("roam_arrived", nowMs);
+    return;
+  }
+
+  const roamBounds =
+    roamState.roamBounds ||
+    getRoamBounds(
+      getWindowDisplay(win, WINDOW_SIZE),
+      latestShellState?.roaming?.mode || ROAMING_MODES.desktop,
+      getRoamZoneLabel(latestShellState),
+      latestShellState?.roaming?.zoneRect || null
+    );
+  const petBounds = roamState.petBounds || getRoamPetBounds();
+  const stepDistance = Math.min(roamState.speedPxPerSec * dtSec, remainingDistance);
+  const moveX = (dx / remainingDistance) * stepDistance;
+  const moveY = (dy / remainingDistance) * stepDistance;
+  const velocityScale = remainingDistance > 0 ? roamState.speedPxPerSec / remainingDistance : 0;
+  const velocityOverride = {
+    vx: dx * velocityScale,
+    vy: dy * velocityScale,
+  };
+  const targetX = winX + moveX;
+  const targetY = winY + moveY;
+  const clamped = clampWindowPosition(targetX, targetY, roamBounds, petBounds);
+  const collidedX = Math.abs(targetX - clamped.x) > 0.5;
+  const collidedY = Math.abs(targetY - clamped.y) > 0.5;
+
+  applyWindowBounds(clamped.x, clamped.y);
+  emitMotionState({
+    velocityOverride,
+    collided: {
+      x: collidedX,
+      y: collidedY,
+    },
+    impact: {
+      triggered: false,
+      strength: 0,
+    },
+  });
+  if (collidedX || collidedY) {
+    finishRoamLeg("roam_bounds_clamped", nowMs);
+    return;
+  }
+  if (remainingDistance - stepDistance <= ROAM_ARRIVAL_THRESHOLD_PX) {
+    applyWindowBounds(roamState.destination.x, roamState.destination.y);
+    finishRoamLeg("roam_arrived", nowMs);
+  }
+}
+
+function startRoamController() {
+  if (roamTimer) {
+    clearInterval(roamTimer);
+  }
+  roamTimer = setInterval(stepRoam, ROAM_STEP_INTERVAL_MS);
+}
+
+function getDefaultPropWindowPosition(propId) {
+  const spec = getPropWindowSpec(propId);
+  if (!spec) return { x: 0, y: 0 };
+
+  if (win && !win.isDestroyed()) {
+    const [petX, petY] = win.getPosition();
+    const proposedX = petX - Math.round(spec.windowSize.width * 0.72);
+    const proposedY = petY + WINDOW_SIZE.height - spec.windowSize.height - 28;
+    const display = getWindowDisplay(win, WINDOW_SIZE);
+    return clampWindowPosition(
+      proposedX,
+      proposedY,
+      getClampArea(display),
+      spec.visualBounds
+    );
+  }
+
+  const display = screen.getPrimaryDisplay();
+  const area = getClampArea(display);
+  return clampWindowPosition(
+    area.x + Math.round(area.width * 0.2),
+    area.y + Math.round(area.height * 0.72),
+    area,
+    spec.visualBounds
+  );
+}
+
+function applyPropWindowBounds(propId, targetX, targetY) {
+  const record = propWindows.get(propId);
+  if (!record || !record.window || record.window.isDestroyed()) return null;
+  const display = screen.getDisplayNearestPoint({
+    x: Math.round(targetX + record.spec.windowSize.width * 0.5),
+    y: Math.round(targetY + record.spec.windowSize.height * 0.5),
+  });
+  const clamped = clampWindowPosition(
+    targetX,
+    targetY,
+    getClampArea(display),
+    record.spec.visualBounds
+  );
+  applyFixedContentBounds(record.window, record.spec.windowSize, clamped.x, clamped.y);
+  return clamped;
+}
+
+function positionPropWindowAtCursor(propId) {
+  const record = propWindows.get(propId);
+  if (!record) return null;
+  const cursor = screen.getCursorScreenPoint();
+  return applyPropWindowBounds(
+    propId,
+    cursor.x - Math.round(record.spec.windowSize.width * 0.5),
+    cursor.y - Math.round(record.spec.windowSize.height * 0.5)
+  );
+}
+
+function refreshPropWorldCapabilityState() {
+  updateCapabilityState(
+    CAPABILITY_IDS.propWorld,
+    CAPABILITY_STATES.healthy,
+    "separateWindowPropWorldReady",
+    {
+      mode: "separateWindowProps",
+      activeQuickProps: [...(latestShellState?.inventory?.quickProps || [])],
+      activeWindowCount: propWindows.size,
+    }
+  );
+}
+
+function createPropWindow(propId, initialPosition = null) {
+  const existing = propWindows.get(propId);
+  if (existing && existing.window && !existing.window.isDestroyed()) {
+    if (initialPosition) {
+      applyPropWindowBounds(propId, initialPosition.x, initialPosition.y);
+    }
+    return existing;
+  }
+
+  const spec = getPropWindowSpec(propId);
+  if (!spec) return null;
+
+  const propWindow = new BrowserWindow({
+    width: spec.windowSize.width,
+    height: spec.windowSize.height,
+    show: false,
+    frame: false,
+    transparent: true,
+    resizable: false,
+    maximizable: false,
+    minimizable: false,
+    fullscreenable: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    hasShadow: false,
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      preload: path.join(__dirname, "prop-window-preload.js"),
+    },
+  });
+
+  propWindow.setMinimumSize(spec.windowSize.width, spec.windowSize.height);
+  propWindow.setMaximumSize(spec.windowSize.width, spec.windowSize.height);
+
+  const record = {
+    propId,
+    spec,
+    window: propWindow,
+    dragging: false,
+    dragOffset: { x: 0, y: 0 },
+    placing: false,
+    createdForPlacement: false,
+  };
+  propWindows.set(propId, record);
+
+  propWindow.on("closed", () => {
+    propWindows.delete(propId);
+    if (appIsQuitting) return;
+    refreshPropWorldCapabilityState();
+  });
+
+  propWindow.loadFile("prop-window.html");
+  propWindow.webContents.once("did-finish-load", () => {
+    emitToWindow(propWindow, "prop:model", buildPropWindowModel(propId));
+    const position = initialPosition || getDefaultPropWindowPosition(propId);
+    applyPropWindowBounds(propId, position.x, position.y);
+    propWindow.show();
+  });
+
+  refreshPropWorldCapabilityState();
+  return record;
+}
+
+function destroyPropWindow(propId) {
+  const record = propWindows.get(propId);
+  if (!record) return;
+  propWindows.delete(propId);
+  if (record.window && !record.window.isDestroyed()) {
+    record.window.destroy();
+  }
+  refreshPropWorldCapabilityState();
+}
+
+function syncShellQuickPropWindows() {
+  const activeQuickProps = new Set(latestShellState?.inventory?.quickProps || []);
+  for (const propId of Object.keys(PROP_WINDOW_SPECS)) {
+    if (activeQuickProps.has(propId)) {
+      createPropWindow(propId);
+      continue;
+    }
+    destroyPropWindow(propId);
+  }
+  refreshPropWorldCapabilityState();
+}
+
+function removeQuickPropFromDesktop(propId, reason = "shell_remove_quick_prop") {
+  const snapshot = latestShellState || buildShellStateSnapshot();
+  const nextQuickProps = (snapshot.inventory?.quickProps || []).filter((entry) => entry !== propId);
+  if (nextQuickProps.length === (snapshot.inventory?.quickProps || []).length) {
+    return {
+      ok: true,
+      shellState: snapshot,
+    };
+  }
+  const nextSnapshot = applyRuntimeSettingsPatch(
+    {
+      inventory: {
+        quickProps: nextQuickProps,
+      },
+    },
+    reason
+  );
+  return {
+    ok: true,
+    shellState: latestShellState || nextSnapshot,
+  };
+}
+
+function beginPropPlacement(propId) {
+  const spec = getPropWindowSpec(propId);
+  if (!spec) {
+    return {
+      ok: false,
+      error: "unknown_prop_id",
+    };
+  }
+
+  let snapshot = latestShellState || buildShellStateSnapshot();
+  let createdForPlacement = false;
+  if (!snapshot.inventory?.quickProps?.includes(propId)) {
+    snapshot = applyRuntimeSettingsPatch(
+      {
+        inventory: {
+          quickProps: toggleMembership(snapshot.inventory?.quickProps, propId),
+        },
+      },
+      `shell_place_${propId}`
+    );
+    createdForPlacement = true;
+  }
+
+  const record = createPropWindow(propId);
+  if (!record) {
+    return {
+      ok: false,
+      error: "prop_window_unavailable",
+    };
+  }
+
+  record.placing = true;
+  record.createdForPlacement = createdForPlacement;
+  if (!record.window.isDestroyed()) {
+    record.window.setIgnoreMouseEvents(true);
+  }
+  positionPropWindowAtCursor(propId);
+  return {
+    ok: true,
+    shellState: latestShellState || snapshot,
+  };
+}
+
+function updatePropPlacement(propId) {
+  const record = propWindows.get(propId);
+  if (!record || !record.placing) {
+    return {
+      ok: false,
+      error: "placement_not_active",
+    };
+  }
+  positionPropWindowAtCursor(propId);
+  return {
+    ok: true,
+  };
+}
+
+function endPropPlacement(propId, commit = true) {
+  const record = propWindows.get(propId);
+  if (!record) {
+    return {
+      ok: false,
+      error: "prop_window_unavailable",
+    };
+  }
+
+  const shouldRemove = !commit && record.createdForPlacement;
+  record.placing = false;
+  record.createdForPlacement = false;
+  if (!record.window.isDestroyed()) {
+    record.window.setIgnoreMouseEvents(false);
+  }
+
+  if (shouldRemove) {
+    removeQuickPropFromDesktop(propId, `shell_cancel_place_${propId}`);
+    destroyPropWindow(propId);
+  }
+
+  return {
+    ok: true,
+    shellState: latestShellState || buildShellStateSnapshot(),
+  };
+}
+
+function beginPropWindowDrag(propId) {
+  const record = propWindows.get(propId);
+  if (!record || !record.window || record.window.isDestroyed()) {
+    return {
+      ok: false,
+      error: "prop_window_unavailable",
+    };
+  }
+  if (record.placing) {
+    return {
+      ok: false,
+      error: "prop_window_placing",
+    };
+  }
+
+  const cursor = screen.getCursorScreenPoint();
+  const [x, y] = record.window.getPosition();
+  record.dragging = true;
+  record.dragOffset = {
+    x: cursor.x - x,
+    y: cursor.y - y,
+  };
+  return {
+    ok: true,
+  };
+}
+
+function dragPropWindow(propId) {
+  const record = propWindows.get(propId);
+  if (!record || !record.window || record.window.isDestroyed()) {
+    return {
+      ok: false,
+      error: "prop_window_unavailable",
+    };
+  }
+  if (!record.dragging) {
+    return {
+      ok: false,
+      error: "prop_window_not_dragging",
+    };
+  }
+
+  const cursor = screen.getCursorScreenPoint();
+  const clamped = applyPropWindowBounds(
+    propId,
+    cursor.x - record.dragOffset.x,
+    cursor.y - record.dragOffset.y
+  );
+  return {
+    ok: true,
+    position: clamped,
+  };
+}
+
+function endPropWindowDrag(propId) {
+  const record = propWindows.get(propId);
+  if (!record) {
+    return {
+      ok: false,
+      error: "prop_window_unavailable",
+    };
+  }
+  record.dragging = false;
+  return {
+    ok: true,
+  };
+}
+
+function createInventoryWindow() {
+  if (inventoryWin && !inventoryWin.isDestroyed()) return inventoryWin;
+
+  const position = getDefaultInventoryWindowPosition();
+
+  inventoryWin = new BrowserWindow({
+    x: position.x,
+    y: position.y,
+    width: INVENTORY_WINDOW_SIZE.width,
+    height: INVENTORY_WINDOW_SIZE.height,
+    show: false,
+    frame: false,
+    transparent: true,
+    resizable: true,
+    maximizable: false,
+    minimizable: false,
+    fullscreenable: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    hasShadow: false,
+    backgroundColor: "#00000000",
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      preload: path.join(__dirname, "inventory-preload.js"),
+    },
+  });
+  inventoryWin.setMinimumSize(INVENTORY_WINDOW_MIN_SIZE.width, INVENTORY_WINDOW_MIN_SIZE.height);
+
+  inventoryWin.on("closed", () => {
+    inventoryWin = null;
+    if (appIsQuitting) return;
+    emitShellState(buildShellStateSnapshot());
+  });
+
+  inventoryWin.loadFile("inventory.html");
+  inventoryWin.webContents.once("did-finish-load", () => {
+    emitShellState(buildShellStateSnapshot());
+    inventoryWin.show();
+    inventoryWin.focus();
+  });
+
+  return inventoryWin;
+}
+
+function openInventoryWindow() {
+  const targetWindow = createInventoryWindow();
+  if (!targetWindow) return null;
+  if (!targetWindow.isVisible()) {
+    targetWindow.show();
+  }
+  targetWindow.focus();
+  emitShellState(buildShellStateSnapshot());
+  return targetWindow;
+}
+
+function closeZoneSelectorWindow() {
+  if (!zoneSelectorWin || zoneSelectorWin.isDestroyed()) {
+    zoneSelectorWin = null;
+    return;
+  }
+  zoneSelectorWin.close();
+}
+
+function getZoneSelectorDisplay() {
+  if (win && !win.isDestroyed()) {
+    return getWindowDisplay(win, WINDOW_SIZE);
+  }
+  return screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+}
+
+function buildZoneSelectorModel(display = getZoneSelectorDisplay()) {
+  const area = getClampArea(display);
+  const existingRect = normalizeRoamZoneRect(latestShellState?.roaming?.zoneRect);
+  return {
+    displayId: display.id,
+    area: summarizeBounds(area),
+    existingRect,
+  };
+}
+
+function createZoneSelectorWindow() {
+  if (zoneSelectorWin && !zoneSelectorWin.isDestroyed()) {
+    zoneSelectorWin.destroy();
+    zoneSelectorWin = null;
+  }
+
+  const display = getZoneSelectorDisplay();
+  const area = getClampArea(display);
+  zoneSelectorWin = new BrowserWindow({
+    x: area.x,
+    y: area.y,
+    width: area.width,
+    height: area.height,
+    show: false,
+    frame: false,
+    transparent: true,
+    resizable: false,
+    movable: false,
+    maximizable: false,
+    minimizable: false,
+    fullscreenable: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    hasShadow: false,
+    backgroundColor: "#00000000",
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      preload: path.join(__dirname, "zone-selector-preload.js"),
+    },
+  });
+
+  zoneSelectorWin.on("closed", () => {
+    zoneSelectorWin = null;
+  });
+
+  zoneSelectorWin.loadFile("zone-selector.html");
+  zoneSelectorWin.webContents.once("did-finish-load", () => {
+    emitToWindow(zoneSelectorWin, "zone-selector:model", buildZoneSelectorModel(display));
+    zoneSelectorWin.show();
+    zoneSelectorWin.focus();
+  });
+
+  return zoneSelectorWin;
+}
+
+function openZoneSelectorWindow() {
+  const targetWindow = createZoneSelectorWindow();
+  if (!targetWindow) return null;
+  if (!targetWindow.isVisible()) {
+    targetWindow.show();
+  }
+  targetWindow.focus();
+  return targetWindow;
+}
+
+function commitRoamZoneSelection(rawRect) {
+  const rect = normalizeRoamZoneRect(rawRect);
+  if (!rect) {
+    return {
+      ok: false,
+      error: "invalid_zone_rect",
+    };
+  }
+  const snapshot = applyRuntimeSettingsPatch(
+    {
+      roaming: {
+        mode: ROAMING_MODES.zone,
+        zone: "custom",
+        zoneRect: rect,
+      },
+    },
+    "shell_commit_roam_zone"
+  );
+  queueZoneEntryIfOutside(rect, "shell_commit_roam_zone");
+  syncShellRoamingState("shell_commit_roam_zone", true);
+  closeZoneSelectorWindow();
+  return {
+    ok: true,
+    shellState: latestShellState || snapshot,
+  };
+}
+
+function getPreferredRoamStateId(snapshot = latestShellState) {
+  return snapshot?.roaming?.mode === ROAMING_MODES.zone ? "WatchMode" : "Idle";
+}
+
+function syncShellRoamingState(reason = "shell_roam_sync", force = false) {
+  if (!stateRuntime || !latestShellState) return null;
+  const currentState = latestStateSnapshot?.currentState || "Idle";
+  if (!isAmbientStateId(currentState)) {
+    return latestStateSnapshot;
+  }
+  if (roamState.phase === "moving") {
+    return latestStateSnapshot;
+  }
+  const targetStateId = getPreferredRoamStateId(latestShellState);
+  if (
+    force &&
+    latestShellState.roaming?.mode === ROAMING_MODES.zone &&
+    latestShellState.roaming?.zoneRect
+  ) {
+    queueZoneEntryIfOutside(latestShellState.roaming.zoneRect, reason);
+  }
+  if (roamState.queuedDestination) {
+    roamState.phase = "rest";
+    roamState.nextDecisionAtMs = Math.max(
+      Date.now() + ROAM_ZONE_ENTRY_DELAY_MS,
+      roamState.nextDecisionAtMs || 0
+    );
+  } else {
+    scheduleInitialRoamDecision(
+      reason,
+      force || currentState === "Roam" || roamState.nextDecisionAtMs <= 0
+    );
+  }
+  if (currentState === "Roam") {
+    return enterAmbientRestState(reason, targetStateId);
+  }
+  if (currentState !== targetStateId) {
+    return enterAmbientRestState(reason, targetStateId);
+  }
+  return latestStateSnapshot;
+}
+
+function refreshShellTrayMenu() {
+  const snapshot = buildShellStateSnapshot();
+  if (!shellTray) {
+    emitShellState(snapshot);
+    return snapshot;
+  }
+
+  const menu = Menu.buildFromTemplate([
+    {
+      label: "Inventory...",
+      click: () => {
+        void runShellAction(SHELL_ACTIONS.openInventory);
+      },
+    },
+    { type: "separator" },
+    {
+      label: "Roam",
+      submenu: [
+        {
+          label: "Desktop",
+          type: "radio",
+          checked: snapshot.roaming.mode === ROAMING_MODES.desktop,
+          click: () => {
+            void runShellAction(SHELL_ACTIONS.roamDesktop);
+          },
+        },
+        {
+          label: `Zone (${getRoamZoneLabel(snapshot)})`,
+          type: "radio",
+          checked: snapshot.roaming.mode === ROAMING_MODES.zone,
+          click: () => {
+            void runShellAction(SHELL_ACTIONS.roamZone);
+          },
+        },
+        {
+          label: "Draw Zone...",
+          click: () => {
+            void runShellAction(SHELL_ACTIONS.selectRoamZone);
+          },
+        },
+      ],
+    },
+    { type: "separator" },
+    {
+      label: "Diagnostics Overlay",
+      type: "checkbox",
+      checked: snapshot.ui.diagnosticsEnabled,
+      click: () => {
+        void runShellAction(SHELL_ACTIONS.toggleDiagnostics);
+      },
+    },
+    {
+      label: "Pin Latest Speech Bubble",
+      type: "checkbox",
+      checked: snapshot.dialog.alwaysShowBubble,
+      click: () => {
+        void runShellAction(SHELL_ACTIONS.toggleAlwaysShowBubble);
+      },
+    },
+    { type: "separator" },
+    {
+      label: `Fallback Hotkeys ${snapshot.devFallback.hotkeys.join(", ")}`,
+      enabled: false,
+    },
+    { type: "separator" },
+    {
+      label: "Quit",
+      click: () => {
+        app.quit();
+      },
+    },
+  ]);
+
+  shellTray.setToolTip("Virtual Pet");
+  shellTray.setContextMenu(menu);
+  emitShellState(snapshot);
+  return snapshot;
+}
+
+function initializeShellSurface() {
+  try {
+    shellTray = new Tray(createShellTrayIcon());
+    shellTraySupported = true;
+    shellTrayError = null;
+    shellTray.on("click", () => {
+      if (shellTray) {
+        shellTray.popUpContextMenu();
+      }
+    });
+    refreshShellTrayMenu();
+    syncShellRoamingState("shell_startup", true);
+    console.log("[pet-shell] tray surface ready");
+  } catch (error) {
+    shellTray = null;
+    shellTraySupported = false;
+    shellTrayError = error?.message || String(error);
+    console.warn(`[pet-shell] tray surface unavailable: ${shellTrayError}`);
+    emitShellState(buildShellStateSnapshot());
+    syncShellRoamingState("shell_startup_no_tray", true);
+  }
+}
+
+function applyRuntimeSettingsPatch(patch, reason = "shell_settings_patch") {
+  persistRuntimeSettingsPatch({
+    app,
+    projectRoot: __dirname,
+    patch,
+  });
+  initializeRuntimeSettings(reason);
+  const snapshot = refreshShellTrayMenu();
+  return snapshot;
+}
+
+async function runShellAction(actionId) {
+  try {
+    let snapshot = latestShellState || buildShellStateSnapshot();
+    if (actionId === SHELL_ACTIONS.openInventory) {
+      openInventoryWindow();
+      snapshot = emitShellState(buildShellStateSnapshot());
+    } else if (actionId === SHELL_ACTIONS.roamDesktop) {
+      snapshot = applyRuntimeSettingsPatch(
+        {
+          roaming: {
+            mode: ROAMING_MODES.desktop,
+          },
+        },
+        "shell_roam_desktop"
+      );
+      syncShellRoamingState("shell_roam_desktop", true);
+    } else if (actionId === SHELL_ACTIONS.roamZone) {
+      snapshot = applyRuntimeSettingsPatch(
+        {
+          roaming: {
+            mode: ROAMING_MODES.zone,
+            zone: snapshot?.roaming?.zoneRect ? "custom" : snapshot?.roaming?.zone || DEFAULT_ROAMING_ZONE,
+          },
+        },
+        "shell_roam_zone"
+      );
+      if (!snapshot?.roaming?.zoneRect) {
+        openZoneSelectorWindow();
+      }
+      syncShellRoamingState("shell_roam_zone", true);
+    } else if (actionId === SHELL_ACTIONS.selectRoamZone) {
+      snapshot = applyRuntimeSettingsPatch(
+        {
+          roaming: {
+            mode: ROAMING_MODES.zone,
+            zone: "custom",
+          },
+        },
+        "shell_select_roam_zone"
+      );
+      openZoneSelectorWindow();
+      syncShellRoamingState("shell_select_roam_zone", true);
+    } else if (actionId === SHELL_ACTIONS.toggleDiagnostics) {
+      snapshot = applyRuntimeSettingsPatch(
+        {
+          ui: {
+            diagnosticsEnabled: !snapshot?.ui?.diagnosticsEnabled,
+          },
+        },
+        "shell_toggle_diagnostics"
+      );
+    } else if (actionId === SHELL_ACTIONS.toggleHeadphones) {
+      snapshot = applyRuntimeSettingsPatch(
+        {
+          wardrobe: {
+            activeAccessories: toggleMembership(
+              snapshot?.wardrobe?.activeAccessories,
+              SHELL_ACCESSORY_IDS.headphones
+            ),
+          },
+        },
+        "shell_toggle_headphones"
+      );
+    } else if (actionId === SHELL_ACTIONS.togglePoolRing) {
+      snapshot = applyRuntimeSettingsPatch(
+        {
+          inventory: {
+            quickProps: toggleMembership(
+              snapshot?.inventory?.quickProps,
+              SHELL_QUICK_PROP_IDS.poolRing
+            ),
+          },
+        },
+        "shell_toggle_pool_ring"
+      );
+    } else if (actionId === SHELL_ACTIONS.toggleAlwaysShowBubble) {
+      snapshot = applyRuntimeSettingsPatch(
+        {
+          dialog: {
+            alwaysShowBubble: !snapshot?.dialog?.alwaysShowBubble,
+          },
+        },
+        "shell_toggle_always_show_bubble"
+      );
+    } else {
+      return {
+        ok: false,
+        error: "unknown_shell_action",
+      };
+    }
+
+    return {
+      ok: true,
+      actionId,
+      shellState: latestShellState || snapshot,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      actionId,
+      error: error?.message || String(error),
+    };
   }
 }
 
@@ -1942,6 +3537,16 @@ function deriveContractSource() {
   return "offline";
 }
 
+function summarizeShellAccessories() {
+  const accessories = latestShellState?.wardrobe?.activeAccessories || [];
+  return accessories.length > 0 ? accessories.join(",") : "none";
+}
+
+function summarizeShellQuickProps() {
+  const quickProps = latestShellState?.inventory?.quickProps || [];
+  return quickProps.length > 0 ? quickProps.join(",") : "none";
+}
+
 function buildStatusText() {
   const runtime = latestCapabilitySnapshot?.runtimeState || "unknown";
   const summary = latestCapabilitySnapshot?.summary || {};
@@ -1954,11 +3559,15 @@ function buildStatusText() {
   const activeVisual = latestStateSnapshot?.visual?.clip || "IdleReady";
   const fallbackLabel = latestStateSnapshot?.visualFallbackUsed ? "yes" : "no";
   const motionState = dragging ? "dragging" : flingState.active ? "flinging" : "steady";
+  const roamMode = latestShellState?.roaming?.mode || ROAMING_MODES.desktop;
+  const roamZone = getRoamZoneLabel(latestShellState);
+  const diagnosticsLabel = latestShellState?.ui?.diagnosticsEnabled ? "on" : "off";
   return (
     `Runtime ${runtime}. ` +
     `Capabilities healthy=${summary.healthyCount || 0}, ` +
     `degraded=${summary.degradedCount || 0}, failed=${summary.failedCount || 0}. ` +
     `Integrations spotify=${spotifyState}, freshrss=${freshRssState}. ` +
+    `Shell roam=${roamMode}${roamMode === ROAMING_MODES.zone ? `:${roamZone}` : ""} diagnostics=${diagnosticsLabel} accessories=${summarizeShellAccessories()} props=${summarizeShellQuickProps()}. ` +
     `State ${activeState}${activePhase} visual=${activeVisual} fallback=${fallbackLabel} motion=${motionState}.`
   );
 }
@@ -1968,8 +3577,14 @@ function deriveBridgeCurrentState() {
 }
 
 function buildActivePropsSummary() {
-  if (!latestExtensionSnapshot || !Array.isArray(latestExtensionSnapshot.extensions)) return "none";
   const summaries = [];
+  const quickProps = latestShellState?.inventory?.quickProps || [];
+  if (quickProps.length > 0) {
+    summaries.push(`shell:${quickProps.join("+")}`);
+  }
+  if (!latestExtensionSnapshot || !Array.isArray(latestExtensionSnapshot.extensions)) {
+    return summaries.length > 0 ? summaries.join(", ").slice(0, 180) : "none";
+  }
   for (const extension of latestExtensionSnapshot.extensions) {
     if (!extension?.valid || !extension?.enabled || !Array.isArray(extension.props)) continue;
     const enabledProps = extension.props.filter((prop) => prop?.enabled).length;
@@ -3253,6 +4868,7 @@ function createWindow() {
     if (latestIntegrationEvent) {
       emitIntegrationEvent(latestIntegrationEvent);
     }
+    emitShellState(latestShellState || buildShellStateSnapshot());
     resetMotionSampleFromWindow();
     emitMotionState({
       velocityOverride: { vx: 0, vy: 0 },
@@ -3484,11 +5100,129 @@ ipcMain.handle("pet:getConfig", () => {
     openclawLoopbackEndpoint: settingsSummary.openclaw.loopbackEndpoint,
     openclawAuthTokenConfigured: settingsSummary.openclaw.authTokenConfigured,
     settingsSummary,
+    shellState: latestShellState || buildShellStateSnapshot(),
     settingsSourceMap: runtimeSettingsSourceMap,
     settingsValidationWarnings: runtimeSettingsValidationWarnings,
     settingsValidationErrors: runtimeSettingsValidationErrors,
     settingsFiles: runtimeSettingsFiles,
   };
+});
+
+ipcMain.handle("pet:getShellState", () => {
+  return latestShellState || buildShellStateSnapshot();
+});
+
+ipcMain.handle("pet:runShellAction", (_event, payload) => {
+  const actionId =
+    typeof payload?.actionId === "string" && payload.actionId.trim().length > 0
+      ? payload.actionId.trim()
+      : "";
+  return runShellAction(actionId);
+});
+
+ipcMain.handle("inventory:beginPropPlacement", (_event, payload) => {
+  const propId =
+    typeof payload?.propId === "string" && payload.propId.trim().length > 0
+      ? payload.propId.trim()
+      : "";
+  return beginPropPlacement(propId);
+});
+
+ipcMain.handle("inventory:updatePropPlacement", (_event, payload) => {
+  const propId =
+    typeof payload?.propId === "string" && payload.propId.trim().length > 0
+      ? payload.propId.trim()
+      : "";
+  return updatePropPlacement(propId);
+});
+
+ipcMain.handle("inventory:endPropPlacement", (_event, payload) => {
+  const propId =
+    typeof payload?.propId === "string" && payload.propId.trim().length > 0
+      ? payload.propId.trim()
+      : "";
+  return endPropPlacement(propId, payload?.commit !== false);
+});
+
+ipcMain.handle("zoneSelector:getModel", () => {
+  return buildZoneSelectorModel();
+});
+
+ipcMain.handle("zoneSelector:commit", (_event, payload) => {
+  return commitRoamZoneSelection(payload?.rect);
+});
+
+ipcMain.handle("zoneSelector:cancel", () => {
+  closeZoneSelectorWindow();
+  return {
+    ok: true,
+  };
+});
+
+ipcMain.handle("prop:getModel", (event) => {
+  const record = findPropWindowRecordByWebContentsId(event.sender.id);
+  if (!record) return null;
+  return buildPropWindowModel(record.propId);
+});
+
+ipcMain.handle("prop:beginDrag", (event, payload) => {
+  const requestedPropId =
+    typeof payload?.propId === "string" && payload.propId.trim().length > 0
+      ? payload.propId.trim()
+      : "";
+  const record = findPropWindowRecordByWebContentsId(event.sender.id);
+  if (!record || record.propId !== requestedPropId) {
+    return {
+      ok: false,
+      error: "prop_window_mismatch",
+    };
+  }
+  return beginPropWindowDrag(requestedPropId);
+});
+
+ipcMain.handle("prop:drag", (event, payload) => {
+  const requestedPropId =
+    typeof payload?.propId === "string" && payload.propId.trim().length > 0
+      ? payload.propId.trim()
+      : "";
+  const record = findPropWindowRecordByWebContentsId(event.sender.id);
+  if (!record || record.propId !== requestedPropId) {
+    return {
+      ok: false,
+      error: "prop_window_mismatch",
+    };
+  }
+  return dragPropWindow(requestedPropId);
+});
+
+ipcMain.handle("prop:endDrag", (event, payload) => {
+  const requestedPropId =
+    typeof payload?.propId === "string" && payload.propId.trim().length > 0
+      ? payload.propId.trim()
+      : "";
+  const record = findPropWindowRecordByWebContentsId(event.sender.id);
+  if (!record || record.propId !== requestedPropId) {
+    return {
+      ok: false,
+      error: "prop_window_mismatch",
+    };
+  }
+  return endPropWindowDrag(requestedPropId);
+});
+
+ipcMain.handle("prop:returnToInventory", (event, payload) => {
+  const requestedPropId =
+    typeof payload?.propId === "string" && payload.propId.trim().length > 0
+      ? payload.propId.trim()
+      : "";
+  const record = findPropWindowRecordByWebContentsId(event.sender.id);
+  if (!record || record.propId !== requestedPropId) {
+    return {
+      ok: false,
+      error: "prop_window_mismatch",
+    };
+  }
+  return removeQuickPropFromDesktop(requestedPropId, `prop_return_${requestedPropId}`);
 });
 
 ipcMain.handle("pet:getCapabilitySnapshot", () => {
@@ -3877,13 +5611,14 @@ ipcMain.handle("pet:getAnimationManifest", (_event, characterId) => {
 });
 
 app.whenReady().then(async () => {
-  initializeDiagnosticsLog();
-  initializeRuntimeSettings();
+  initializeRuntimeSettings("startup");
   initializeStateRuntime();
   initializeDialogRuntime();
   initializeContractRouter();
   await initializeMemoryPipelineRuntime();
   createWindow();
+  initializeShellSurface();
+  startRoamController();
   physicsTimer = setInterval(stepFling, FLING_CONFIG.stepMs);
   cursorTimer = setInterval(emitCursorState, CURSOR_EMIT_INTERVAL_MS);
   initializeExtensionPackRuntime();
@@ -3893,17 +5628,18 @@ app.whenReady().then(async () => {
   startLocalMediaPoller();
   startBackgroundFreshRssPoller();
 
-  if (!DIAGNOSTICS_ENABLED) return;
-
   screen.on("display-added", (_event, display) => {
+    if (!DIAGNOSTICS_ENABLED) return;
     logDiagnostics("display-added", summarizeDisplay(display));
   });
 
   screen.on("display-removed", (_event, display) => {
+    if (!DIAGNOSTICS_ENABLED) return;
     logDiagnostics("display-removed", summarizeDisplay(display));
   });
 
   screen.on("display-metrics-changed", (_event, display, changedMetrics) => {
+    if (!DIAGNOSTICS_ENABLED) return;
     logDiagnostics("display-metrics-changed", {
       changedMetrics,
       display: summarizeDisplay(display),
@@ -3912,6 +5648,7 @@ app.whenReady().then(async () => {
 });
 
 app.on("before-quit", () => {
+  appIsQuitting = true;
   if (stateRuntime) {
     stateRuntime.stop();
   }
@@ -3928,6 +5665,10 @@ app.on("before-quit", () => {
     clearInterval(cursorTimer);
     cursorTimer = null;
   }
+  if (roamTimer) {
+    clearInterval(roamTimer);
+    roamTimer = null;
+  }
   if (localMediaPollTimer) {
     clearInterval(localMediaPollTimer);
     localMediaPollTimer = null;
@@ -3936,6 +5677,24 @@ app.on("before-quit", () => {
     clearInterval(freshRssPollTimer);
     freshRssPollTimer = null;
   }
+  if (shellTray) {
+    shellTray.destroy();
+    shellTray = null;
+  }
+  if (inventoryWin && !inventoryWin.isDestroyed()) {
+    inventoryWin.destroy();
+    inventoryWin = null;
+  }
+  if (zoneSelectorWin && !zoneSelectorWin.isDestroyed()) {
+    zoneSelectorWin.destroy();
+    zoneSelectorWin = null;
+  }
+  for (const record of propWindows.values()) {
+    if (record?.window && !record.window.isDestroyed()) {
+      record.window.destroy();
+    }
+  }
+  propWindows.clear();
   cancelFling("appQuit");
   closeDiagnosticsLog();
 });

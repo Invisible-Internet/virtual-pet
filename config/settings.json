@@ -51,5 +51,22 @@
     "localWorkspaceRoot": ".",
     "openClawWorkspaceRoot": null,
     "obsidianVaultRoot": "W:\\AI\\OpenClaw\\Memory\\Vault"
+  },
+  "roaming": {
+    "mode": "desktop",
+    "zone": "desk-center",
+    "zoneRect": null
+  },
+  "ui": {
+    "diagnosticsEnabled": false
+  },
+  "wardrobe": {
+    "activeAccessories": []
+  },
+  "inventory": {
+    "quickProps": []
+  },
+  "dialog": {
+    "alwaysShowBubble": true
   }
 }

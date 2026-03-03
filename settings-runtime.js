@@ -25,6 +25,14 @@ const OPENCLAW_TRANSPORTS = Object.freeze({
   stub: "stub",
   http: "http",
 });
+const ROAMING_MODES = Object.freeze({
+  desktop: "desktop",
+  zone: "zone",
+});
+const DEFAULT_ROAMING_ZONE = "desk-center";
+const MIN_ZONE_RECT_SIZE = 120;
+const KNOWN_ACCESSORY_IDS = new Set(["headphones"]);
+const KNOWN_QUICK_PROP_IDS = new Set(["poolRing"]);
 
 const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "::1"]);
 
@@ -52,6 +60,42 @@ function toPositiveInteger(value, fallback, min = 1) {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) return fallback;
   return Math.max(min, Math.round(numeric));
+}
+
+function normalizeStringArray(value, allowedValues = null) {
+  const rawValues =
+    Array.isArray(value) ? value : typeof value === "string" ? value.split(",") : [];
+  const normalized = [];
+  const seen = new Set();
+  for (const entry of rawValues) {
+    const trimmed = toOptionalString(entry, null);
+    if (!trimmed) continue;
+    if (allowedValues instanceof Set && !allowedValues.has(trimmed)) continue;
+    if (seen.has(trimmed)) continue;
+    seen.add(trimmed);
+    normalized.push(trimmed);
+  }
+  return normalized;
+}
+
+function normalizeZoneRect(value) {
+  if (!value || typeof value !== "object") return null;
+  const x = Number(value.x);
+  const y = Number(value.y);
+  const width = Number(value.width);
+  const height = Number(value.height);
+  if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(width) || !Number.isFinite(height)) {
+    return null;
+  }
+  if (width < MIN_ZONE_RECT_SIZE || height < MIN_ZONE_RECT_SIZE) {
+    return null;
+  }
+  return {
+    x: Math.round(x),
+    y: Math.round(y),
+    width: Math.round(width),
+    height: Math.round(height),
+  };
 }
 
 function deepClone(value) {
@@ -199,6 +243,23 @@ function buildDefaultSettings(projectRoot) {
       openClawWorkspaceRoot: null,
       obsidianVaultRoot: DEFAULT_OBSIDIAN_VAULT_PATH,
     },
+    roaming: {
+      mode: ROAMING_MODES.desktop,
+      zone: DEFAULT_ROAMING_ZONE,
+      zoneRect: null,
+    },
+    ui: {
+      diagnosticsEnabled: false,
+    },
+    wardrobe: {
+      activeAccessories: [],
+    },
+    inventory: {
+      quickProps: [],
+    },
+    dialog: {
+      alwaysShowBubble: true,
+    },
   };
 }
 
@@ -236,6 +297,39 @@ function normalizeSettings(rawSettings, { projectRoot, env, warnings, errors }) 
   normalized.paths.obsidianVaultRoot = toAbsolutePath(
     pathsRaw.obsidianVaultRoot,
     normalized.paths.obsidianVaultRoot
+  );
+
+  const roamingRaw = raw.roaming && typeof raw.roaming === "object" ? raw.roaming : {};
+  normalized.roaming.mode =
+    toOptionalString(roamingRaw.mode, normalized.roaming.mode) === ROAMING_MODES.zone
+      ? ROAMING_MODES.zone
+      : ROAMING_MODES.desktop;
+  normalized.roaming.zone =
+    toOptionalString(roamingRaw.zone, normalized.roaming.zone) || DEFAULT_ROAMING_ZONE;
+  normalized.roaming.zoneRect = normalizeZoneRect(roamingRaw.zoneRect);
+
+  const uiRaw = raw.ui && typeof raw.ui === "object" ? raw.ui : {};
+  normalized.ui.diagnosticsEnabled = toBoolean(
+    uiRaw.diagnosticsEnabled,
+    normalized.ui.diagnosticsEnabled
+  );
+
+  const wardrobeRaw = raw.wardrobe && typeof raw.wardrobe === "object" ? raw.wardrobe : {};
+  normalized.wardrobe.activeAccessories = normalizeStringArray(
+    wardrobeRaw.activeAccessories,
+    KNOWN_ACCESSORY_IDS
+  );
+
+  const inventoryRaw = raw.inventory && typeof raw.inventory === "object" ? raw.inventory : {};
+  normalized.inventory.quickProps = normalizeStringArray(
+    inventoryRaw.quickProps,
+    KNOWN_QUICK_PROP_IDS
+  );
+
+  const dialogRaw = raw.dialog && typeof raw.dialog === "object" ? raw.dialog : {};
+  normalized.dialog.alwaysShowBubble = toBoolean(
+    dialogRaw.alwaysShowBubble,
+    normalized.dialog.alwaysShowBubble
   );
 
   const openclawRaw = raw.openclaw && typeof raw.openclaw === "object" ? raw.openclaw : {};
@@ -395,6 +489,33 @@ function applyEnvOverrides(settings, env, sourceMap) {
   if (Object.prototype.hasOwnProperty.call(env, "PET_OBSIDIAN_VAULT_PATH")) {
     set("paths.obsidianVaultRoot", toOptionalString(env.PET_OBSIDIAN_VAULT_PATH, next.paths.obsidianVaultRoot));
   }
+  if (Object.prototype.hasOwnProperty.call(env, "PET_ROAMING_MODE")) {
+    set("roaming.mode", toOptionalString(env.PET_ROAMING_MODE, next.roaming.mode));
+  }
+  if (Object.prototype.hasOwnProperty.call(env, "PET_ROAMING_ZONE")) {
+    set("roaming.zone", toOptionalString(env.PET_ROAMING_ZONE, next.roaming.zone));
+  }
+  if (Object.prototype.hasOwnProperty.call(env, "PET_UI_DIAGNOSTICS_ENABLED")) {
+    set("ui.diagnosticsEnabled", toBoolean(env.PET_UI_DIAGNOSTICS_ENABLED, next.ui.diagnosticsEnabled));
+  }
+  if (Object.prototype.hasOwnProperty.call(env, "PET_WARDROBE_ACCESSORIES")) {
+    set(
+      "wardrobe.activeAccessories",
+      toOptionalString(env.PET_WARDROBE_ACCESSORIES, next.wardrobe.activeAccessories)
+    );
+  }
+  if (Object.prototype.hasOwnProperty.call(env, "PET_INVENTORY_QUICK_PROPS")) {
+    set(
+      "inventory.quickProps",
+      toOptionalString(env.PET_INVENTORY_QUICK_PROPS, next.inventory.quickProps)
+    );
+  }
+  if (Object.prototype.hasOwnProperty.call(env, "PET_DIALOG_ALWAYS_SHOW_BUBBLE")) {
+    set(
+      "dialog.alwaysShowBubble",
+      toBoolean(env.PET_DIALOG_ALWAYS_SHOW_BUBBLE, next.dialog.alwaysShowBubble)
+    );
+  }
   if (Object.prototype.hasOwnProperty.call(env, "PET_SPOTIFY_ENABLED")) {
     set("integrations.spotify.enabled", toBoolean(env.PET_SPOTIFY_ENABLED, next.integrations.spotify.enabled));
   }
@@ -485,6 +606,14 @@ function applyEnvOverrides(settings, env, sourceMap) {
   return next;
 }
 
+function resolveRuntimeOverridePath({ app, projectRoot } = {}) {
+  const root = projectRoot || process.cwd();
+  if (app?.isPackaged && app && typeof app.getPath === "function") {
+    return path.join(app.getPath("userData"), "settings.json");
+  }
+  return path.join(root, "config", "settings.local.json");
+}
+
 function loadRuntimeSettings({ app, projectRoot, env = process.env } = {}) {
   const root = projectRoot || process.cwd();
   const warnings = [];
@@ -542,10 +671,34 @@ function loadRuntimeSettings({ app, projectRoot, env = process.env } = {}) {
   };
 }
 
+function persistRuntimeSettingsPatch({ app, projectRoot, patch } = {}) {
+  const overridePath = resolveRuntimeOverridePath({ app, projectRoot });
+  const warnings = [];
+  const errors = [];
+  const existing = safeReadJson(overridePath, warnings, errors) || {};
+  if (errors.length > 0) {
+    throw new Error(errors[0]);
+  }
+
+  const next = mergeObjects(existing, patch && typeof patch === "object" ? patch : {});
+  fs.mkdirSync(path.dirname(overridePath), { recursive: true });
+  fs.writeFileSync(overridePath, `${JSON.stringify(next, null, 2)}\n`, "utf8");
+  return {
+    overridePath,
+    override: next,
+  };
+}
+
 module.exports = {
+  DEFAULT_ROAMING_ZONE,
+  KNOWN_ACCESSORY_IDS,
+  KNOWN_QUICK_PROP_IDS,
   OPENCLAW_TRANSPORTS,
+  ROAMING_MODES,
   isLoopbackEndpoint,
   isWslUncPath,
+  persistRuntimeSettingsPatch,
   resolveWorkspacePaths,
+  resolveRuntimeOverridePath,
   loadRuntimeSettings,
 };
