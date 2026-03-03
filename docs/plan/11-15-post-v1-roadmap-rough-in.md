@@ -18,7 +18,7 @@ Locked ordering:
 5. `15` Extension Showcase
 
 Planning status:
-- `11` is the next family to detail fully.
+- `11` is the active family currently being specified through `11a`.
 - `12` through `15` are intentionally rough placeholders and are not implementation-ready yet.
 - All future work follows the post-v1 workflow in [`00-development-workflow.md`](./00-development-workflow.md).
 
@@ -32,7 +32,7 @@ Planning status:
 ## Family Index
 | Family | Theme | Why It Exists | Current Planning State |
 | --- | --- | --- | --- |
-| `11` | Observability / Setup / Provenance | Make the current OpenClaw, model, memory, and fallback setup visible and understandable inside the app. | Next family to detail now |
+| `11` | Observability / Setup / Provenance | Make the current OpenClaw, model, memory, and fallback setup visible and understandable inside the app. | Active via `11a` |
 | `12` | Conversation / Bridge | Make pet chat feel like real OpenClaw conversation, not narrow status/introspection. | Rough only |
 | `13` | Memory / Persona Continuity | Make online and offline feel like the same pet with recall and stable personality. | Rough only |
 | `14` | Embodiment / Autonomy | Make the pet move and react more deliberately, unobtrusively, and believably. | Rough only |

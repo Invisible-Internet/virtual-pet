@@ -9,9 +9,8 @@ Related:
 ## Current State
 - D01-D10 are complete historical v1 records.
 - The v1 roadmap is closed.
-- No post-v1 deliverable is active.
-- The next real feature slice will start at `11a`.
-- The next detailed planning target is `11a-openclaw-memory-observability-surface`.
+- The current active post-v1 deliverable is `11a-openclaw-memory-observability-surface`.
+- `11a` has a passed `Spec Gate`; build work has not started yet.
 - Post-v1 families `11` through `15` are roughed in here:
   - [`11-15-post-v1-roadmap-rough-in.md`](./11-15-post-v1-roadmap-rough-in.md)
 - Future work should be created through the post-v1 workflow and deliverable template:
@@ -47,8 +46,8 @@ This family rough-in is preserved in:
 - [`11-15-post-v1-roadmap-rough-in.md`](./11-15-post-v1-roadmap-rough-in.md)
 
 Current planning guidance:
-- `11` is the next family to detail fully.
-- `11a-openclaw-memory-observability-surface` is the next planning target.
+- `11` is the active family currently being specified through `11a`.
+- `11a-openclaw-memory-observability-surface` is the current spec-passed deliverable.
 - `12` through `15` remain rough placeholders until dedicated planning sessions lock their slice-level specs.
 
 ### Status Schema

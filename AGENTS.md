@@ -124,18 +124,22 @@ Historical v1 deliverables keep their original status wording and are not retrof
 - `accepted` is the only terminal state for future post-v1 deliverables.
 
 ### Current Workflow Snapshot
-- Current Deliverable: `none`
-- Workflow State: `idle`
-- Current Status: `n/a` (no active post-v1 deliverable)
+- Current Deliverable: `11a-openclaw-memory-observability-surface`
+- Workflow State: `active`
+- Current Status: `specifying`
 - Last Completed Deliverable: `D10`
 - Next Detailed Target: `11a-openclaw-memory-observability-surface`
 - Current Gate State:
-  - `Spec Gate`: `n/a`
-  - `Build Gate`: `n/a`
-  - `Acceptance Gate`: `n/a`
+  - `Spec Gate`: `passed`
+  - `Build Gate`: `not_started`
+  - `Acceptance Gate`: `not_started`
 - Historical Note:
   - D01-D10 are complete historical v1 records.
   - Detailed v1 session history lives in `docs/plan/archive/00-progress-tracker-v1-history.md`.
+- Current `11a` surface contract:
+  - Tray `Inventory...` and `Settings...` must open the same shared shell popup on different tabs.
+  - `Inventory` preserves the D07c inventory UI; `Settings` owns the `11a` observability rows.
+  - Dev fallback `F10` must route to the shared shell popup on the `Settings` tab.
 
 ### Post-v1 Roadmap Snapshot
 - Rough-in doc: `docs/plan/11-15-post-v1-roadmap-rough-in.md`
@@ -146,8 +150,8 @@ Historical v1 deliverables keep their original status wording and are not retrof
   - `14` Embodiment / Autonomy
   - `15` Extension Showcase
 - Planning rule:
-  - `11` is the next family to detail fully.
-  - `11a-openclaw-memory-observability-surface` is the next planning target unless the user explicitly reprioritizes.
+  - `11` is the active family currently being specified through `11a`.
+  - `11a-openclaw-memory-observability-surface` is the current active post-v1 deliverable unless the user explicitly reprioritizes.
   - `12` through `15` remain rough placeholders and must not be treated as spec-passed deliverables yet.
 
 ### Session-End Sync Rule

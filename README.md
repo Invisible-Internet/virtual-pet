@@ -16,8 +16,8 @@
   - memory pipeline with local and Obsidian-backed modes
   - Spotify, FreshRSS, and local media sensing slices
   - acceptance coverage with automated smoke checks plus operator-visible evidence
-- There is currently no active post-v1 deliverable. Future work starts through the post-v1 workflow in `docs/plan`.
-- The next detailed planning target is `11a-openclaw-memory-observability-surface`.
+- Future work follows the post-v1 workflow in `docs/plan`.
+- The current active post-v1 deliverable is `11a-openclaw-memory-observability-surface`, with `Spec Gate` passed and implementation not started yet.
 
 ## Architecture Principles
 - Local deterministic authority stays in control.
