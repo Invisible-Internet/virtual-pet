@@ -1,11 +1,68 @@
 # Master Roadmap
 
 Related:
+- Workflow: [`00-development-workflow.md`](./00-development-workflow.md)
 - Progress Tracker: [`00-progress-tracker.md`](./00-progress-tracker.md)
 - Decisions Log: [`09-decisions-log.md`](./09-decisions-log.md)
 
-## Summary
-This roadmap governs the documentation-guided implementation path for Virtual Pet v2:
+## Current State
+- D01-D10 are complete historical v1 records.
+- The v1 roadmap is closed.
+- No post-v1 deliverable is active.
+- The next real feature slice will start at `11a`.
+- Future work should be created through the post-v1 workflow and deliverable template:
+  - [`00-development-workflow.md`](./00-development-workflow.md)
+  - [`templates/deliverable-template.md`](./templates/deliverable-template.md)
+
+## Post-v1 Delivery Model
+
+### Core Rules
+- Work is organized as showcase-first slices.
+- The slice is owned by the surface that best demonstrates the feature.
+- Demo contract comes before implementation.
+- Failure and recovery behavior must be specified before implementation.
+- Operator acceptance is required for closure.
+
+### Naming
+- Use family-plus-slice naming:
+  - `11a-openclaw-obsidian-provider-observability-surface`
+  - `11b-provider-repair-actions`
+  - `11c-persona-aware-offline-dialog`
+- Integer = feature family
+- Letter suffix = smallest showcase-first slice
+
+### Status Schema
+- `queued`
+- `specifying`
+- `implementing`
+- `iterating`
+- `blocked`
+- `accepted`
+
+### Gate Model
+- `Spec Gate`
+  - showcase promise, demo script, failure/recovery script, interfaces, and acceptance bar are ready
+- `Build Gate`
+  - first implementation slice exists, checks are green, and the slice is demoable
+- `Acceptance Gate`
+  - operator-visible demo and failure/recovery script both pass with evidence logged
+
+### Start Rule
+1. If no deliverable is active, create a new `11a-...md` file from the template.
+2. Set status to `specifying`.
+3. Pass `Spec Gate`.
+4. Only then begin implementation.
+
+### Closeout Rule
+1. `Spec Gate=passed`
+2. `Build Gate=passed`
+3. `Acceptance Gate=passed`
+4. Deliverable status set to `accepted`
+5. Deliverable file, tracker, and `AGENTS.md` all synced
+
+## Historical v1 Summary
+This section records the closed v1 roadmap and remains the historical baseline for the current product.
+
 - Keep Canvas runtime baseline.
 - Keep local deterministic authority in control; OpenClaw remains advisory only.
 - Build modular capability architecture with graceful fallbacks.
@@ -22,27 +79,27 @@ This roadmap governs the documentation-guided implementation path for Virtual Pe
 - Keep deep offline personality and local-brain work out of the v1 critical path and move them into post-v1 feasibility research.
 - Gate progression by both documentation and implementation verification before advancing to the next implementation deliverable.
 
-## Execution Mode (Doc + Code)
-For implementation deliverables (D02-D08, including D02b, D05a, D07b, and D07c), completion requires dual gates:
+## Historical v1 Execution Mode (Doc + Code)
+For implementation deliverables (D02-D08, including D02b, D05a, D07b, and D07c), completion required dual gates:
 1. `Doc Gate`: contract/spec sections are complete and internally consistent.
 2. `Implementation Gate`: at least one concrete runtime slice is implemented with visible/manual verification steps and outcomes.
 
-Definition of `done` for each implementation deliverable:
-- Deliverable file marks both gates passed.
-- Tracker mirrors status and gate outcomes.
-- User can run or observe at least one new visible app/runtime behavior tied to that deliverable.
+Definition of `done` for those historical v1 implementation deliverables:
+- Deliverable file marked both gates passed.
+- Tracker mirrored status and gate outcomes.
+- User could run or observe at least one new visible app/runtime behavior tied to that deliverable.
 
-Doc-only exceptions:
-- D01 is a completed discovery/planning baseline and does not require retroactive runtime implementation.
-- D10 is a post-v1 feasibility/research deliverable and is doc-only unless explicitly promoted into implementation scope.
+Doc-only historical exceptions:
+- D01 is a completed discovery/planning baseline and did not require retroactive runtime implementation.
+- D10 is a post-v1 feasibility/research deliverable and remained doc-only.
 
-## Explicit Feature Targets (Roadmap Commitments)
+## Historical Feature Targets (v1 Commitments)
 1. Movement and Roaming
 - Pet can roam desktop bounds (respecting configured clamp mode).
 - Pet can optionally roam within a designated user region.
 2. Renderer Scope
 - Keep existing Canvas renderer/runtime as-is for this roadmap.
-- Do not include DOM/CSS/Pixi renderer migration work in current deliverables.
+- Do not include DOM/CSS/Pixi renderer migration work in the historical v1 deliverables.
 3. State System
 - Baseline states are explicitly supported: `Idle`, `Roam`, `MusicChill`, `MusicDance`, `WatchMode`, `Sleep`.
 - Default priority policy is documented and testable: `Sleep > WatchMode > MusicMode > Roam > Idle`.
@@ -85,7 +142,7 @@ Doc-only exceptions:
 - Evaluate whether future local intelligence should remain external OpenClaw, use a local model provider, bundle OpenClaw, embed a local model path, or stay rules/traits-only.
 - Evaluate whether structured traits should become canonical and how they would sync with `SOUL.md` and `IDENTITY.md`.
 
-## Feature-to-Deliverable Ownership
+## Historical Feature-to-Deliverable Ownership
 | Feature Theme | Primary Deliverable | Validation Deliverable |
 | --- | --- | --- |
 | Extension framework contracts (pack model, trust, permissions, compatibility) | D02b | D08 |
@@ -110,7 +167,7 @@ Doc-only exceptions:
 | Minimal offline embodiment loop | D07, D07b, D07c | D08 |
 | Local brain / personality feasibility | D10 | Post-v1 ADR follow-up |
 
-## Phases and Ordering
+## Historical Phases And Ordering
 ### Phase 0 - Bootstrap and Alignment
 - `00-progress-tracker`
 - `00-master-roadmap`
@@ -137,7 +194,7 @@ Doc-only exceptions:
 ### Phase 4 - Post-v1 Feasibility Research
 - `10-local-brain-and-personality-feasibility`
 
-## Deliverable Sequencing
+## Historical Deliverable Sequencing
 1. `01-gap-analysis-expansion-vs-current`
 2. `02-architecture-capability-registry`
 3. `02b-extension-framework-and-pack-sdk`
@@ -152,7 +209,7 @@ Doc-only exceptions:
 12. `08-test-and-acceptance-matrix`
 13. `10-local-brain-and-personality-feasibility`
 
-## Exit Criteria Per Phase
+## Historical Exit Criteria Per Phase
 ### Phase 0 Exit
 - D01 is `done` and gaps are mapped to concrete implementation priorities.
 - Decisions log contains baseline architecture decisions with rationale.
@@ -187,7 +244,7 @@ Doc-only exceptions:
 - ADR recommendation is recorded for or against a future local-brain implementation track.
 - No v1 runtime behavior is retroactively expanded without a separate approved deliverable.
 
-## Risk Register Summary
+## Historical Risk Register Summary
 | Risk | Impact | Mitigation |
 | --- | --- | --- |
 | Integration coupling to OpenClaw availability | High | Capability registry + degraded mode fallbacks |

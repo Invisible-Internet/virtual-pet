@@ -151,3 +151,10 @@ Related:
 - **Rationale:** This preserves auditability, operator editability, and the existing Markdown-first memory policy while still allowing deterministic local logic to consume concise trait fields. It also avoids split-brain sync between editable prose and editable structured records.
 - **Alternatives Considered:** Make structured traits canonical now, keep dual canonical sources, avoid structured traits entirely even for runtime derivation.
 - **Impacted Files/Modules:** D05 memory governance, D10 feasibility outcome, any future persona snapshot runtime, `SOUL.md`, `IDENTITY.md`, future memory-derived trait projections.
+
+## ADR-0022: Post-v1 Deliverables Are Showcase-First and Operator-Accepted
+- **Date:** `2026-03-03`
+- **Decision:** All future post-v1 deliverables must be showcase-first, demo-contract-first, and operator-accepted. Future slices use `D11a`-style family-plus-slice naming, and `accepted` is the only terminal state for those deliverables.
+- **Rationale:** The v1 workflow shipped real features, but it allowed too much first-pass ambiguity in user-visible experience. Smaller showcase slices with explicit demo and failure scripts reduce late-stage redesign and make operator feedback actionable earlier.
+- **Alternatives Considered:** Keep the v1 `done`/`review` flow unchanged for post-v1 work, track future work as larger bundles, or keep process rules only in chat instead of documenting them.
+- **Impacted Files/Modules:** `README.md`, `AGENTS.md`, `docs/plan/00-development-workflow.md`, `docs/plan/templates/deliverable-template.md`, `docs/plan/00-progress-tracker.md`, `docs/plan/00-master-roadmap.md`.

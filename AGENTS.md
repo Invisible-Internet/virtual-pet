@@ -84,87 +84,64 @@ If diagnostics are enabled, also verify:
   - Draw anchor/bounds in `renderer.js`
 - If you centralize shared constants, prefer one source exported through preload-safe config or static JSON to avoid mismatch.
 
-## Planning Workflow And Resume Protocol
+## Post-v1 Workflow
 
-This section defines the mandatory session handoff process for roadmap execution.
+This section defines the mandatory startup and handoff protocol for all work after the v1 roadmap closeout.
 
 ### Mandatory Startup Sequence
 1. Read `AGENTS.md` first.
 2. Read `docs/plan/00-progress-tracker.md`.
-3. Open the file listed in `Current Deliverable`.
-4. Continue only work relevant to that deliverable unless a blocker requires escalation.
+3. If `Current Deliverable` is not `none`, open that deliverable and follow its current status and gates.
+4. If `Current Deliverable` is `none`, read `docs/plan/00-development-workflow.md` and create/spec a new deliverable before coding.
 
-### Delivery Model (Mandatory)
-- Use `spec + implementation slice` delivery for each implementation deliverable.
-- From D02 onward, each deliverable must produce both:
-  - Documentation contract updates.
-  - A concrete runtime code slice with visible/manual verification steps.
-- Required sections in each deliverable file:
-  - `Implementation Slice (Mandatory)`
-  - `Visible App Outcome`
-  - `Implementation Verification (Manual)`
-- Exception: D01 remains a completed discovery/planning baseline and is not retrofitted with runtime code requirements.
-- Exception: D10 is a post-v1 feasibility deliverable and remains doc-only unless explicitly promoted into implementation scope.
+### Post-v1 Status Schema
+- `queued`
+- `specifying`
+- `implementing`
+- `iterating`
+- `blocked`
+- `accepted`
 
-### Deliverable TODO Table
-Status schema:
-- `not_started | in_progress | review | blocked | done`
+Historical v1 deliverables keep their original status wording and are not retrofitted.
 
-| Deliverable | Status | File |
-| --- | --- | --- |
-| `00-master-roadmap` | `in_progress` | `docs/plan/00-master-roadmap.md` |
-| `01-gap-analysis-expansion-vs-current` | `done` | `docs/plan/01-gap-analysis-expansion-vs-current.md` |
-| `02-architecture-capability-registry` | `done` | `docs/plan/02-architecture-capability-registry.md` |
-| `02b-extension-framework-and-pack-sdk` | `done` | `docs/plan/02b-extension-framework-and-pack-sdk.md` |
-| `03-pet-core-events-intents-suggestions` | `done` | `docs/plan/03-pet-core-events-intents-suggestions.md` |
-| `04-openclaw-bridge-spec` | `done` | `docs/plan/04-openclaw-bridge-spec.md` |
-| `05a-obsidian-workspace-bootstrap-and-connectivity` | `done` | `docs/plan/05a-obsidian-workspace-bootstrap-and-connectivity.md` |
-| `05-memory-pipeline-and-obsidian-adapter` | `done` | `docs/plan/05-memory-pipeline-and-obsidian-adapter.md` |
-| `06-integrations-freshrss-spotify` | `done` | `docs/plan/06-integrations-freshrss-spotify.md` |
-| `07-state-system-extension-guide` | `done` | `docs/plan/07-state-system-extension-guide.md` |
-| `07b-dialog-surface-and-minimal-offline-loop` | `done` | `docs/plan/07b-dialog-surface-and-minimal-offline-loop.md` |
-| `07c-shell-settings-and-wardrobe-surface` | `done` | `docs/plan/07c-shell-settings-and-wardrobe-surface.md` |
-| `08-test-and-acceptance-matrix` | `done` | `docs/plan/08-test-and-acceptance-matrix.md` |
-| `09-decisions-log` | `in_progress` | `docs/plan/09-decisions-log.md` |
-| `10-local-brain-and-personality-feasibility` | `done` | `docs/plan/10-local-brain-and-personality-feasibility.md` |
+### Post-v1 Gate Model
+- `Spec Gate`
+  - Must pass before implementation starts.
+- `Build Gate`
+  - First slice is implemented, checks are green, and the feature is demoable.
+- `Acceptance Gate`
+  - Operator-visible demo and failure/recovery script both pass with evidence logged.
 
-### Current Progress Snapshot
-- Current Deliverable: `10-local-brain-and-personality-feasibility`
-- Current Status: `done`
-- Overall Progress: `13/13 roadmap deliverables done` (D01, D02, D02b, D03, D04, D05a, D05, D06, D07, D07b, D07c, D08, and D10 complete; roadmap deliverables are complete)
-- Gate Snapshot: `Research Gate=passed`.
-- Scope Note: roadmap now explicitly tracks roam modes, baseline state set/priority, tray/settings/wardrobe surface, memory/introspection contracts, and visible acceptance tests.
-- Scope Note: roadmap also explicitly tracks conversation UX (chat/voice), speech bubble/dialog fallback, and lip-sync approximation with degraded-mode behavior.
-- Scope Note: roadmap includes proactive pet messaging, explicit introspection payload expectations, music-mode feedback loop, and memory/hobby governance details.
-- Scope Note: roadmap also includes simple/complex custom-state onboarding patterns and read-only pet state context propagation to OpenClaw.
-- Scope Note: roadmap now includes `02b-extension-framework-and-pack-sdk` for extension packs, prop world model, trust/permission policy, arbitration, and OpenClaw context enrichment contracts.
-- Scope Note: roadmap now explicitly tracks config-first path/settings management for OpenClaw workspace and Obsidian vault targets (including WSL path support expectations).
-- Scope Note: roadmap sequencing now inserts `05a-obsidian-workspace-bootstrap-and-connectivity` before D05 gate closeout.
-- Scope Note: D01 verification gate is passed and closed; focus has shifted to D02 capability contract and degraded-fallback architecture.
-- Scope Note: delivery model is now `spec + implementation slice` so each deliverable ships visible runtime progress, not docs only.
-- Scope Note: D02 is closed as `done` (doc + implementation gates passed).
-- Scope Note: D02b is closed as `done` (doc + implementation gates passed) with verified extension discovery, trust-warning toggles, and prop interaction outcomes.
-- Scope Note: D03 is closed as `done` (doc + implementation gates passed) with verified status-introspection flow, announcement cooldown skip behavior, and extension interaction correlation traces.
-- Scope Note: D04 is re-closed as `done` (doc + implementation gates passed) after operator-confirmed degraded-mode drag/fling stability.
-- Scope Note: D06 is closed as `done` after operator-confirmed Spotify/FreshRSS healthy paths, `track_rating` writes, and deterministic Spotify unavailable fallback.
-- Scope Note: D07 is now closed as `done` after operator-confirmed local-media `MusicChill`, temporary `Reading`/FreshRSS return-to-idle behavior, route-aware props, and preserved fling `Roll`.
-- Scope Note: D07c is now closed as `done` after operator-confirmed tray shell, inventory workflow, diagnostics toggle, custom zone flow, and acceptable cross-monitor roam behavior; remaining polish can be revisited later.
-- Scope Note: D08 is now closed as `done` with a working acceptance matrix, `npm run check:acceptance` smoke harness, generated evidence artifacts, linked operator-visible evidence from D02b-D07c, and a final operator-visible sweep pass.
-- Scope Note: D08 manual sweep and follow-up operator re-tests surfaced roam-transition issues; runtime fixes for manual zone escape, slow-walk smoothing, locomotion facing, and mid-travel `desktop -> zone` toggles are now accepted by the final operator sweep.
-- Scope Note: Phase 3 is now split across D07 (state runtime), D07b (dialog surface + minimal offline loop), and D07c (shell/settings/wardrobe surface).
-- Scope Note: v1 now explicitly commits to a minimal offline embodiment loop while deferring deeper personality/local-model work to D10 feasibility research.
-- Scope Note: D10 is now closed as `done`; the research recommendation favors bridge-compatible local-provider work first and keeps structured traits derived instead of canonical.
-- Scope Note: roadmap deliverables are complete; any further work should start as an explicitly approved post-v1 follow-on deliverable.
-- Shipped Outcome (This Session): no visible app change; this session completed the D10 doc-only feasibility deliverable, added ADRs for bridge-compatible local-provider sequencing and Markdown-first personality canon, and closed the roadmap deliverables at `13/13 done`.
+### Post-v1 Workflow Rules
+- Use showcase-first slices rather than broad feature bundles.
+- Write the demo contract before implementation:
+  - `Showcase Promise (Mandatory)`
+  - `Operator Demo Script (Mandatory)`
+  - `Failure / Recovery Script (Mandatory)`
+- If a slice touches multiple systems, the deliverable is owned by the surface that best demonstrates the outcome.
+- Do not start implementation before `Spec Gate=passed`.
+- Failed operator feedback moves the slice to `iterating`, not `accepted`.
+- `accepted` is the only terminal state for future post-v1 deliverables.
 
-### Gating Rule
-- Do not advance to the next deliverable until the current deliverable is marked `done`, its verification gate is explicitly marked passed, and its implementation slice is explicitly marked passed in its file and mirrored in `docs/plan/00-progress-tracker.md`.
+### Current Workflow Snapshot
+- Current Deliverable: `none`
+- Workflow State: `idle`
+- Current Status: `n/a` (no active post-v1 deliverable)
+- Last Completed Deliverable: `D10`
+- Current Gate State:
+  - `Spec Gate`: `n/a`
+  - `Build Gate`: `n/a`
+  - `Acceptance Gate`: `n/a`
+- Historical Note:
+  - D01-D10 are complete historical v1 records.
+  - Detailed v1 session history lives in `docs/plan/archive/00-progress-tracker-v1-history.md`.
 
-### Session-End Update Rule
-- At the end of every working session, update both:
+### Session-End Sync Rule
+- At the end of every working session, update:
+  - the active deliverable file if one exists
   - `docs/plan/00-progress-tracker.md`
-  - `AGENTS.md` (Current Progress Snapshot and TODO status rows)
-- Ensure both files point to the same `Current Deliverable` and status before stopping.
+  - `AGENTS.md`
+- If no deliverable is active, update `docs/plan/00-progress-tracker.md` and `AGENTS.md` whenever workflow state or next-step guidance changes.
 - Include a short shipped-outcome note:
-  - Visible app/runtime changes delivered this session.
-  - Or explicit `no visible app change` with reason.
+  - visible app/runtime change delivered
+  - or explicit `no visible app change` with reason
