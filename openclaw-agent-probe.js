@@ -112,7 +112,7 @@ function buildSpotifyNowPlayingPrompt() {
     "Use the spotify-history or spotify-player skill as needed.",
     "Return JSON only.",
     "Shape:",
-    '{"is_playing":boolean,"timestamp":number|null,"track":string|null,"artist":string|null,"album":string|null,"context":object|null}.',
+    '{"is_playing":boolean,"timestamp":number|null,"track":string|null,"artist":string|null,"album":string|null,"device_name":string|null,"device_type":string|null,"output_route":string|null,"context":object|null}.',
     "No markdown.",
   ].join(" ");
 }
@@ -281,6 +281,51 @@ function normalizeSpotifyNowPlayingPayload(value) {
     ]) ||
     derivedTrack.artistName ||
     "unknown_artist";
+  const deviceName =
+    firstNonEmpty([
+      input.device_name,
+      input.deviceName,
+      input.output_device,
+      input.device?.name,
+      input.context?.device_name,
+      input.context?.deviceName,
+      input.context?.device?.name,
+    ]) || "unknown_device";
+  const deviceType =
+    firstNonEmpty([
+      input.device_type,
+      input.deviceType,
+      input.device?.type,
+      input.context?.device_type,
+      input.context?.deviceType,
+      input.context?.device?.type,
+    ]) || "unknown";
+  const rawRoute =
+    firstNonEmpty([
+      input.output_route,
+      input.outputRoute,
+      input.route,
+      input.context?.output_route,
+      input.context?.outputRoute,
+    ]) || "";
+  const routeSource = `${rawRoute} ${deviceType} ${deviceName}`.toLowerCase();
+  let outputRoute = "unknown";
+  if (
+    routeSource.includes("headphone") ||
+    routeSource.includes("headset") ||
+    routeSource.includes("earbud") ||
+    routeSource.includes("airpod")
+  ) {
+    outputRoute = "headphones";
+  } else if (
+    routeSource.includes("speaker") ||
+    routeSource.includes("computer") ||
+    routeSource.includes("stereo") ||
+    routeSource.includes("receiver") ||
+    routeSource.includes("tv")
+  ) {
+    outputRoute = "speaker";
+  }
   return {
     isPlaying: Boolean(input.is_playing),
     timestamp: Number.isFinite(Number(input.timestamp)) ? Number(input.timestamp) : null,
@@ -289,6 +334,9 @@ function normalizeSpotifyNowPlayingPayload(value) {
     albumName:
       firstNonEmpty([typeof album === "string" ? album : null, album?.name, track?.album?.name]) ||
       "unknown_album",
+    outputDeviceName: deviceName,
+    outputDeviceType: deviceType,
+    outputRoute,
     context: input.context && typeof input.context === "object" ? input.context : null,
     raw: input,
   };

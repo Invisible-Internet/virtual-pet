@@ -35,10 +35,23 @@ async function testLayeredPrecedenceAndEnvOverrides() {
       spotify: {
         enabled: true,
         available: true,
+        backgroundEnrichmentEnabled: true,
+        pollCadenceMinutes: 10,
       },
       freshRss: {
         enabled: true,
         available: false,
+        backgroundEnrichmentEnabled: true,
+        pollCadenceMinutes: 30,
+      },
+    },
+    sensors: {
+      media: {
+        enabled: true,
+        backend: "powershell",
+        pollIntervalMs: 2500,
+        probeTimeoutMs: 1800,
+        includeOutputDevice: true,
       },
     },
     memory: {
@@ -68,6 +81,12 @@ async function testLayeredPrecedenceAndEnvOverrides() {
     integrations: {
       spotify: {
         available: false,
+        pollCadenceMinutes: 2,
+      },
+    },
+    sensors: {
+      media: {
+        pollIntervalMs: 4000,
       },
     },
     memory: {
@@ -97,12 +116,26 @@ async function testLayeredPrecedenceAndEnvOverrides() {
       PET_OPENCLAW_AUTH_TOKEN: "test-token",
       PET_OPENCLAW_RETRY_COUNT: "2",
       PET_SPOTIFY_AVAILABLE: "1",
+      PET_SPOTIFY_BACKGROUND_ENRICHMENT: "0",
+      PET_LOCAL_MEDIA_ENABLED: "0",
+      PET_LOCAL_MEDIA_TIMEOUT_MS: "900",
     },
   });
 
   assert(loaded.settings.memory.adapterMode === "local", "env should override memory.adapterMode");
   assert(loaded.settings.memory.writeLegacyJsonl === true, "local file should override base setting");
   assert(loaded.settings.integrations.spotify.available === true, "env should override spotify availability");
+  assert(
+    loaded.settings.integrations.spotify.backgroundEnrichmentEnabled === false,
+    "env should override spotify background enrichment"
+  );
+  assert(
+    loaded.settings.integrations.spotify.pollCadenceMinutes === 2,
+    "local file should override spotify cadence"
+  );
+  assert(loaded.settings.sensors.media.enabled === false, "env should override local media enabled");
+  assert(loaded.settings.sensors.media.pollIntervalMs === 4000, "local file should override media cadence");
+  assert(loaded.settings.sensors.media.probeTimeoutMs === 900, "env should override media timeout");
   assert(loaded.settings.openclaw.transport === "http", "transport should resolve to HTTP");
   assert(loaded.settings.openclaw.baseUrl === "https://remote.example.com/bridge/dialog", "env baseUrl should win");
   assert(loaded.settings.openclaw.agentId === "session-main", "env agentId should win");
@@ -113,6 +146,11 @@ async function testLayeredPrecedenceAndEnvOverrides() {
   assert(loaded.sourceMap.localConfig.endsWith(path.join("config", "settings.local.json")), "local config source map missing");
   assert(loaded.sourceMap["memory.adapterMode"] === "env", "env source map should mark memory.adapterMode");
   assert(loaded.sourceMap["integrations.spotify.available"] === "env", "env source map should mark spotify availability");
+  assert(
+    loaded.sourceMap["integrations.spotify.backgroundEnrichmentEnabled"] === "env",
+    "env source map should mark spotify background enrichment"
+  );
+  assert(loaded.sourceMap["sensors.media.enabled"] === "env", "env source map should mark local media enabled");
   assert(loaded.sourceMap["openclaw.agentId"] === "env", "env source map should mark openclaw.agentId");
   assert(loaded.sourceMap["openclaw.baseUrl"] === "env", "env source map should mark openclaw.baseUrl");
 }

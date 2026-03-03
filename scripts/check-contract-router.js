@@ -253,6 +253,50 @@ function testBridgeDialogFlow() {
   );
 }
 
+function testStateDescriptionFlow() {
+  const clock = createClock(5200);
+  const router = createPetContractRouter({
+    now: () => clock.now(),
+  });
+
+  const result = router.processEvent(
+    {
+      type: "USER_COMMAND",
+      correlationId: "corr-state-description",
+      payload: {
+        command: "what are you reading?",
+        text: "what are you reading?",
+      },
+      ts: clock.now(),
+    },
+    {
+      source: "offline",
+      stateDescriptionText: "I have a book open, but I do not have the title handy.",
+      bridgeFallbackMode: "state_context_fallback",
+    }
+  );
+
+  assert(result.ok, "state description should return ok=true");
+  assertEqual(result.intents.length, 1, "state description should emit one intent");
+  assertEqual(
+    result.intents[0].type,
+    "INTENT_STATE_DESCRIPTION",
+    "state description intent type mismatch"
+  );
+  assertEqual(result.suggestions.length, 1, "state description should emit one suggestion");
+  assertEqual(result.suggestions[0].type, "PET_RESPONSE", "state description suggestion type mismatch");
+  assertEqual(
+    result.suggestions[0].fallbackMode,
+    "state_context_fallback",
+    "state description fallback mode mismatch"
+  );
+  assertIncludes(
+    result.suggestions[0].text,
+    "book open",
+    "state description text mismatch"
+  );
+}
+
 function testMediaMusicModeFlow() {
   const clock = createClock(6000);
   const trace = [];
@@ -347,6 +391,7 @@ function run() {
   testAnnouncementCooldownFlow();
   testExtensionInteractionFlow();
   testBridgeDialogFlow();
+  testStateDescriptionFlow();
   testMediaMusicModeFlow();
   testFreshRssSummaryFlow();
   console.log("[contracts] router checks passed");

@@ -121,7 +121,7 @@ Status schema:
 | `05a-obsidian-workspace-bootstrap-and-connectivity` | `done` | `docs/plan/05a-obsidian-workspace-bootstrap-and-connectivity.md` |
 | `05-memory-pipeline-and-obsidian-adapter` | `done` | `docs/plan/05-memory-pipeline-and-obsidian-adapter.md` |
 | `06-integrations-freshrss-spotify` | `done` | `docs/plan/06-integrations-freshrss-spotify.md` |
-| `07-state-system-extension-guide` | `in_progress` | `docs/plan/07-state-system-extension-guide.md` |
+| `07-state-system-extension-guide` | `done` | `docs/plan/07-state-system-extension-guide.md` |
 | `07b-dialog-surface-and-minimal-offline-loop` | `not_started` | `docs/plan/07b-dialog-surface-and-minimal-offline-loop.md` |
 | `07c-shell-settings-and-wardrobe-surface` | `not_started` | `docs/plan/07c-shell-settings-and-wardrobe-surface.md` |
 | `08-test-and-acceptance-matrix` | `not_started` | `docs/plan/08-test-and-acceptance-matrix.md` |
@@ -129,9 +129,9 @@ Status schema:
 | `10-local-brain-and-personality-feasibility` | `not_started` | `docs/plan/10-local-brain-and-personality-feasibility.md` |
 
 ### Current Progress Snapshot
-- Current Deliverable: `07-state-system-extension-guide`
-- Current Status: `in_progress`
-- Overall Progress: `8/13 roadmap deliverables done` (D01, D02, D02b, D03, D04, D05a, D05, D06 complete; D07 remains current)
+- Current Deliverable: `07b-dialog-surface-and-minimal-offline-loop`
+- Current Status: `not_started`
+- Overall Progress: `9/13 roadmap deliverables done` (D01, D02, D02b, D03, D04, D05a, D05, D06, D07 complete; D07b is next)
 - Gate Snapshot: `Doc Gate=not_started`, `Implementation Gate=not_started`.
 - Scope Note: roadmap now explicitly tracks roam modes, baseline state set/priority, tray/settings/wardrobe surface, memory/introspection contracts, and visible acceptance tests.
 - Scope Note: roadmap also explicitly tracks conversation UX (chat/voice), speech bubble/dialog fallback, and lip-sync approximation with degraded-mode behavior.
@@ -147,10 +147,11 @@ Status schema:
 - Scope Note: D03 is closed as `done` (doc + implementation gates passed) with verified status-introspection flow, announcement cooldown skip behavior, and extension interaction correlation traces.
 - Scope Note: D04 is re-closed as `done` (doc + implementation gates passed) after operator-confirmed degraded-mode drag/fling stability.
 - Scope Note: D06 is closed as `done` after operator-confirmed Spotify/FreshRSS healthy paths, `track_rating` writes, and deterministic Spotify unavailable fallback.
+- Scope Note: D07 is now closed as `done` after operator-confirmed local-media `MusicChill`, temporary `Reading`/FreshRSS return-to-idle behavior, route-aware props, and preserved fling `Roll`.
 - Scope Note: Phase 3 is now split across D07 (state runtime), D07b (dialog surface + minimal offline loop), and D07c (shell/settings/wardrobe surface).
 - Scope Note: v1 now explicitly commits to a minimal offline embodiment loop while deferring deeper personality/local-model work to D10 feasibility research.
 - Scope Note: D10 is a post-v1, doc-only research deliverable; external OpenClaw remains the current product baseline.
-- Shipped Outcome (This Session): no visible app/runtime change; roadmap, deliverable, ADR, tracker, and README restructuring were completed while keeping D07 as the current deliverable.
+- Shipped Outcome (This Session): visible app/runtime change delivered and verified: D07 state runtime is now closed with operator-confirmed local-media `MusicChill`, route-aware speaker/headphones props, temporary manual `Reading` and FreshRSS `L` states that return to `Idle`, and preserved fling `Roll`. Current deliverable advances to D07b.
 
 ### Gating Rule
 - Do not advance to the next deliverable until the current deliverable is marked `done`, its verification gate is explicitly marked passed, and its implementation slice is explicitly marked passed in its file and mirrored in `docs/plan/00-progress-tracker.md`.

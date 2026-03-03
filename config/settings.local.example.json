@@ -1,4 +1,23 @@
 {
+  "integrations": {
+    "spotify": {
+      "backgroundEnrichmentEnabled": true,
+      "pollCadenceMinutes": 10
+    },
+    "freshRss": {
+      "backgroundEnrichmentEnabled": true,
+      "pollCadenceMinutes": 30
+    }
+  },
+  "sensors": {
+    "media": {
+      "enabled": true,
+      "backend": "powershell",
+      "pollIntervalMs": 2500,
+      "probeTimeoutMs": 1800,
+      "includeOutputDevice": true
+    }
+  },
   "memory": {
     "enabled": true,
     "adapterMode": "obsidian",

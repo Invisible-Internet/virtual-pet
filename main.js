@@ -30,10 +30,18 @@ const {
   createTrackRatingObservation,
 } = require("./integration-runtime");
 const {
+  WINDOWS_MEDIA_SOURCE,
+  buildLocalMediaEventPayload,
+  buildLocalMediaProbeKey,
+  buildLocalMediaResponseText,
+  probeWindowsMediaState,
+} = require("./windows-media-sensor");
+const {
   MEMORY_ADAPTER_MODES,
   OPENCLAW_WORKSPACE_BOOTSTRAP_MODES,
   createMemoryPipeline,
 } = require("./memory-pipeline");
+const { DEFAULT_STATE_CATALOG_PATH, createStateRuntime } = require("./state-runtime");
 const { loadRuntimeSettings } = require("./settings-runtime");
 const { BASE_LAYOUT, computePetLayout } = require("./pet-layout");
 const {
@@ -56,6 +64,7 @@ const DRAG_CLAMP_HYSTERESIS_PX = 2;
 const MOTION_POSITION_EPSILON = 0.25;
 const MOTION_VELOCITY_EPSILON = 0.5;
 const CHARACTER_ASSETS_ROOT = path.join(__dirname, "assets", "characters");
+const DEFAULT_CHARACTER_ID = "girl";
 const REQUIRED_SPRITE_DIRECTIONS = Object.freeze([
   "Down",
   "DownRight",
@@ -122,6 +131,7 @@ const ACTIVE_FLING_PRESET = Object.prototype.hasOwnProperty.call(FLING_PRESETS, 
   : "default";
 const FLING_CONFIG = FLING_PRESETS[ACTIVE_FLING_PRESET];
 const CAPABILITY_CONTRACT_VERSION = "1.0";
+const STATE_CATALOG_PATH = DEFAULT_STATE_CATALOG_PATH;
 const CAPABILITY_IDS = Object.freeze({
   renderer: "renderer",
   brain: "brain",
@@ -154,6 +164,8 @@ let diagnosticsLogStream = null;
 let physicsTimer = null;
 let lastMotionSample = null;
 let cursorTimer = null;
+let localMediaPollTimer = null;
+let freshRssPollTimer = null;
 let dragClampLatch = createDragClampLatch();
 let activePetBoundsUpdatedAtMs = 0;
 let lastMotionPayload = null;
@@ -167,6 +179,8 @@ let openclawBridge = null;
 let memoryPipeline = null;
 let latestMemorySnapshot = null;
 let latestIntegrationEvent = null;
+let stateRuntime = null;
+let latestStateSnapshot = null;
 let integrationProbeStates = {
   spotify: createInitialIntegrationProbeState(),
   freshRss: createInitialIntegrationProbeState(),
@@ -177,6 +191,12 @@ let runtimeSettingsValidationWarnings = [];
 let runtimeSettingsValidationErrors = [];
 let runtimeSettingsResolvedPaths = null;
 let runtimeSettingsFiles = null;
+let latestLocalMediaSnapshot = null;
+let lastLocalMediaEventKey = null;
+let localMediaProbeInFlight = false;
+let spotifyBackgroundProbeInFlight = false;
+let freshRssBackgroundProbeInFlight = false;
+let lastSpotifyBackgroundProbeAt = 0;
 
 const flingState = {
   active: false,
@@ -328,6 +348,17 @@ function readAnimationManifest(characterId) {
   return payload;
 }
 
+function getAvailableSpriteStateIds(characterId = DEFAULT_CHARACTER_ID) {
+  try {
+    return Object.keys(readAnimationManifest(characterId)?.manifest?.states || {});
+  } catch (error) {
+    console.warn(
+      `[pet-state] failed to read sprite manifest for state runtime: ${error?.message || String(error)}`
+    );
+    return [...REQUIRED_SPRITE_STATES];
+  }
+}
+
 function summarizeDisplay(display) {
   return {
     id: display.id,
@@ -347,6 +378,127 @@ function createInitialIntegrationProbeState() {
     lastSuccessAt: 0,
     lastFailureAt: 0,
     error: null,
+  };
+}
+
+function createInitialLocalMediaSnapshot() {
+  return {
+    ok: false,
+    source: WINDOWS_MEDIA_SOURCE,
+    isPlaying: false,
+    playbackStatus: "Idle",
+    provider: "local_media",
+    sourceAppLabel: "Windows Media",
+    sourceAppUserModelId: null,
+    title: null,
+    artist: null,
+    album: null,
+    outputRoute: "unknown",
+    outputDeviceName: "unknown_device",
+    outputDeviceType: "unknown",
+    ts: 0,
+    error: "probe_pending",
+  };
+}
+
+function isMusicStateId(stateId) {
+  return stateId === "MusicChill" || stateId === "MusicDance";
+}
+
+function getLocalMediaSensorSettings() {
+  const settings = runtimeSettings?.sensors?.media || {};
+  return {
+    enabled: Boolean(settings.enabled),
+    backend: settings.backend || "powershell",
+    pollIntervalMs: Number.isFinite(Number(settings.pollIntervalMs))
+      ? Math.max(500, Math.round(Number(settings.pollIntervalMs)))
+      : 2500,
+    probeTimeoutMs: Number.isFinite(Number(settings.probeTimeoutMs))
+      ? Math.max(250, Math.round(Number(settings.probeTimeoutMs)))
+      : 1800,
+    includeOutputDevice: settings.includeOutputDevice !== false,
+  };
+}
+
+function getSpotifyBackgroundPollCadenceMs() {
+  const cadenceMinutes = Number(runtimeSettings?.integrations?.spotify?.pollCadenceMinutes);
+  if (!Number.isFinite(cadenceMinutes)) return 10 * 60 * 1000;
+  return Math.max(60 * 1000, Math.round(cadenceMinutes * 60 * 1000));
+}
+
+function getFreshRssBackgroundPollCadenceMs() {
+  const cadenceMinutes = Number(runtimeSettings?.integrations?.freshRss?.pollCadenceMinutes);
+  if (!Number.isFinite(cadenceMinutes)) return 30 * 60 * 1000;
+  return Math.max(5 * 60 * 1000, Math.round(cadenceMinutes * 60 * 1000));
+}
+
+function buildLocalMediaIntegrationEvent(snapshot, extras = {}) {
+  let defaultText = buildLocalMediaResponseText(snapshot);
+  if (!snapshot?.ok) {
+    defaultText =
+      snapshot?.error === "disabled_by_config"
+        ? "Local media sensor is disabled by config."
+        : `Local media probe degraded: ${snapshot?.error || "unknown_error"}.`;
+  }
+  return {
+    kind: "localMedia",
+    correlationId: extras.correlationId || createContractCorrelationId(),
+    provider: snapshot?.provider || "local_media",
+    source: "local",
+    mediaSource: snapshot?.source || WINDOWS_MEDIA_SOURCE,
+    sourceAppLabel: snapshot?.sourceAppLabel || "Windows Media",
+    playbackStatus: snapshot?.playbackStatus || "Unknown",
+    isPlaying: Boolean(snapshot?.isPlaying),
+    outputRoute: snapshot?.outputRoute || "unknown",
+    outputDeviceName: snapshot?.outputDeviceName || "unknown_device",
+    capabilityState: snapshot?.ok ? "healthy" : "degraded",
+    fallbackMode: snapshot?.ok ? "none" : snapshot?.error || "local_media_probe_failed",
+    text:
+      typeof extras.text === "string" && extras.text.length > 0
+        ? extras.text
+        : defaultText,
+    ts: Number.isFinite(snapshot?.ts) ? snapshot.ts : Date.now(),
+  };
+}
+
+function getPreferredSpotifyOutputContext() {
+  if (!latestLocalMediaSnapshot?.isPlaying) return null;
+  if (latestLocalMediaSnapshot.provider !== "spotify") return null;
+  return {
+    outputRoute: latestLocalMediaSnapshot.outputRoute || "unknown",
+    outputDeviceName: latestLocalMediaSnapshot.outputDeviceName || "unknown_device",
+    outputDeviceType: latestLocalMediaSnapshot.outputDeviceType || "unknown",
+  };
+}
+
+function applyPreferredOutputContext(nowPlaying, preferredOutputContext) {
+  const preferred =
+    preferredOutputContext && typeof preferredOutputContext === "object"
+      ? preferredOutputContext
+      : null;
+  if (!nowPlaying || !preferred) return nowPlaying;
+  if (
+    nowPlaying.outputRoute &&
+    nowPlaying.outputRoute !== "unknown" &&
+    nowPlaying.outputDeviceName &&
+    nowPlaying.outputDeviceName !== "unknown_device"
+  ) {
+    return nowPlaying;
+  }
+  return {
+    ...nowPlaying,
+    outputRoute:
+      nowPlaying.outputRoute && nowPlaying.outputRoute !== "unknown"
+        ? nowPlaying.outputRoute
+        : preferred.outputRoute || "unknown",
+    outputDeviceName:
+      nowPlaying.outputDeviceName && nowPlaying.outputDeviceName !== "unknown_device"
+        ? nowPlaying.outputDeviceName
+        : preferred.outputDeviceName || "unknown_device",
+    outputDeviceType:
+      nowPlaying.outputDeviceType && nowPlaying.outputDeviceType !== "unknown"
+        ? nowPlaying.outputDeviceType
+        : preferred.outputDeviceType || "unknown",
   };
 }
 
@@ -828,6 +980,25 @@ function emitCapabilitySnapshot(snapshot) {
   emitToRenderer("pet:capabilities", snapshot);
 }
 
+function emitStateSnapshot(snapshot) {
+  if (!snapshot || typeof snapshot !== "object") return;
+  const previousSnapshot = latestStateSnapshot;
+  latestStateSnapshot = snapshot;
+  emitToRenderer("pet:state", snapshot);
+  if (
+    previousSnapshot &&
+    previousSnapshot.currentState !== snapshot.currentState &&
+    snapshot.currentState === "Idle" &&
+    latestLocalMediaSnapshot?.ok &&
+    latestLocalMediaSnapshot?.isPlaying
+  ) {
+    void pollLocalMediaState({
+      force: true,
+      trigger: "idle-resume",
+    });
+  }
+}
+
 function logCapabilitySummary(label, snapshot) {
   if (!snapshot || typeof snapshot !== "object") return;
   const summary = snapshot.summary || {};
@@ -1245,6 +1416,7 @@ function buildRuntimeSettingsSummary() {
   const settings = runtimeSettings && typeof runtimeSettings === "object" ? runtimeSettings : {};
   const integrations =
     settings.integrations && typeof settings.integrations === "object" ? settings.integrations : {};
+  const sensors = settings.sensors && typeof settings.sensors === "object" ? settings.sensors : {};
   const memory = settings.memory && typeof settings.memory === "object" ? settings.memory : {};
   const openclaw = settings.openclaw && typeof settings.openclaw === "object" ? settings.openclaw : {};
   const paths = settings.paths && typeof settings.paths === "object" ? settings.paths : {};
@@ -1261,17 +1433,35 @@ function buildRuntimeSettingsSummary() {
         defaultTrackTitle: integrations.spotify?.defaultTrackTitle || "Night Drive",
         defaultArtist: integrations.spotify?.defaultArtist || "Primea FM",
         defaultAlbum: integrations.spotify?.defaultAlbum || "Sample Rotation",
+        backgroundEnrichmentEnabled: integrations.spotify?.backgroundEnrichmentEnabled !== false,
+        pollCadenceMinutes: Number.isFinite(Number(integrations.spotify?.pollCadenceMinutes))
+          ? Math.max(1, Math.round(Number(integrations.spotify.pollCadenceMinutes)))
+          : 10,
       },
       freshRss: {
         enabled: Boolean(integrations.freshRss?.enabled),
         available: Boolean(integrations.freshRss?.available),
         transport: integrations.freshRss?.transport || INTEGRATION_TRANSPORTS.stub,
+        backgroundEnrichmentEnabled: integrations.freshRss?.backgroundEnrichmentEnabled !== false,
         pollCadenceMinutes: Number.isFinite(Number(integrations.freshRss?.pollCadenceMinutes))
           ? Math.max(5, Math.round(Number(integrations.freshRss.pollCadenceMinutes)))
           : 30,
         dailyTopItems: Number.isFinite(Number(integrations.freshRss?.dailyTopItems))
           ? Math.max(1, Math.min(3, Math.round(Number(integrations.freshRss.dailyTopItems))))
           : 3,
+      },
+    },
+    sensors: {
+      media: {
+        enabled: Boolean(sensors.media?.enabled),
+        backend: sensors.media?.backend || "powershell",
+        pollIntervalMs: Number.isFinite(Number(sensors.media?.pollIntervalMs))
+          ? Math.max(500, Math.round(Number(sensors.media.pollIntervalMs)))
+          : 2500,
+        probeTimeoutMs: Number.isFinite(Number(sensors.media?.probeTimeoutMs))
+          ? Math.max(250, Math.round(Number(sensors.media.probeTimeoutMs)))
+          : 1800,
+        includeOutputDevice: sensors.media?.includeOutputDevice !== false,
       },
     },
     memory: {
@@ -1461,8 +1651,14 @@ async function runAgentProbeWithJson(prompt, label) {
 function buildSpotifyProbeResponseText(nowPlaying, topArtistSummary, degradedParts = []) {
   const segments = [];
   if (nowPlaying) {
+    const outputSuffix =
+      nowPlaying.outputRoute && nowPlaying.outputRoute !== "unknown"
+        ? ` on ${nowPlaying.outputRoute === "speaker" ? "Speakers" : "Headphones"}`
+        : nowPlaying.outputDeviceName && nowPlaying.outputDeviceName !== "unknown_device"
+          ? ` on ${nowPlaying.outputDeviceName}`
+          : "";
     segments.push(
-      `Spotify ${nowPlaying.isPlaying ? "is playing" : "last reported"} ${nowPlaying.trackName} by ${nowPlaying.artistName}.`
+      `Spotify ${nowPlaying.isPlaying ? "is playing" : "last reported"} ${nowPlaying.trackName} by ${nowPlaying.artistName}${outputSuffix}.`
     );
   }
   if (topArtistSummary?.topArtist) {
@@ -1654,6 +1850,33 @@ function initializeContractRouter() {
   });
 }
 
+function logStateRuntimeEvent(kind, payload) {
+  const safePayload = payload && typeof payload === "object" ? payload : {};
+  const stateLabel = safePayload.currentState || safePayload.stateId || "unknown";
+  const phaseLabel = safePayload.phase ? ` phase=${safePayload.phase}` : "";
+  console.log(`[pet-state] ${kind} state=${stateLabel}${phaseLabel}`);
+  if (!DIAGNOSTICS_ENABLED) return;
+  emitDiagnostics({
+    kind: "stateRuntime",
+    event: kind,
+    ...safePayload,
+  });
+}
+
+function initializeStateRuntime() {
+  stateRuntime = createStateRuntime({
+    catalogPath: STATE_CATALOG_PATH,
+    availableClipIds: getAvailableSpriteStateIds(),
+    onSnapshot: (snapshot) => {
+      emitStateSnapshot(snapshot);
+    },
+    logger: (kind, payload) => {
+      logStateRuntimeEvent(kind, payload);
+    },
+  });
+  latestStateSnapshot = stateRuntime.start();
+}
+
 function createContractCorrelationId() {
   const randomPart = Math.floor(Math.random() * 0xffffff)
     .toString(16)
@@ -1667,8 +1890,10 @@ function normalizeUserCommandForBridge(payload) {
     typeof rawPayload.type === "string" ? rawPayload.type.trim().toLowerCase() : "";
   const command = typeof rawPayload.command === "string" ? rawPayload.command.trim().toLowerCase() : "";
   const text = typeof rawPayload.text === "string" ? rawPayload.text.trim().toLowerCase() : "";
-  const raw = explicitType || command || text;
-  if (raw === "status" || raw === "introspect" || raw === "what are you doing") return "status";
+  const raw = (explicitType || command || text).replace(/[?!.,]+$/g, "");
+  if (raw === "status" || raw === "introspect") return "status";
+  if (raw === "what are you doing") return "what-are-you-doing";
+  if (raw === "what are you reading") return "what-are-you-reading";
   if (raw === "announce-test" || raw === "announce") return "announce-test";
   if (raw === "bridge-test" || raw === "bridge") return "bridge-test";
   if (raw === "guardrail-test" || raw === "guardrail") return "guardrail-test";
@@ -1690,18 +1915,22 @@ function buildStatusText() {
     capabilityRegistry?.getCapabilityState(CAPABILITY_IDS.spotifyIntegration)?.state || "unknown";
   const freshRssState =
     capabilityRegistry?.getCapabilityState(CAPABILITY_IDS.freshRssIntegration)?.state || "unknown";
+  const activeState = latestStateSnapshot?.currentState || "Idle";
+  const activePhase = latestStateSnapshot?.phase ? `/${latestStateSnapshot.phase}` : "";
+  const activeVisual = latestStateSnapshot?.visual?.clip || "IdleReady";
+  const fallbackLabel = latestStateSnapshot?.visualFallbackUsed ? "yes" : "no";
+  const motionState = dragging ? "dragging" : flingState.active ? "flinging" : "steady";
   return (
     `Runtime ${runtime}. ` +
     `Capabilities healthy=${summary.healthyCount || 0}, ` +
     `degraded=${summary.degradedCount || 0}, failed=${summary.failedCount || 0}. ` +
-    `Integrations spotify=${spotifyState}, freshrss=${freshRssState}.`
+    `Integrations spotify=${spotifyState}, freshrss=${freshRssState}. ` +
+    `State ${activeState}${activePhase} visual=${activeVisual} fallback=${fallbackLabel} motion=${motionState}.`
   );
 }
 
 function deriveBridgeCurrentState() {
-  if (dragging) return "Dragging";
-  if (flingState.active) return "Flinging";
-  return "Idle";
+  return latestStateSnapshot?.currentState || "Idle";
 }
 
 function buildActivePropsSummary() {
@@ -1728,7 +1957,7 @@ function buildExtensionContextSummary() {
 function buildBridgeRequestContext() {
   return {
     currentState: deriveBridgeCurrentState(),
-    stateContextSummary: buildStatusText(),
+    stateContextSummary: latestStateSnapshot?.contextSummary || buildStatusText(),
     activePropsSummary: buildActivePropsSummary(),
     extensionContextSummary: buildExtensionContextSummary(),
     source: deriveContractSource(),
@@ -1738,6 +1967,13 @@ function buildBridgeRequestContext() {
 function buildBridgeFallbackText(route, promptText) {
   if (route === "introspection_status") {
     return `${buildStatusText()} (offline fallback)`;
+  }
+  if (route === "state_description") {
+    const readingMatch = typeof promptText === "string" && promptText.toLowerCase().includes("reading");
+    const description = readingMatch
+      ? stateRuntime?.describeReading()
+      : stateRuntime?.describeActivity();
+    return description?.text || "I am keeping to a safe local fallback.";
   }
   const normalizedPrompt =
     typeof promptText === "string" && promptText.trim().length > 0 ? promptText.trim() : "your request";
@@ -1845,6 +2081,17 @@ async function buildBridgeCommandContext(payload, correlationId) {
   if (normalizedCommand === "announce-test" || normalizedCommand === "unknown") {
     return {};
   }
+  if (normalizedCommand === "what-are-you-doing" || normalizedCommand === "what-are-you-reading") {
+    const description =
+      normalizedCommand === "what-are-you-reading"
+        ? stateRuntime?.describeReading()
+        : stateRuntime?.describeActivity();
+    return {
+      source: "offline",
+      stateDescriptionText: description?.text || buildBridgeFallbackText("state_description", normalizedCommand),
+      bridgeFallbackMode: description?.fallbackUsed ? "state_context_fallback" : "state_local",
+    };
+  }
   if (
     normalizedCommand !== "status" &&
     normalizedCommand !== "bridge-test" &&
@@ -1948,7 +2195,7 @@ function createMemoryObservationFromContractResult(eventType, payload, result, c
         ? payload.provider.trim()
         : "media";
     return {
-      observationType: "spotify_playback",
+      observationType: provider === "spotify" ? "spotify_playback" : "media_playback",
       source: `${provider}_playback`,
       correlationId,
       evidenceTag: `${provider}:${title}`.toLowerCase().replace(/\s+/g, "-"),
@@ -1968,6 +2215,18 @@ function createMemoryObservationFromContractResult(eventType, payload, result, c
           typeof payload?.suggestedState === "string" && payload.suggestedState.trim().length > 0
             ? payload.suggestedState.trim()
             : "MusicChill",
+        mediaSource:
+          typeof payload?.source === "string" && payload.source.trim().length > 0
+            ? payload.source.trim()
+            : "media",
+        outputRoute:
+          typeof payload?.outputRoute === "string" && payload.outputRoute.trim().length > 0
+            ? payload.outputRoute.trim()
+            : "unknown",
+        sourceAppLabel:
+          typeof payload?.sourceAppLabel === "string" && payload.sourceAppLabel.trim().length > 0
+            ? payload.sourceAppLabel.trim()
+            : "Windows Media",
         fallbackMode:
           typeof payload?.fallbackMode === "string" && payload.fallbackMode.trim().length > 0
             ? payload.fallbackMode.trim()
@@ -2029,6 +2288,18 @@ function queueMemoryObservation(observation) {
     .catch((error) => {
       console.warn(`[pet-memory] observation write failed: ${error?.message || String(error)}`);
     });
+}
+
+function applyStateRuntimeForEvent(eventType, payload, result) {
+  if (!stateRuntime) return null;
+  if (eventType === "MEDIA") {
+    const intent = Array.isArray(result?.intents)
+      ? result.intents.find((entry) => entry?.type === "INTENT_STATE_MUSIC_MODE")
+      : null;
+    if (!intent) return null;
+    return stateRuntime.applyMusicState(payload);
+  }
+  return null;
 }
 
 function handleContractSuggestions(result) {
@@ -2095,6 +2366,7 @@ async function processPetContractEvent(eventType, payload = {}, context = {}) {
       ...context,
     }
   );
+  applyStateRuntimeForEvent(eventType, payload, result);
   handleContractSuggestions(result);
   queueMemoryObservation(
     createMemoryObservationFromContractResult(eventType, payload, result, correlationId)
@@ -2102,10 +2374,13 @@ async function processPetContractEvent(eventType, payload = {}, context = {}) {
   return result;
 }
 
-async function probeSpotifyIntegration() {
+async function probeSpotifyIntegration(options = {}) {
   const settings = buildRuntimeSettingsSummary();
   const correlationId = createContractCorrelationId();
   const nowMs = Date.now();
+  const routeContractEvent = options.routeContractEvent !== false;
+  const queueObservation = options.queueObservation !== false;
+  const preferredOutputContext = options.preferredOutputContext || getPreferredSpotifyOutputContext();
 
   if (!settings.openclaw.enabled || !settings.integrations.spotify.enabled) {
     const reason = !settings.integrations.spotify.enabled ? "disabledByConfig" : "openclawDisabledFallback";
@@ -2172,7 +2447,10 @@ async function probeSpotifyIntegration() {
       "spotify-now-playing"
     );
     if (nowPlayingProbe.ok) {
-      nowPlaying = normalizeSpotifyNowPlayingPayload(nowPlayingProbe.json);
+      nowPlaying = applyPreferredOutputContext(
+        normalizeSpotifyNowPlayingPayload(nowPlayingProbe.json),
+        preferredOutputContext
+      );
     } else {
       degradedParts.push(`now_playing=${nowPlayingProbe.failure.reason}`);
     }
@@ -2218,11 +2496,8 @@ async function probeSpotifyIntegration() {
     });
   }
 
-  let contractResult = null;
-  if (nowPlaying) {
-    contractResult = await processPetContractEvent(
-      "MEDIA",
-      {
+  const mediaEventPayload = nowPlaying
+    ? {
         playing: Boolean(nowPlaying.isPlaying),
         confidence: succeeded ? 0.98 : 0.8,
         provider: "spotify",
@@ -2231,11 +2506,27 @@ async function probeSpotifyIntegration() {
         artist: nowPlaying.artistName,
         album: nowPlaying.albumName,
         suggestedState: "MusicChill",
-        activeProp: "headphones",
+        activeProp:
+          nowPlaying.outputRoute === "speaker"
+            ? "speaker"
+            : nowPlaying.outputRoute === "headphones"
+              ? "headphones"
+              : "musicNote",
+        outputRoute: nowPlaying.outputRoute || "unknown",
+        outputDeviceName: nowPlaying.outputDeviceName || "unknown_device",
+        outputDeviceType: nowPlaying.outputDeviceType || "unknown",
+        sourceAppLabel: latestLocalMediaSnapshot?.sourceAppLabel || "Spotify",
         entryDialogue: responseText,
         fallbackMode,
         topArtistSummary,
-      },
+      }
+    : null;
+
+  let contractResult = null;
+  if (mediaEventPayload && routeContractEvent) {
+    contractResult = await processPetContractEvent(
+      "MEDIA",
+      mediaEventPayload,
       {
         correlationId,
         source: succeeded ? "online" : "offline",
@@ -2243,6 +2534,10 @@ async function probeSpotifyIntegration() {
         mediaSuggestedState: "MusicChill",
         integrationFallbackMode: fallbackMode,
       }
+    );
+  } else if (mediaEventPayload && queueObservation) {
+    queueMemoryObservation(
+      createMemoryObservationFromContractResult("MEDIA", mediaEventPayload, null, correlationId)
     );
   }
 
@@ -2255,7 +2550,15 @@ async function probeSpotifyIntegration() {
     fallbackMode,
     source: succeeded ? "online" : "offline",
     capabilityState: succeeded ? "healthy" : "degraded",
+    outputRoute: nowPlaying?.outputRoute || "unknown",
+    outputDeviceName: nowPlaying?.outputDeviceName || "unknown_device",
     degradedParts,
+    trigger:
+      typeof options.trigger === "string" && options.trigger.trim().length > 0
+        ? options.trigger.trim()
+        : routeContractEvent
+          ? "interactive"
+          : "background",
     text: responseText,
     ts: nowMs,
   };
@@ -2271,10 +2574,12 @@ async function probeSpotifyIntegration() {
   };
 }
 
-async function probeFreshRssIntegration() {
+async function probeFreshRssIntegration(options = {}) {
   const settings = buildRuntimeSettingsSummary();
   const correlationId = createContractCorrelationId();
   const nowMs = Date.now();
+  const routeContractEvent = options.routeContractEvent !== false;
+  const queueObservation = options.queueObservation !== false;
 
   if (!settings.openclaw.enabled || !settings.integrations.freshRss.enabled) {
     const reason = !settings.integrations.freshRss.enabled ? "disabledByConfig" : "openclawDisabledFallback";
@@ -2378,21 +2683,39 @@ async function probeFreshRssIntegration() {
     });
   }
 
-  let contractResult = null;
-  if (normalized) {
-    contractResult = await processPetContractEvent(
-      "FRESHRSS_ITEMS",
-      {
+  const freshRssEventPayload = normalized
+    ? {
         summary: normalized.summary,
         items: normalized.items,
         fallbackMode,
-      },
+      }
+    : null;
+
+  let contractResult = null;
+  if (freshRssEventPayload && routeContractEvent) {
+    contractResult = await processPetContractEvent(
+      "FRESHRSS_ITEMS",
+      freshRssEventPayload,
       {
         correlationId,
         source: succeeded ? "online" : "offline",
         freshRssResponseText: responseText,
       }
     );
+  } else if (freshRssEventPayload && queueObservation) {
+    queueMemoryObservation(
+      createMemoryObservationFromContractResult(
+        "FRESHRSS_ITEMS",
+        freshRssEventPayload,
+        null,
+        correlationId
+      )
+    );
+  }
+  if (routeContractEvent && succeeded && normalized?.items?.length > 0 && stateRuntime) {
+    stateRuntime.applyFreshRssReading({
+      items: normalized.items,
+    });
   }
 
   const integrationEvent = {
@@ -2404,6 +2727,12 @@ async function probeFreshRssIntegration() {
     fallbackMode,
     source: succeeded ? "online" : "offline",
     capabilityState: succeeded ? "healthy" : "degraded",
+    trigger:
+      typeof options.trigger === "string" && options.trigger.trim().length > 0
+        ? options.trigger.trim()
+        : routeContractEvent
+          ? "interactive"
+          : "background",
     text: responseText,
     ts: nowMs,
   };
@@ -2417,6 +2746,169 @@ async function probeFreshRssIntegration() {
     probe: integrationEvent,
     contractResult,
   };
+}
+
+async function runBackgroundSpotifyEnrichment(snapshot, trigger = "background-local-media") {
+  const settings = buildRuntimeSettingsSummary();
+  if (!settings.openclaw.enabled || !settings.integrations.spotify.enabled) return null;
+  if (!settings.integrations.spotify.available) return null;
+  if (!settings.integrations.spotify.backgroundEnrichmentEnabled) return null;
+  if (!snapshot?.isPlaying || snapshot.provider !== "spotify") return null;
+  if (spotifyBackgroundProbeInFlight) return null;
+  const nowMs = Date.now();
+  if (nowMs - lastSpotifyBackgroundProbeAt < getSpotifyBackgroundPollCadenceMs()) {
+    return null;
+  }
+
+  spotifyBackgroundProbeInFlight = true;
+  lastSpotifyBackgroundProbeAt = nowMs;
+  try {
+    return await probeSpotifyIntegration({
+      routeContractEvent: false,
+      queueObservation: true,
+      preferredOutputContext: snapshot,
+      trigger,
+    });
+  } finally {
+    spotifyBackgroundProbeInFlight = false;
+  }
+}
+
+async function pollLocalMediaState(options = {}) {
+  const sensorSettings = getLocalMediaSensorSettings();
+  const force = options.force === true;
+  const trigger = typeof options.trigger === "string" ? options.trigger : "interval";
+  const correlationId = createContractCorrelationId();
+  const previousSnapshot = latestLocalMediaSnapshot || createInitialLocalMediaSnapshot();
+
+  if (!sensorSettings.enabled) {
+    const disabledSnapshot = createInitialLocalMediaSnapshot();
+    disabledSnapshot.playbackStatus = "Disabled";
+    disabledSnapshot.error = "disabled_by_config";
+    latestLocalMediaSnapshot = disabledSnapshot;
+    if (force) {
+      emitIntegrationEvent(buildLocalMediaIntegrationEvent(disabledSnapshot, { correlationId }));
+    }
+    return {
+      ok: false,
+      error: "disabled_by_config",
+      snapshot: disabledSnapshot,
+    };
+  }
+
+  if (localMediaProbeInFlight) {
+    return {
+      ok: false,
+      skipped: true,
+      error: "probe_in_flight",
+      snapshot: previousSnapshot,
+    };
+  }
+
+  localMediaProbeInFlight = true;
+  try {
+    const snapshot = await probeWindowsMediaState({
+      settings: sensorSettings,
+    });
+    latestLocalMediaSnapshot = snapshot;
+    emitIntegrationEvent(buildLocalMediaIntegrationEvent(snapshot, { correlationId }));
+
+    const nextEventKey = buildLocalMediaProbeKey(snapshot);
+    const changed = force || nextEventKey !== lastLocalMediaEventKey;
+    let contractResult = null;
+    if (changed) {
+      lastLocalMediaEventKey = nextEventKey;
+
+      if (snapshot.ok && snapshot.isPlaying) {
+        const payload = buildLocalMediaEventPayload(snapshot);
+        contractResult = await processPetContractEvent("MEDIA", payload, {
+          correlationId,
+          source: "local",
+          mediaResponseText: buildLocalMediaResponseText(snapshot),
+          mediaSuggestedState: "MusicChill",
+          integrationFallbackMode: "none",
+        });
+      }
+    }
+
+    if (
+      previousSnapshot.ok &&
+      previousSnapshot.isPlaying &&
+      snapshot.ok &&
+      !snapshot.isPlaying &&
+      isMusicStateId(latestStateSnapshot?.currentState) &&
+      stateRuntime
+    ) {
+      stateRuntime.activateState("Idle", {
+        source: "system",
+        reason: "local_media_stopped",
+        trigger: "local-media",
+      });
+    }
+
+    if (snapshot.isPlaying) {
+      void runBackgroundSpotifyEnrichment(snapshot, `local-media-${trigger}`);
+    }
+
+    return {
+      ok: snapshot.ok && (!changed || !snapshot.isPlaying || Boolean(contractResult) || force),
+      snapshot,
+      contractResult,
+      error: snapshot.error || null,
+    };
+  } finally {
+    localMediaProbeInFlight = false;
+  }
+}
+
+async function runBackgroundFreshRssProbe(trigger = "background-poll") {
+  const settings = buildRuntimeSettingsSummary();
+  if (!settings.openclaw.enabled || !settings.integrations.freshRss.enabled) return null;
+  if (!settings.integrations.freshRss.available) return null;
+  if (!settings.integrations.freshRss.backgroundEnrichmentEnabled) return null;
+  if (freshRssBackgroundProbeInFlight) return null;
+  freshRssBackgroundProbeInFlight = true;
+  try {
+    return await probeFreshRssIntegration({
+      routeContractEvent: false,
+      queueObservation: true,
+      trigger,
+    });
+  } finally {
+    freshRssBackgroundProbeInFlight = false;
+  }
+}
+
+function startLocalMediaPoller() {
+  if (localMediaPollTimer) {
+    clearInterval(localMediaPollTimer);
+    localMediaPollTimer = null;
+  }
+  const settings = getLocalMediaSensorSettings();
+  if (!settings.enabled || process.platform !== "win32") return;
+  void pollLocalMediaState({
+    force: true,
+    trigger: "startup",
+  });
+  localMediaPollTimer = setInterval(() => {
+    void pollLocalMediaState({
+      trigger: "interval",
+    });
+  }, settings.pollIntervalMs);
+}
+
+function startBackgroundFreshRssPoller() {
+  if (freshRssPollTimer) {
+    clearInterval(freshRssPollTimer);
+    freshRssPollTimer = null;
+  }
+  const settings = buildRuntimeSettingsSummary();
+  if (!settings.integrations.freshRss.backgroundEnrichmentEnabled) return;
+  if (!settings.openclaw.enabled || !settings.integrations.freshRss.enabled) return;
+  if (!settings.integrations.freshRss.available) return;
+  freshRssPollTimer = setInterval(() => {
+    void runBackgroundFreshRssProbe("background-interval");
+  }, getFreshRssBackgroundPollCadenceMs());
 }
 
 async function recordTrackRating(payload = {}) {
@@ -2524,6 +3016,9 @@ function createWindow() {
     }
     if (latestMemorySnapshot) {
       emitMemorySnapshot(latestMemorySnapshot);
+    }
+    if (latestStateSnapshot) {
+      emitStateSnapshot(latestStateSnapshot);
     }
     if (latestIntegrationEvent) {
       emitIntegrationEvent(latestIntegrationEvent);
@@ -2742,9 +3237,16 @@ ipcMain.handle("pet:getConfig", () => {
     layout: PET_LAYOUT,
     capabilityRuntimeState: latestCapabilitySnapshot?.runtimeState || "unknown",
     capabilitySummary: latestCapabilitySnapshot?.summary || null,
+    stateCurrentState: latestStateSnapshot?.currentState || "Idle",
+    statePhase: latestStateSnapshot?.phase || null,
+    stateVisualClip: latestStateSnapshot?.visual?.clip || "IdleReady",
+    stateVisualFallbackUsed: Boolean(latestStateSnapshot?.visualFallbackUsed),
     contractTraceStage: latestContractTrace?.stage || null,
     memoryAdapterMode: latestMemorySnapshot?.activeAdapterMode || "unknown",
     memoryFallbackReason: latestMemorySnapshot?.fallbackReason || "none",
+    localMediaPlaying: Boolean(latestLocalMediaSnapshot?.isPlaying),
+    localMediaSource: latestLocalMediaSnapshot?.sourceAppLabel || "Windows Media",
+    localMediaOutputRoute: latestLocalMediaSnapshot?.outputRoute || "unknown",
     openclawEnabled: settingsSummary.openclaw.enabled,
     openclawTransport: settingsSummary.openclaw.transport,
     openclawMode: settingsSummary.openclaw.mode,
@@ -2773,6 +3275,67 @@ ipcMain.handle("pet:getMemorySnapshot", () => {
   return memoryPipeline.getSnapshot();
 });
 
+ipcMain.handle("pet:getStateSnapshot", () => {
+  if (!stateRuntime) return latestStateSnapshot;
+  return stateRuntime.getSnapshot();
+});
+
+ipcMain.handle("pet:triggerBehaviorState", (_event, payload) => {
+  if (!stateRuntime) {
+    return {
+      ok: false,
+      error: "state_runtime_unavailable",
+    };
+  }
+  const stateId =
+    typeof payload?.stateId === "string" && payload.stateId.trim().length > 0
+      ? payload.stateId.trim()
+      : "";
+  if (!stateId) {
+    return {
+      ok: false,
+      error: "invalid_state_id",
+    };
+  }
+  const snapshot = stateRuntime.activateState(stateId, {
+    source: "manual",
+    reason:
+      typeof payload?.reason === "string" && payload.reason.trim().length > 0
+        ? payload.reason.trim()
+        : "manual_trigger",
+    trigger:
+      typeof payload?.trigger === "string" && payload.trigger.trim().length > 0
+        ? payload.trigger.trim()
+        : "manual",
+    durationMs: Number.isFinite(Number(payload?.durationMs))
+      ? Math.max(100, Math.round(Number(payload.durationMs)))
+      : null,
+    onCompleteStateId:
+      typeof payload?.onCompleteStateId === "string" && payload.onCompleteStateId.trim().length > 0
+        ? payload.onCompleteStateId.trim()
+        : null,
+    context: payload?.context,
+  });
+  return {
+    ok: true,
+    snapshot,
+  };
+});
+
+ipcMain.handle("pet:simulateStateFallback", () => {
+  if (!stateRuntime) {
+    return {
+      ok: false,
+      error: "state_runtime_unavailable",
+    };
+  }
+  const snapshot = stateRuntime.simulateMissingVisualFallback();
+  return {
+    ok: true,
+    snapshot,
+  };
+});
+
 ipcMain.handle("pet:runUserCommand", (_event, payload) => {
   const command =
     typeof payload?.command === "string" && payload.command.trim().length > 0
@@ -2797,6 +3360,13 @@ ipcMain.handle("pet:probeSpotifyIntegration", () => {
 
 ipcMain.handle("pet:probeFreshRssIntegration", () => {
   return probeFreshRssIntegration();
+});
+
+ipcMain.handle("pet:probeLocalMedia", () => {
+  return pollLocalMediaState({
+    force: true,
+    trigger: "manual",
+  });
 });
 
 ipcMain.handle("pet:simulateSpotifyPlayback", () => {
@@ -3038,6 +3608,7 @@ ipcMain.handle("pet:getAnimationManifest", (_event, characterId) => {
 app.whenReady().then(async () => {
   initializeDiagnosticsLog();
   initializeRuntimeSettings();
+  initializeStateRuntime();
   initializeContractRouter();
   await initializeMemoryPipelineRuntime();
   createWindow();
@@ -3047,6 +3618,8 @@ app.whenReady().then(async () => {
   initializeOpenClawBridgeRuntime();
   initializeCapabilityRegistry();
   await startCapabilityRegistry();
+  startLocalMediaPoller();
+  startBackgroundFreshRssPoller();
 
   if (!DIAGNOSTICS_ENABLED) return;
 
@@ -3067,6 +3640,9 @@ app.whenReady().then(async () => {
 });
 
 app.on("before-quit", () => {
+  if (stateRuntime) {
+    stateRuntime.stop();
+  }
   if (capabilityRegistry) {
     capabilityRegistry.stopAll({
       reason: "appQuit",
@@ -3079,6 +3655,14 @@ app.on("before-quit", () => {
   if (cursorTimer) {
     clearInterval(cursorTimer);
     cursorTimer = null;
+  }
+  if (localMediaPollTimer) {
+    clearInterval(localMediaPollTimer);
+    localMediaPollTimer = null;
+  }
+  if (freshRssPollTimer) {
+    clearInterval(freshRssPollTimer);
+    freshRssPollTimer = null;
   }
   cancelFling("appQuit");
   closeDiagnosticsLog();

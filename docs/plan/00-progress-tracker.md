@@ -21,9 +21,9 @@ Allowed values:
 - D10 is a post-v1 feasibility deliverable and remains doc-only unless explicitly promoted into implementation scope.
 
 ## Current Deliverable
-- Current Deliverable: `07-state-system-extension-guide`
-- Current Status: `in_progress`
-- Overall Progress: `8/13 roadmap deliverables done` (D01, D02, D02b, D03, D04, D05a, D05, D06 complete; D07 remains current)
+- Current Deliverable: `07b-dialog-surface-and-minimal-offline-loop`
+- Current Status: `not_started`
+- Overall Progress: `9/13 roadmap deliverables done` (D01, D02, D02b, D03, D04, D05a, D05, D06, D07 complete; D07b is next)
 - Current Gate State:
   - `Doc Gate`: `not_started`
   - `Implementation Gate`: `not_started`
@@ -40,22 +40,76 @@ Allowed values:
 | `05a-obsidian-workspace-bootstrap-and-connectivity` | `done` | Doc + implementation gates passed; real-path validation captured for WSL OpenClaw workspace + local Obsidian vault with enabled/disabled toggle checks |
 | `05-memory-pipeline-and-obsidian-adapter` | `done` | Doc + implementation gates passed; operator runtime evidence confirmed `runtimeReady` obsidian path plus `M/H/N` write/promotion/mutation behavior |
 | `06-integrations-freshrss-spotify` | `done` | Doc + implementation gates passed; operator verification confirmed FreshRSS/Spotify healthy paths, `track_rating` writes, and deterministic Spotify unavailable fallback |
-| `07-state-system-extension-guide` | `in_progress` | Re-scoped to deterministic state runtime, behavior-to-visual mapping, and local state-aware description fallback |
-| `07b-dialog-surface-and-minimal-offline-loop` | `not_started` | Split out from D07 to cover visible chat, bubble output, offline local dialogue, and talk feedback |
+| `07-state-system-extension-guide` | `done` | Doc + implementation gates passed; operator verification confirmed fling `Roll`, timed `Reading`/FreshRSS return to `Idle`, automatic local-media `MusicChill`, and route-aware music props |
+| `07b-dialog-surface-and-minimal-offline-loop` | `not_started` | Current deliverable; covers visible chat, bubble output, offline local dialogue, and talk feedback |
 | `07c-shell-settings-and-wardrobe-surface` | `not_started` | Split out from D07 to cover tray/menu settings, roam controls, diagnostics toggle, and first wardrobe slice |
 | `08-test-and-acceptance-matrix` | `not_started` | Final consolidation after D07, D07b, and D07c |
 | `09-decisions-log` | `in_progress` | Seed decisions added |
 | `10-local-brain-and-personality-feasibility` | `not_started` | Post-v1 doc-only research deliverable; non-blocking to v1 closeout |
 
 ## Next 3 Actions
-1. Implement D07 state runtime scaffolding (`state-runtime.js` + `config/state-catalog.json`) with main-process authoritative snapshots.
-2. Implement the first D07 runtime slice for one simple state (`Reading`) and one complex phase state (`PoolPlay`) without switch-case expansion.
-3. Add deterministic missing-resource fallback behavior plus local state-aware description fallback before moving on to D07b.
+1. Start D07b by adding a lightweight visible dialog surface in `index.html` and `renderer.js`, plus preload-safe APIs for `sendUserMessage`, dialog history, and dialog event subscription.
+2. Route `USER_MESSAGE` through the existing contract pipeline with deterministic offline templates and explicit `source` / `fallbackMode` labeling.
+3. Add bubble rendering and non-blocking talk feedback for `PET_RESPONSE` and `PET_ANNOUNCEMENT`, then define the first manual verification steps for online/offline dialog behavior.
 
 ## Blockers
 - None currently.
 
 ## Last Session Summary
+- Closed D07 as `done` after operator-provided runtime verification:
+  - automatic local-media sensing entered `MusicChill` without waiting for Spotify enrichment
+  - speaker/headphones route detection was confirmed from the Windows local-media path
+  - temporary manual `Reading` (`1`), fallback `Reading` (`3`), and manual FreshRSS `L` all returned to `Idle` and then resumed `MusicChill`
+  - fling `Roll`, `PoolPlay`, local state-description fallback, `K`, and `J` all behaved as expected
+- Advanced the current deliverable to `07b-dialog-surface-and-minimal-offline-loop` per gating rule.
+- Refined the FreshRSS D07 behavior after manual verification feedback:
+  - background FreshRSS polling remains silent enrichment/memory input only
+  - manual `L` now enters a temporary `Reading` state for the latest headline, then returns to `Idle` automatically so local-media `MusicChill` can resume
+- Ran `npm run check` successfully after the FreshRSS timeout/scope update.
+- Fixed the local-media re-entry bug reported during manual verification:
+  - local `GSMTC` media events now apply `MusicChill` before any slower Spotify enrichment work starts
+  - when a temporary manual state returns to `Idle`, the runtime now forces a local-media refresh so `MusicChill` can resume even if the song did not change
+- Ran `npm run check` successfully after the local-media ordering/resume fix.
+- Adjusted the D07 debug-state behavior after operator runtime feedback:
+  - manual `Reading` (`1`) and forced fallback (`3`) now use temporary duration-bound overrides and return to `Idle` automatically instead of pinning the pet in `Reading`
+  - this preserves the priority guard while allowing local-media/autonomous music behavior to resume after the debug/test state expires
+- Ran `npm run check` successfully after the timed manual-state change.
+- Implemented local-first media sensing and online enrichment split for the D07 runtime:
+  - added `windows-media-sensor.js` plus `scripts/windows-media-probe.ps1` for Windows `GSMTC` playback metadata and default render-endpoint detection
+  - added config-first settings for `sensors.media` and background Spotify/FreshRSS enrichment cadence
+  - wired main-process local-media polling into the existing `MEDIA -> MusicChill` path without requiring `J`
+  - added manual `K` probe path and renderer diagnostics label for local media source/route inspection
+  - kept Spotify/FreshRSS probes available as slower enrichment routes, with background mode writing/logging without stealing visible state
+  - added a D07 priority guard so automatic `MusicChill` does not preempt higher-priority states like `Reading` or `PoolPlay`
+- Ran `npm run check` successfully after the local-media changes (`check:syntax`, `check:contracts`, `check:layout`, `check:assets` all passed).
+- Verification note:
+  - deterministic checks and direct PowerShell probe are green
+  - live Node/Electron child-process verification of the PowerShell probe is still pending operator runtime evidence because the coding sandbox blocks `child_process.spawn("powershell.exe")`
+- Implemented the first D07 runtime slice:
+  - added `state-runtime.js` and `config/state-catalog.json` for config-first authoritative behavior state management
+  - wired main-process state snapshots into preload/renderer (`pet:state`, `getStateSnapshot`, `triggerBehaviorState`, `simulateStateFallback`)
+  - added visible runtime controls and outcomes:
+    - `1` -> `Reading`
+    - `2` -> `PoolPlay`
+    - `3` -> forced missing-resource fallback
+    - `4` -> local state-aware question path
+    - `J` Spotify probe now drives `MusicChill`
+  - added renderer-visible D07 overlays/badge for `book`, `headphones`, `poolRing`, and sleep marker plus state/fallback diagnostics
+  - added deterministic check coverage via `scripts/check-state-runtime.js`
+- Followed up on operator feedback for the D07 slice:
+  - restored fling `Roll` precedence so state overlays do not suppress the base fling animation
+  - added animated placeholder overlay sprite sheets under `assets/overlays/`
+  - made `1` a local book-reading example and `3` a visibly distinct fallback-warning path
+  - made `L` drive a visible FreshRSS-backed `Reading` state from the latest item when probe data is available
+  - extended Spotify parsing so `J` can distinguish `speaker` vs `headphones` when device metadata is returned
+  - documented the next-layer visual contract from operator feedback:
+    - reading states should stay on body-compatible poses
+    - props should prefer direction-aware body attachments or carried/drop behavior before floating-icon fallback
+    - visible inventory/prop launcher expectations should live in D07c follow-on scope
+- Ran `npm run check` successfully after the D07 slice (`check:syntax`, `check:contracts`, `check:layout`, `check:assets` all passed).
+- D07 `Doc Gate` moved to `passed`; `Implementation Gate` remains `in_progress` pending manual app verification evidence.
+- Shipped outcome note for this session:
+  - visible app/runtime change delivered: D07 now includes Windows-local media sensing (`GSMTC` + output-device route), a manual `K` refresh path, slower Spotify/FreshRSS enrichment hooks, safer route preservation for `J`, and a priority guard so automatic music mode does not stomp higher-priority states.
 - Re-scoped Phase 3 so D07 now covers deterministic state runtime only, with follow-on deliverables:
   - D07b for dialog surface and minimal offline loop
   - D07c for shell/settings/wardrobe surface

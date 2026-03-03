@@ -1,0 +1,190 @@
+{
+  "version": 1,
+  "defaultStateId": "Idle",
+  "supportedOverlays": [
+    "headphones",
+    "speaker",
+    "musicNote",
+    "book",
+    "rssCard",
+    "poolRing",
+    "sleepZ"
+  ],
+  "states": [
+    {
+      "id": "Idle",
+      "kind": "simple",
+      "priority": 0,
+      "visual": {
+        "clip": "IdleReady",
+        "fallbackClip": "IdleReady"
+      },
+      "description": {
+        "doingText": "I am idling and keeping an eye on the desktop.",
+        "readingText": "I am not reading anything right now."
+      }
+    },
+    {
+      "id": "Roam",
+      "kind": "simple",
+      "priority": 10,
+      "visual": {
+        "clip": "Walk",
+        "fallbackClip": "IdleReady",
+        "label": "roam"
+      },
+      "description": {
+        "doingText": "I am roaming around and checking the room.",
+        "readingText": "I am roaming, not reading."
+      }
+    },
+    {
+      "id": "MusicChill",
+      "kind": "simple",
+      "priority": 30,
+      "visual": {
+        "clip": "IdleReady",
+        "fallbackClip": "IdleReady",
+        "overlay": "headphones",
+        "label": "headphones"
+      },
+      "description": {
+        "doingTemplate": "I am listening to {titleLabel} and settling into MusicChill.",
+        "doingFallback": "I am listening to music and staying in MusicChill.",
+        "readingText": "I am listening to music right now, not reading."
+      }
+    },
+    {
+      "id": "MusicDance",
+      "kind": "simple",
+      "priority": 40,
+      "visual": {
+        "clip": "Run",
+        "fallbackClip": "Walk",
+        "overlay": "headphones",
+        "label": "dance"
+      },
+      "description": {
+        "doingTemplate": "I am dancing along to {titleLabel}.",
+        "doingFallback": "I am dancing along to the music.",
+        "readingText": "I am dancing, not reading."
+      }
+    },
+    {
+      "id": "WatchMode",
+      "kind": "simple",
+      "priority": 20,
+      "visual": {
+        "clip": "IdleReady",
+        "fallbackClip": "IdleReady"
+      },
+      "description": {
+        "doingText": "I am watching quietly and waiting for the next cue.",
+        "readingText": "I am watching, not reading."
+      }
+    },
+    {
+      "id": "Sleep",
+      "kind": "simple",
+      "priority": 50,
+      "visual": {
+        "clip": "IdleReady",
+        "fallbackClip": "IdleReady",
+        "overlay": "sleepZ",
+        "label": "sleep"
+      },
+      "description": {
+        "doingText": "I am asleep for a bit.",
+        "readingText": "I am asleep, so I am definitely not reading."
+      }
+    },
+    {
+      "id": "Reading",
+      "kind": "simple",
+      "priority": 60,
+      "visual": {
+        "clip": "IdleReady",
+        "fallbackClip": "IdleReady",
+        "overlay": "book",
+        "label": "book"
+      },
+      "context": {
+        "itemType": "book",
+        "title": "The Pragmatic Programmer",
+        "sourceLabel": "local library"
+      },
+      "description": {
+        "doingTemplate": "I am reading {title} from {sourceLabel}.",
+        "doingFallback": "I am reading quietly right now.",
+        "readingTemplate": "I am reading {title} from {sourceLabel}.",
+        "readingFallback": "I have a book open, but I do not have the title handy."
+      }
+    },
+    {
+      "id": "PoolPlay",
+      "kind": "phase",
+      "priority": 70,
+      "onCompleteStateId": "Idle",
+      "context": {
+        "propLabel": "pool toy"
+      },
+      "description": {
+        "doingText": "I am splashing around with the pool toy.",
+        "readingText": "I am playing in the pool toy right now, not reading."
+      },
+      "phases": [
+        {
+          "id": "enter",
+          "durationMs": 450,
+          "visual": {
+            "clip": "Jump",
+            "fallbackClip": "IdleReady",
+            "overlay": "poolRing",
+            "label": "pool-enter"
+          },
+          "description": {
+            "doingText": "I am hopping into the pool toy."
+          }
+        },
+        {
+          "id": "loop",
+          "durationMs": 1200,
+          "visual": {
+            "clip": "IdleReady",
+            "fallbackClip": "IdleReady",
+            "overlay": "poolRing",
+            "label": "pool-loop"
+          },
+          "description": {
+            "doingText": "I am bobbing around in the pool toy."
+          }
+        },
+        {
+          "id": "exit",
+          "durationMs": 450,
+          "visual": {
+            "clip": "Jump",
+            "fallbackClip": "IdleReady",
+            "overlay": "poolRing",
+            "label": "pool-exit"
+          },
+          "description": {
+            "doingText": "I am hopping back out of the pool toy."
+          }
+        },
+        {
+          "id": "recover",
+          "durationMs": 650,
+          "visual": {
+            "clip": "IdleReady",
+            "fallbackClip": "IdleReady",
+            "label": "recover"
+          },
+          "description": {
+            "doingText": "I am catching my breath after pool play."
+          }
+        }
+      ]
+    }
+  ]
+}

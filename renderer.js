@@ -8,6 +8,85 @@ const RENDER_MODES = Object.freeze({
   sprite: "sprite",
 });
 const SPRITE_CHARACTER_ID = "girl";
+const OVERLAY_SPRITES = Object.freeze({
+  book: Object.freeze({
+    src: "assets/overlays/book-sheet.svg",
+    frameWidth: 96,
+    frameHeight: 96,
+    frameCount: 4,
+    fps: 4,
+    drawWidth: 70,
+    drawHeight: 70,
+    anchorX: 0.63,
+    anchorY: 0.65,
+  }),
+  rssCard: Object.freeze({
+    src: "assets/overlays/rss-card-sheet.svg",
+    frameWidth: 96,
+    frameHeight: 96,
+    frameCount: 4,
+    fps: 4,
+    drawWidth: 74,
+    drawHeight: 74,
+    anchorX: 0.63,
+    anchorY: 0.64,
+  }),
+  headphones: Object.freeze({
+    src: "assets/overlays/headphones-sheet.svg",
+    frameWidth: 96,
+    frameHeight: 96,
+    frameCount: 4,
+    fps: 6,
+    drawWidth: 78,
+    drawHeight: 78,
+    anchorX: 0.5,
+    anchorY: 0.33,
+  }),
+  speaker: Object.freeze({
+    src: "assets/overlays/speaker-sheet.svg",
+    frameWidth: 96,
+    frameHeight: 96,
+    frameCount: 4,
+    fps: 6,
+    drawWidth: 72,
+    drawHeight: 72,
+    anchorX: 0.2,
+    anchorY: 0.44,
+  }),
+  musicNote: Object.freeze({
+    src: "assets/overlays/music-note-sheet.svg",
+    frameWidth: 96,
+    frameHeight: 96,
+    frameCount: 4,
+    fps: 6,
+    drawWidth: 54,
+    drawHeight: 54,
+    anchorX: 0.66,
+    anchorY: 0.2,
+  }),
+  poolRing: Object.freeze({
+    src: "assets/overlays/pool-ring-sheet.svg",
+    frameWidth: 96,
+    frameHeight: 96,
+    frameCount: 4,
+    fps: 5,
+    drawWidth: 112,
+    drawHeight: 72,
+    anchorX: 0.5,
+    anchorY: 0.7,
+  }),
+  fallbackWarning: Object.freeze({
+    src: "assets/overlays/fallback-warning-sheet.svg",
+    frameWidth: 96,
+    frameHeight: 96,
+    frameCount: 4,
+    fps: 5,
+    drawWidth: 54,
+    drawHeight: 54,
+    anchorX: 0.5,
+    anchorY: 0.22,
+  }),
+});
 const SPRITE_DRAG_ROTATION_MAX_RAD = Math.PI * (34 / 180);
 const SPRITE_DRAG_ROTATION_VX_FOR_MAX = 420;
 const SPRITE_DRAG_ROTATION_MIN_VX = 2;
@@ -154,6 +233,7 @@ let latestContractSuggestion = null;
 let latestMemorySnapshot = null;
 let latestMemoryEvent = null;
 let latestIntegrationEvent = null;
+let latestStateSnapshot = null;
 let diagnosticsEnabled = false;
 let latestMotion = { ...DEFAULT_MOTION };
 let currentRenderState = "idle";
@@ -193,6 +273,7 @@ let latestSpriteFrame = null;
 let latestSpriteHitRect = null;
 let spriteRuntime = null;
 let spriteManifest = null;
+let overlaySpriteEntries = new Map();
 let spriteJumpQueued = false;
 let spriteDragRotation = 0;
 let spriteDragRotationVel = 0;
@@ -509,6 +590,16 @@ function getSpriteInputState() {
   const moveX = (movementKeys.right ? 1 : 0) - (movementKeys.left ? 1 : 0);
   const moveY = (movementKeys.down ? 1 : 0) - (movementKeys.up ? 1 : 0);
   const jumpPressed = spriteJumpQueued;
+  const behaviorVisual = getBehaviorVisualBinding();
+  const preferBehaviorVisual = Boolean(
+    latestStateSnapshot &&
+      (
+        latestStateSnapshot.currentState !== "Idle" ||
+        latestStateSnapshot.phase ||
+        behaviorVisual?.overlay ||
+        behaviorVisual?.clip !== "IdleReady"
+      )
+  );
   spriteJumpQueued = false;
   return {
     moveX,
@@ -522,6 +613,9 @@ function getSpriteInputState() {
     motionVX: latestMotion.velocity?.vx || 0,
     motionVY: latestMotion.velocity?.vy || 0,
     motionSpeed: latestMotion.velocity?.speed || 0,
+    preferredState: preferBehaviorVisual ? behaviorVisual?.clip || "" : "",
+    preferredDirection: preferBehaviorVisual ? behaviorVisual?.direction || "" : "",
+    preservePreferredPhase: preferBehaviorVisual && Boolean(latestStateSnapshot?.phase),
   };
 }
 
@@ -568,6 +662,11 @@ function onMovementKeyDown(event) {
     runSpotifyProbe();
     return;
   }
+  else if (key === "k") {
+    if (event.repeat) return;
+    runLocalMediaProbe();
+    return;
+  }
   else if (key === "l") {
     if (event.repeat) return;
     runFreshRssProbe();
@@ -576,6 +675,39 @@ function onMovementKeyDown(event) {
   else if (key === "m") {
     if (event.repeat) return;
     recordManualMusicRating();
+    return;
+  }
+  else if (key === "1") {
+    if (event.repeat) return;
+    triggerBehaviorState("Reading", {
+      reason: "manual_reading_hotkey",
+      trigger: "hotkey-1",
+      durationMs: 9000,
+      onCompleteStateId: "Idle",
+      context: {
+        itemType: "book",
+        title: "The Pragmatic Programmer",
+        sourceLabel: "local library",
+      },
+    });
+    return;
+  }
+  else if (key === "2") {
+    if (event.repeat) return;
+    triggerBehaviorState("PoolPlay", {
+      reason: "manual_poolplay_hotkey",
+      trigger: "hotkey-2",
+    });
+    return;
+  }
+  else if (key === "3") {
+    if (event.repeat) return;
+    simulateStateFallback();
+    return;
+  }
+  else if (key === "4") {
+    if (event.repeat) return;
+    runStateDescriptionQuestion();
     return;
   }
   else if (key === "r") {
@@ -652,6 +784,40 @@ async function loadSpriteRuntime(characterId) {
   }
 }
 
+function primeOverlaySpriteSheet(overlayId, metadata) {
+  if (!metadata || overlaySpriteEntries.has(overlayId)) return;
+  const image = new Image();
+  const entry = {
+    ...metadata,
+    image,
+    loaded: false,
+    failed: false,
+  };
+  image.onload = () => {
+    entry.loaded = true;
+  };
+  image.onerror = () => {
+    entry.failed = true;
+  };
+  image.src = encodeURI(metadata.src);
+  overlaySpriteEntries.set(overlayId, entry);
+}
+
+function loadOverlaySpriteSheets() {
+  overlaySpriteEntries = new Map();
+  for (const [overlayId, metadata] of Object.entries(OVERLAY_SPRITES)) {
+    primeOverlaySpriteSheet(overlayId, metadata);
+  }
+}
+
+function getOverlaySpriteEntry(overlayId) {
+  if (!overlayId || !OVERLAY_SPRITES[overlayId]) return null;
+  if (!overlaySpriteEntries.has(overlayId)) {
+    primeOverlaySpriteSheet(overlayId, OVERLAY_SPRITES[overlayId]);
+  }
+  return overlaySpriteEntries.get(overlayId) || null;
+}
+
 async function triggerFirstExtensionPropInteraction(source = "manual") {
   if (typeof window.petAPI.getExtensions !== "function") return;
   if (typeof window.petAPI.interactWithExtensionProp !== "function") return;
@@ -723,6 +889,52 @@ async function runPetUserCommand(command) {
   }
 }
 
+async function triggerBehaviorState(stateId, options = {}) {
+  if (typeof window.petAPI.triggerBehaviorState !== "function") return;
+  try {
+    const result = await window.petAPI.triggerBehaviorState(stateId, options);
+    if (!result?.ok) {
+      console.warn("[state] trigger failed:", result?.error || "unknown");
+      return;
+    }
+    if (result.snapshot && typeof result.snapshot === "object") {
+      latestStateSnapshot = result.snapshot;
+    }
+    console.info(
+      `[state] current=${result.snapshot?.currentState || stateId} phase=${result.snapshot?.phase || "none"} fallback=${result.snapshot?.visualFallbackUsed ? "yes" : "no"}`
+    );
+  } catch (error) {
+    console.warn("[state] trigger failed:", error);
+  }
+}
+
+async function simulateStateFallback() {
+  if (typeof window.petAPI.simulateStateFallback !== "function") return;
+  try {
+    const result = await window.petAPI.simulateStateFallback();
+    if (!result?.ok) {
+      console.warn("[state] fallback simulation failed:", result?.error || "unknown");
+      return;
+    }
+    if (result.snapshot && typeof result.snapshot === "object") {
+      latestStateSnapshot = result.snapshot;
+    }
+    console.info(
+      `[state] fallback simulation current=${result.snapshot?.currentState || "unknown"} fallback=${result.snapshot?.visualFallbackUsed ? "yes" : "no"}`
+    );
+  } catch (error) {
+    console.warn("[state] fallback simulation failed:", error);
+  }
+}
+
+function runStateDescriptionQuestion() {
+  const question =
+    latestStateSnapshot?.currentState === "Reading"
+      ? "what are you reading?"
+      : "what are you doing?";
+  void runPetUserCommand(question);
+}
+
 async function recordManualMusicRating() {
   if (typeof window.petAPI.recordMusicRating !== "function") return;
   try {
@@ -752,6 +964,23 @@ async function runSpotifyProbe() {
     );
   } catch (error) {
     console.warn("[integration] spotify probe failed:", error);
+  }
+}
+
+async function runLocalMediaProbe() {
+  if (typeof window.petAPI.probeLocalMedia !== "function") return;
+  try {
+    const result = await window.petAPI.probeLocalMedia();
+    const snapshot = result?.snapshot || null;
+    if (!snapshot) {
+      console.warn("[local-media] probe failed:", result?.error || "unknown");
+      return;
+    }
+    console.info(
+      `[local-media] playing=${snapshot.isPlaying ? "yes" : "no"} app=${snapshot.sourceAppLabel || "Windows Media"} route=${snapshot.outputRoute || "unknown"}`
+    );
+  } catch (error) {
+    console.warn("[local-media] probe failed:", error);
   }
 }
 
@@ -1146,6 +1375,27 @@ function getCapabilityStateLabel(capabilityId) {
     : [];
   const match = capabilities.find((entry) => entry?.capabilityId === capabilityId);
   return match?.state || "n/a";
+}
+
+function getBehaviorStateLabel() {
+  if (!latestStateSnapshot?.currentState) return "Idle";
+  return latestStateSnapshot.phase
+    ? `${latestStateSnapshot.currentState}/${latestStateSnapshot.phase}`
+    : latestStateSnapshot.currentState;
+}
+
+function getIntegrationEventLabel() {
+  if (!latestIntegrationEvent) return "n/a";
+  if (latestIntegrationEvent.kind === "localMedia") {
+    return `localMedia:${latestIntegrationEvent.sourceAppLabel || "Windows Media"}:${latestIntegrationEvent.outputRoute || "unknown"}`;
+  }
+  return `${latestIntegrationEvent.kind || "?"}${latestIntegrationEvent.fallbackMode ? `:${latestIntegrationEvent.fallbackMode}` : ""}`;
+}
+
+function getBehaviorVisualBinding() {
+  return latestStateSnapshot?.visual && typeof latestStateSnapshot.visual === "object"
+    ? latestStateSnapshot.visual
+    : null;
 }
 
 function deriveRenderState(nowMs) {
@@ -2215,6 +2465,17 @@ function drawDebugOverlay(w, h) {
   const lines = [
     `render mode: ${activeRenderMode}`,
     `state: ${currentRenderState}`,
+    `behavior: ${getBehaviorStateLabel()}`,
+    `behavior visual: ${
+      latestStateSnapshot?.visual
+        ? `${latestStateSnapshot.visual.clip}${latestStateSnapshot.visual.overlay ? ` + ${latestStateSnapshot.visual.overlay}` : ""}`
+        : "n/a"
+    }`,
+    `behavior fallback: ${
+      latestStateSnapshot
+        ? `${latestStateSnapshot.visualFallbackUsed ? "yes" : "no"}${latestStateSnapshot.fallbackReasons?.length ? ` (${latestStateSnapshot.fallbackReasons.join(",")})` : ""}`
+        : "n/a"
+    }`,
     `capabilities: ${
       latestCapabilitySnapshot
         ? `${latestCapabilitySnapshot.runtimeState} h=${latestCapabilitySnapshot.summary?.healthyCount || 0} d=${latestCapabilitySnapshot.summary?.degradedCount || 0} f=${latestCapabilitySnapshot.summary?.failedCount || 0}`
@@ -2246,11 +2507,7 @@ function drawDebugOverlay(w, h) {
         : "n/a"
     }`,
     `integrations: spotify=${getCapabilityStateLabel("spotifyIntegration")} freshrss=${getCapabilityStateLabel("freshRssIntegration")}`,
-    `integration event: ${
-      latestIntegrationEvent
-        ? `${latestIntegrationEvent.kind || "?"}${latestIntegrationEvent.fallbackMode ? `:${latestIntegrationEvent.fallbackMode}` : ""}`
-        : "n/a"
-    }`,
+    `integration event: ${getIntegrationEventLabel()}`,
     `motion preset: ${latestMotion.preset || "n/a"}`,
     `sprite: ${
       latestSpriteFrame
@@ -2388,10 +2645,200 @@ function draw() {
       layer.draw(ctx, transform, layer);
     }
   }
+  drawBehaviorOverlay(ctx, latestStateSnapshot, nowMs);
   ctx.restore();
 
+  drawBehaviorStateBadge(ctx);
   drawDebugOverlay(w, h);
   requestAnimationFrame(draw);
+}
+
+function drawRoundedRectPath(context, x, y, width, height, radius) {
+  const r = Math.max(0, Math.min(radius, Math.min(width, height) * 0.5));
+  context.beginPath();
+  context.moveTo(x + r, y);
+  context.lineTo(x + width - r, y);
+  context.quadraticCurveTo(x + width, y, x + width, y + r);
+  context.lineTo(x + width, y + height - r);
+  context.quadraticCurveTo(x + width, y + height, x + width - r, y + height);
+  context.lineTo(x + r, y + height);
+  context.quadraticCurveTo(x, y + height, x, y + height - r);
+  context.lineTo(x, y + r);
+  context.quadraticCurveTo(x, y, x + r, y);
+  context.closePath();
+}
+
+function drawProceduralBehaviorOverlay(context, overlay, bounds, centerX, centerY) {
+  if (overlay === "book") {
+    const bookWidth = 42;
+    const bookHeight = 30;
+    const x = centerX + bounds.width * 0.08;
+    const y = centerY + bounds.height * 0.1;
+    drawRoundedRectPath(context, x, y, bookWidth, bookHeight, 6);
+    context.fillStyle = "rgba(243, 210, 126, 0.95)";
+    context.fill();
+    context.strokeStyle = "rgba(121, 82, 28, 0.9)";
+    context.lineWidth = 2;
+    context.stroke();
+    context.beginPath();
+    context.moveTo(x + bookWidth * 0.5, y + 4);
+    context.lineTo(x + bookWidth * 0.5, y + bookHeight - 4);
+    context.strokeStyle = "rgba(121, 82, 28, 0.55)";
+    context.stroke();
+  } else if (overlay === "headphones") {
+    const headY = centerY - bounds.height * 0.22;
+    context.strokeStyle = "rgba(40, 44, 58, 0.96)";
+    context.lineWidth = 4;
+    context.beginPath();
+    context.arc(centerX, headY + 2, 28, Math.PI * 1.1, Math.PI * 1.9);
+    context.stroke();
+    context.fillStyle = "rgba(62, 70, 92, 0.96)";
+    drawRoundedRectPath(context, centerX - 30, headY + 6, 10, 24, 5);
+    context.fill();
+    drawRoundedRectPath(context, centerX + 20, headY + 6, 10, 24, 5);
+    context.fill();
+  } else if (overlay === "speaker") {
+    context.fillStyle = "rgba(58, 68, 89, 0.96)";
+    context.fillRect(centerX - 58, centerY - 10, 18, 24);
+    context.beginPath();
+    context.moveTo(centerX - 40, centerY - 4);
+    context.lineTo(centerX - 22, centerY - 16);
+    context.lineTo(centerX - 22, centerY + 20);
+    context.lineTo(centerX - 40, centerY + 8);
+    context.closePath();
+    context.fillStyle = "rgba(88, 103, 129, 0.96)";
+    context.fill();
+    context.strokeStyle = "rgba(120, 213, 255, 0.96)";
+    context.lineWidth = 3;
+    context.beginPath();
+    context.arc(centerX - 10, centerY + 2, 14, -Math.PI * 0.35, Math.PI * 0.35);
+    context.stroke();
+  } else if (overlay === "musicNote") {
+    context.strokeStyle = "rgba(31, 49, 69, 0.96)";
+    context.fillStyle = "rgba(174, 231, 255, 0.96)";
+    context.lineWidth = 3;
+    context.beginPath();
+    context.arc(centerX + 26, centerY - 44, 8, 0, Math.PI * 2);
+    context.fill();
+    context.stroke();
+    context.beginPath();
+    context.moveTo(centerX + 31, centerY - 48);
+    context.lineTo(centerX + 31, centerY - 72);
+    context.lineTo(centerX + 46, centerY - 76);
+    context.stroke();
+  } else if (overlay === "rssCard") {
+    drawRoundedRectPath(context, centerX + 10, centerY - 2, 46, 34, 8);
+    context.fillStyle = "rgba(255, 244, 219, 0.96)";
+    context.fill();
+    context.strokeStyle = "rgba(187, 108, 40, 0.92)";
+    context.lineWidth = 2;
+    context.stroke();
+    context.fillStyle = "rgba(244, 141, 52, 0.95)";
+    context.beginPath();
+    context.arc(centerX + 24, centerY + 10, 3, 0, Math.PI * 2);
+    context.fill();
+  } else if (overlay === "poolRing") {
+    context.strokeStyle = "rgba(87, 225, 255, 0.96)";
+    context.lineWidth = 8;
+    context.beginPath();
+    context.ellipse(centerX, centerY + bounds.height * 0.14, 52, 18, 0, 0, Math.PI * 2);
+    context.stroke();
+    context.strokeStyle = "rgba(255, 255, 255, 0.65)";
+    context.lineWidth = 2;
+    context.beginPath();
+    context.ellipse(centerX, centerY + bounds.height * 0.14, 40, 10, 0, 0, Math.PI * 2);
+    context.stroke();
+  } else if (overlay === "sleepZ") {
+    context.fillStyle = "rgba(244, 248, 255, 0.95)";
+    context.font = "bold 16px Georgia";
+    context.fillText("Z", centerX + 18, centerY - bounds.height * 0.34);
+    context.font = "bold 12px Georgia";
+    context.fillText("z", centerX + 34, centerY - bounds.height * 0.42);
+  } else if (overlay === "fallbackWarning") {
+    context.fillStyle = "rgba(143, 67, 31, 0.95)";
+    context.beginPath();
+    context.moveTo(centerX, centerY - 58);
+    context.lineTo(centerX + 18, centerY - 24);
+    context.lineTo(centerX - 18, centerY - 24);
+    context.closePath();
+    context.fill();
+  }
+}
+
+function drawBehaviorOverlay(context, snapshot, nowMs) {
+  const bounds = getDesignVisualBounds();
+  const centerX = bounds.x + bounds.width * 0.5;
+  const centerY = bounds.y + bounds.height * 0.5;
+  const overlay = snapshot?.visual?.overlay;
+  const fallbackOverlayId =
+    snapshot?.visualFallbackUsed && !overlay ? "fallbackWarning" : null;
+
+  context.save();
+  const overlayIds = [overlay, fallbackOverlayId].filter(Boolean);
+  for (const overlayId of overlayIds) {
+    const entry = getOverlaySpriteEntry(overlayId);
+    if (entry?.loaded && !entry.failed) {
+      const frameIndex = Math.floor((nowMs / 1000) * entry.fps) % Math.max(1, entry.frameCount);
+      const drawWidth = entry.drawWidth;
+      const drawHeight = entry.drawHeight;
+      const drawX = bounds.x + bounds.width * entry.anchorX - drawWidth * 0.5;
+      const drawY = bounds.y + bounds.height * entry.anchorY - drawHeight * 0.5;
+      context.drawImage(
+        entry.image,
+        frameIndex * entry.frameWidth,
+        0,
+        entry.frameWidth,
+        entry.frameHeight,
+        drawX,
+        drawY,
+        drawWidth,
+        drawHeight
+      );
+      continue;
+    }
+    drawProceduralBehaviorOverlay(context, overlayId, bounds, centerX, centerY);
+  }
+  context.restore();
+}
+
+function drawBehaviorStateBadge(context) {
+  const snapshot = latestStateSnapshot;
+  if (!snapshot) return;
+  const shouldShow =
+    snapshot.currentState !== "Idle" ||
+    snapshot.visualFallbackUsed ||
+    Boolean(snapshot.visual?.overlay);
+  if (!shouldShow) return;
+
+  const bounds = latestVisibleBounds || getDesignVisualBounds();
+  const primaryText = getBehaviorStateLabel();
+  const secondaryText = snapshot.visualFallbackUsed
+    ? "fallback"
+    : snapshot.visual?.overlay || snapshot.visual?.clip || "state";
+
+  context.save();
+  context.font = "bold 12px Georgia";
+  const primaryWidth = context.measureText(primaryText).width;
+  context.font = "11px Georgia";
+  const secondaryWidth = context.measureText(secondaryText).width;
+  const width = Math.max(primaryWidth, secondaryWidth) + 16;
+  const height = 34;
+  const x = Math.max(6, bounds.x + bounds.width * 0.5 - width * 0.5);
+  const y = Math.max(6, bounds.y - height - 8);
+  drawRoundedRectPath(context, x, y, width, height, 10);
+  context.fillStyle = snapshot.visualFallbackUsed
+    ? "rgba(140, 56, 24, 0.9)"
+    : "rgba(16, 24, 36, 0.78)";
+  context.fill();
+  context.fillStyle = "rgba(249, 251, 255, 0.98)";
+  context.font = "bold 12px Georgia";
+  context.fillText(primaryText, x + 8, y + 6);
+  context.font = "11px Georgia";
+  context.fillStyle = snapshot.visualFallbackUsed
+    ? "rgba(255, 220, 176, 0.98)"
+    : "rgba(196, 219, 255, 0.98)";
+  context.fillText(secondaryText, x + 8, y + 19);
+  context.restore();
 }
 
 async function init() {
@@ -2416,6 +2863,12 @@ async function init() {
       latestMemorySnapshot = await window.petAPI.getMemorySnapshot();
     } catch {}
   }
+  if (typeof window.petAPI.getStateSnapshot === "function") {
+    try {
+      latestStateSnapshot = await window.petAPI.getStateSnapshot();
+    } catch {}
+  }
+  loadOverlaySpriteSheets();
   await loadSpriteRuntime(SPRITE_CHARACTER_ID);
 
   if (typeof window.petAPI.onMotion === "function") {
@@ -2505,6 +2958,14 @@ async function init() {
       if (payload.snapshot && typeof payload.snapshot === "object") {
         latestMemorySnapshot = payload.snapshot;
       }
+      latestDiagnostics = payload;
+    });
+  }
+
+  if (typeof window.petAPI.onState === "function") {
+    window.petAPI.onState((payload) => {
+      if (!payload || typeof payload !== "object") return;
+      latestStateSnapshot = payload;
       latestDiagnostics = payload;
     });
   }

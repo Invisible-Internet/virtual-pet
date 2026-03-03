@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="384" height="96" viewBox="0 0 384 96">
+  <rect width="384" height="96" fill="none"/>
+  <g transform="translate(0 0)">
+    <path d="M48 18 L74 68 H22 Z" fill="#8f431f"/>
+    <path d="M48 28 L48 50" stroke="#ffe7bf" stroke-width="6" stroke-linecap="round"/>
+    <circle cx="48" cy="59" r="4" fill="#ffe7bf"/>
+  </g>
+  <g transform="translate(96 0)">
+    <path d="M48 18 L74 68 H22 Z" fill="#a04f27"/>
+    <path d="M48 28 L48 50" stroke="#ffe7bf" stroke-width="6" stroke-linecap="round"/>
+    <circle cx="48" cy="59" r="4" fill="#ffe7bf"/>
+    <rect x="28" y="70" width="40" height="4" rx="2" fill="#ffc27b"/>
+  </g>
+  <g transform="translate(192 0)">
+    <path d="M48 18 L74 68 H22 Z" fill="#8f431f"/>
+    <path d="M48 28 L48 50" stroke="#ffe7bf" stroke-width="6" stroke-linecap="round"/>
+    <circle cx="48" cy="59" r="4" fill="#ffe7bf"/>
+  </g>
+  <g transform="translate(288 0)">
+    <path d="M48 18 L74 68 H22 Z" fill="#a04f27"/>
+    <path d="M48 28 L48 50" stroke="#ffe7bf" stroke-width="6" stroke-linecap="round"/>
+    <circle cx="48" cy="59" r="4" fill="#ffe7bf"/>
+    <rect x="28" y="70" width="40" height="4" rx="2" fill="#ffc27b"/>
+  </g>
+</svg>

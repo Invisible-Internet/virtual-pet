@@ -32,6 +32,7 @@ function assertIncludes(value, expectedPart, message) {
 
 function testPromptBuilders() {
   assertIncludes(buildSpotifyNowPlayingPrompt(), "spotify-history", "now playing prompt should mention spotify-history");
+  assertIncludes(buildSpotifyNowPlayingPrompt(), "device_name", "now playing prompt should request device metadata");
   assertIncludes(buildSpotifyTopArtistPrompt(), "top_artist", "top artist prompt should mention top_artist");
   assertIncludes(buildFreshRssPrompt(), "latest 5 FreshRSS items", "freshrss prompt should mention latest items");
 }
@@ -96,6 +97,16 @@ function testSpotifyNormalizers() {
   });
   assertEqual(splitArtist.trackName, "Lifting", "spotify split track name mismatch");
   assertEqual(splitArtist.artistName, "Silva Bumpa, Riordan", "spotify split artist mismatch");
+
+  const devicePayload = normalizeSpotifyNowPlayingPayload({
+    is_playing: true,
+    track: "back to friends",
+    artist: "sombr",
+    device_name: "Desktop Speakers",
+    device_type: "computer",
+  });
+  assertEqual(devicePayload.outputDeviceName, "Desktop Speakers", "spotify device name mismatch");
+  assertEqual(devicePayload.outputRoute, "speaker", "spotify output route mismatch");
 
   const topArtist = normalizeSpotifyTopArtistPayload({
     time_range: "long_term",

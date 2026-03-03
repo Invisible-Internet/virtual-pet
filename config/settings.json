@@ -6,14 +6,26 @@
       "transport": "stub",
       "defaultTrackTitle": "Night Drive",
       "defaultArtist": "Primea FM",
-      "defaultAlbum": "Sample Rotation"
+      "defaultAlbum": "Sample Rotation",
+      "backgroundEnrichmentEnabled": true,
+      "pollCadenceMinutes": 10
     },
     "freshRss": {
       "enabled": true,
       "available": true,
       "transport": "stub",
+      "backgroundEnrichmentEnabled": true,
       "pollCadenceMinutes": 30,
       "dailyTopItems": 3
+    }
+  },
+  "sensors": {
+    "media": {
+      "enabled": true,
+      "backend": "powershell",
+      "pollIntervalMs": 2500,
+      "probeTimeoutMs": 1800,
+      "includeOutputDevice": true
     }
   },
   "memory": {

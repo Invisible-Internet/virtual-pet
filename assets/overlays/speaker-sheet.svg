@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="384" height="96" viewBox="0 0 384 96">
+  <rect width="384" height="96" fill="none"/>
+  <g transform="translate(0 0)">
+    <rect x="20" y="32" width="20" height="28" rx="4" fill="#3a4459"/>
+    <path d="M40 38 L54 28 L54 64 L40 54 Z" fill="#586781"/>
+    <path d="M62 35 Q74 48 62 61" stroke="#78d5ff" stroke-width="4" fill="none" stroke-linecap="round"/>
+  </g>
+  <g transform="translate(96 0)">
+    <rect x="20" y="32" width="20" height="28" rx="4" fill="#3a4459"/>
+    <path d="M40 38 L54 28 L54 64 L40 54 Z" fill="#586781"/>
+    <path d="M62 35 Q74 48 62 61" stroke="#78d5ff" stroke-width="4" fill="none" stroke-linecap="round"/>
+    <path d="M70 28 Q88 48 70 68" stroke="#c4efff" stroke-width="3" fill="none" stroke-linecap="round"/>
+  </g>
+  <g transform="translate(192 0)">
+    <rect x="20" y="32" width="20" height="28" rx="4" fill="#3a4459"/>
+    <path d="M40 38 L54 28 L54 64 L40 54 Z" fill="#586781"/>
+    <path d="M62 35 Q74 48 62 61" stroke="#78d5ff" stroke-width="4" fill="none" stroke-linecap="round"/>
+    <path d="M70 28 Q88 48 70 68" stroke="#c4efff" stroke-width="3" fill="none" stroke-linecap="round"/>
+    <path d="M78 22 Q100 48 78 74" stroke="#e7fbff" stroke-width="2" fill="none" stroke-linecap="round"/>
+  </g>
+  <g transform="translate(288 0)">
+    <rect x="20" y="32" width="20" height="28" rx="4" fill="#3a4459"/>
+    <path d="M40 38 L54 28 L54 64 L40 54 Z" fill="#586781"/>
+    <path d="M62 35 Q74 48 62 61" stroke="#78d5ff" stroke-width="4" fill="none" stroke-linecap="round"/>
+    <path d="M70 28 Q88 48 70 68" stroke="#c4efff" stroke-width="3" fill="none" stroke-linecap="round"/>
+  </g>
+</svg>

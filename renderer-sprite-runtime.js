@@ -325,6 +325,11 @@
       const motionVX = asFiniteNumber(input.motionVX, 0);
       const motionVY = asFiniteNumber(input.motionVY, 0);
       const motionSpeed = asFiniteNumber(input.motionSpeed, Math.hypot(motionVX, motionVY));
+      const preferredState =
+        typeof input.preferredState === "string" ? input.preferredState.trim() : "";
+      const preferredDirection =
+        typeof input.preferredDirection === "string" ? input.preferredDirection.trim() : "";
+      const preservePreferredPhase = Boolean(input.preservePreferredPhase);
 
       if (dragging) {
         const filterBlend = 1 - Math.exp(-DRAG_DIRECTION_FILTER_HZ * (resolvedDtMs / 1000));
@@ -375,6 +380,13 @@
       } else if (flinging) {
         const preservePhase = stateName === "Roll" && rollState === "Roll";
         setState(rollState, { oneshot: false, preservePhase });
+        oneshotActive = false;
+      } else if (preferredState) {
+        const preservePhase = preservePreferredPhase && stateName === preferredState;
+        setState(preferredState, { oneshot: false, preservePhase });
+        if (REQUIRED_DIRECTIONS.includes(preferredDirection)) {
+          direction = preferredDirection;
+        }
         oneshotActive = false;
       } else if (jumpPressed && !oneshotActive) {
         const jumpState = running || stateName === "Run" ? "RunningJump" : "Jump";

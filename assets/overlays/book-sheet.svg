@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="384" height="96" viewBox="0 0 384 96">
+  <rect width="384" height="96" fill="none"/>
+  <g transform="translate(0 0)">
+    <rect x="16" y="26" width="64" height="42" rx="8" fill="#f1ce86" stroke="#714a1d" stroke-width="3"/>
+    <path d="M48 30 L48 66" stroke="#714a1d" stroke-width="2" opacity="0.7"/>
+    <path d="M24 38 C34 34, 42 34, 46 38" stroke="#fff7da" stroke-width="2" fill="none"/>
+    <path d="M52 38 C58 34, 66 34, 72 38" stroke="#fff7da" stroke-width="2" fill="none"/>
+  </g>
+  <g transform="translate(96 0)">
+    <rect x="16" y="24" width="64" height="44" rx="8" fill="#f1ce86" stroke="#714a1d" stroke-width="3"/>
+    <path d="M48 28 L48 68" stroke="#714a1d" stroke-width="2" opacity="0.7"/>
+    <path d="M24 39 C34 31, 42 31, 46 39" stroke="#fff7da" stroke-width="2" fill="none"/>
+    <path d="M52 39 C58 31, 68 31, 72 39" stroke="#fff7da" stroke-width="2" fill="none"/>
+  </g>
+  <g transform="translate(192 0)">
+    <rect x="16" y="26" width="64" height="42" rx="8" fill="#f1ce86" stroke="#714a1d" stroke-width="3"/>
+    <path d="M48 30 L48 66" stroke="#714a1d" stroke-width="2" opacity="0.7"/>
+    <path d="M24 41 C33 36, 41 36, 46 41" stroke="#fff7da" stroke-width="2" fill="none"/>
+    <path d="M52 41 C60 36, 68 36, 72 41" stroke="#fff7da" stroke-width="2" fill="none"/>
+  </g>
+  <g transform="translate(288 0)">
+    <rect x="16" y="24" width="64" height="44" rx="8" fill="#f1ce86" stroke="#714a1d" stroke-width="3"/>
+    <path d="M48 28 L48 68" stroke="#714a1d" stroke-width="2" opacity="0.7"/>
+    <path d="M24 37 C34 33, 42 33, 46 37" stroke="#fff7da" stroke-width="2" fill="none"/>
+    <path d="M52 37 C58 33, 67 33, 72 37" stroke="#fff7da" stroke-width="2" fill="none"/>
+  </g>
+</svg>

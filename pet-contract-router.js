@@ -16,10 +16,16 @@ function normalizeUserCommand(payload) {
   const explicitType = normalizeText(normalizedPayload.type).toLowerCase();
   const command = normalizeText(normalizedPayload.command).toLowerCase();
   const text = normalizeText(normalizedPayload.text).toLowerCase();
-  const raw = explicitType || command || text;
+  const raw = (explicitType || command || text).replace(/[?!.,]+$/g, "");
 
-  if (raw === "status" || raw === "introspect" || raw === "what are you doing") {
+  if (raw === "status" || raw === "introspect") {
     return "status";
+  }
+  if (raw === "what are you doing") {
+    return "state-description-doing";
+  }
+  if (raw === "what are you reading") {
+    return "state-description-reading";
   }
   if (raw === "announce-test" || raw === "announce") {
     return "announce-test";
@@ -118,6 +124,24 @@ class PetContractRouter {
         ];
       }
 
+      if (
+        normalizedCommand === "state-description-doing" ||
+        normalizedCommand === "state-description-reading"
+      ) {
+        return [
+          {
+            type: "INTENT_STATE_DESCRIPTION",
+            reason: "user_command_state_description",
+            correlationId: event.correlationId,
+            ts: this._now(),
+            payload: {
+              scope:
+                normalizedCommand === "state-description-reading" ? "reading" : "doing",
+            },
+          },
+        ];
+      }
+
       if (normalizedCommand === "bridge-test" || normalizedCommand === "guardrail-test") {
         return [
           {
@@ -183,7 +207,7 @@ class PetContractRouter {
               album: normalizeText(event.payload?.album) || "unknown_album",
               suggestedState:
                 normalizeText(event.payload?.suggestedState) || "MusicChill",
-              activeProp: normalizeText(event.payload?.activeProp) || "headphones",
+              activeProp: normalizeText(event.payload?.activeProp) || "musicNote",
               entryDialogue: normalizeText(event.payload?.entryDialogue) || "",
               fallbackMode: normalizeText(event.payload?.fallbackMode) || "none",
             },
@@ -303,6 +327,22 @@ class PetContractRouter {
       ];
     }
 
+    if (intent.type === "INTENT_STATE_DESCRIPTION") {
+      return [
+        {
+          type: "PET_RESPONSE",
+          mode: "text",
+          source,
+          fallbackMode: normalizeText(context.bridgeFallbackMode) || "state_local",
+          text:
+            normalizeText(context.stateDescriptionText) ||
+            "I am in a safe local state description fallback.",
+          correlationId: intent.correlationId,
+          ts: this._now(),
+        },
+      ];
+    }
+
     if (intent.type === "INTENT_BRIDGE_DIALOG") {
       const bridgeDialogText =
         normalizeText(context.bridgeDialogText) || "Bridge unavailable. Local dialog fallback active.";
@@ -339,7 +379,7 @@ class PetContractRouter {
             "none",
           suggestedState,
           provider: normalizeText(intent.payload?.provider) || "media",
-          activeProp: normalizeText(intent.payload?.activeProp) || "headphones",
+          activeProp: normalizeText(intent.payload?.activeProp) || "musicNote",
           text: responseText,
           correlationId: intent.correlationId,
           ts: this._now(),

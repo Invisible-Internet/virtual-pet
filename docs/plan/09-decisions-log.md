@@ -130,3 +130,10 @@ Related:
 - **Rationale:** Preserves the current advisory-only architecture, avoids destabilizing near-term implementation, and defers high-risk platform/runtime questions until after v1 validation.
 - **Alternatives Considered:** Commit to Ollama/local-model path now, bundle OpenClaw in the v1 roadmap, make structured traits canonical before feasibility work is complete.
 - **Impacted Files/Modules:** `README.md`, `00-master-roadmap.md`, `00-progress-tracker.md`, `AGENTS.md`, D10.
+
+## ADR-0019: Local Media Sensing Reacts First; Online Probes Enrich Later
+- **Date:** `2026-03-02`
+- **Decision:** Use Windows-local media sensing (`GSMTC` + default render endpoint) as the first real-time trigger for music-mode behavior. Keep Spotify/FreshRSS OpenClaw probes as slower enrichment/memory inputs, with interactive probes still available on demand.
+- **Rationale:** Local OS signals are faster and better aligned with real desktop behavior changes, including non-Spotify playback. Online probes remain valuable for richer metadata and downstream memory analysis but are too slow and incomplete to be the only real-time sensor path.
+- **Alternatives Considered:** Spotify-only real-time music sensing, OpenClaw-first media polling for all playback decisions, no local output-route awareness.
+- **Impacted Files/Modules:** `windows-media-sensor.js`, `scripts/windows-media-probe.ps1`, `main.js`, `state-runtime.js`, D03 media-sensor expectations, D06 enrichment behavior, D07 visible state mapping, D08 media acceptance checks.

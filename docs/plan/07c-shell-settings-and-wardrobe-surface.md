@@ -15,6 +15,7 @@ Deliver the first real shell and settings surface promised by the roadmap withou
 - Tray/taskbar menu.
 - Deterministic settings toggles for runtime controls.
 - Minimal wardrobe/accessory control.
+- Minimal inventory/prop launcher control for at least one trusted desktop prop.
 - Roam mode switching.
 - Diagnostics visibility toggles.
 - Durable settings integration through the existing settings stack.
@@ -42,12 +43,14 @@ Deliver the first real shell and settings surface promised by the roadmap withou
    - `roaming.zone`
    - `ui.diagnosticsEnabled`
    - `wardrobe.activeAccessories`
+   - `inventory.quickProps`
    - `dialog.alwaysShowBubble`
 3. Expose runtime-safe menu actions for:
    - desktop roam
    - zone roam
    - diagnostics on/off
    - accessory toggle (`headphones` / `none`)
+   - one trusted prop spawn/remove action (`pool` or comparable reference prop)
 4. Reflect settings changes in runtime status output and renderer-visible state.
 5. Add one dev-only verification fallback if tray interaction is unavailable during development.
 
@@ -56,16 +59,18 @@ Pass when all are true:
 1. Tray/taskbar menu appears and changes at least one runtime behavior.
 2. Settings changes persist through the existing settings stack.
 3. One wardrobe/accessory toggle visibly changes the pet.
-4. Roam mode changes are reflected in runtime status output.
-5. Diagnostics toggle changes overlay visibility without requiring code edits.
-6. Drag/fling and fixed-window invariants remain intact.
+4. One inventory/prop launcher control visibly spawns or removes a trusted prop.
+5. Roam mode changes are reflected in runtime status output.
+6. Diagnostics toggle changes overlay visibility without requiring code edits.
+7. Drag/fling and fixed-window invariants remain intact.
 
 ## Tangible Acceptance Test (Doc-Level)
 1. Toggle roam mode from the tray and verify status output reflects the active mode.
 2. Toggle headphones and verify visible accessory change.
-3. Toggle diagnostics and verify overlay visibility changes without restart.
-4. Confirm drag/fling still behaves the same after each shell interaction.
-5. If using the dev-only fallback path, confirm it mirrors the same settings changes as the tray action.
+3. Spawn or remove one trusted desktop prop from the tray/dev fallback and verify a visible prop-world change.
+4. Toggle diagnostics and verify overlay visibility changes without restart.
+5. Confirm drag/fling still behaves the same after each shell interaction.
+6. If using the dev-only fallback path, confirm it mirrors the same settings changes as the tray action.
 
 ## Public Interfaces
 ### Settings additions
@@ -73,30 +78,35 @@ Pass when all are true:
 - `roaming.zone`
 - `ui.diagnosticsEnabled`
 - `wardrobe.activeAccessories`
+- `inventory.quickProps`
 - `dialog.alwaysShowBubble`
 
 ### Runtime responsibilities
 - Main-process tray/menu management.
 - Settings persistence through the current layered settings runtime.
 - Renderer-visible accessory/diagnostic state updates.
+- Shell-visible trusted prop spawn/remove actions for the first inventory slice.
 
 ## Implementation Slice (Mandatory)
 - Implement a tray/menu surface for the first shell controls.
 - Implement one persisted roam-mode toggle and one persisted diagnostics toggle.
 - Implement one visible wardrobe/accessory toggle (`headphones` / `none`).
+- Implement one trusted inventory/prop launcher action (spawn/remove one desktop prop).
 - Add one dev-only fallback action for environments where tray support is unavailable.
 
 ## Visible App Outcome
 - The app exposes a visible shell/settings surface instead of relying only on code edits or hidden hotkeys.
 - User can toggle diagnostics and roam mode without restarting.
 - User can toggle one visible accessory and confirm the wardrobe pipeline has started.
+- User can spawn/remove at least one trusted prop from a visible shell control, establishing the first inventory workflow.
 
 ## Implementation Verification (Manual)
 1. Use the tray to toggle roam mode and verify runtime status output changes.
 2. Toggle diagnostics visibility and confirm overlay changes immediately.
 3. Toggle headphones and confirm a visible accessory change.
-4. Confirm drag/fling behavior is unchanged after these interactions.
-5. If tray is unavailable, use the dev fallback and verify it produces the same runtime effect.
+4. Spawn/remove the first trusted prop and confirm visible runtime effect plus stable prop-world state.
+5. Confirm drag/fling behavior is unchanged after these interactions.
+6. If tray is unavailable, use the dev fallback and verify it produces the same runtime effect.
 
 ## Gate Status
 - `Doc Gate`: `not_started`
@@ -105,3 +115,4 @@ Pass when all are true:
 
 ## Change Log
 - `2026-03-02`: File created to split tray, settings, and wardrobe work out of D07 and keep shell controls as a focused, operator-verifiable slice.
+- `2026-03-02`: Expanded future shell scope to include a minimal inventory/prop launcher so user-placed desktop props and wardrobe/accessory controls share one visible operator surface.

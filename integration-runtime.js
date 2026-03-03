@@ -75,11 +75,14 @@ function buildDefaultIntegrationSettings() {
       defaultTrackTitle: "Night Drive",
       defaultArtist: "Primea FM",
       defaultAlbum: "Sample Rotation",
+      backgroundEnrichmentEnabled: true,
+      pollCadenceMinutes: 10,
     },
     freshRss: {
       enabled: true,
       available: false,
       transport: INTEGRATION_TRANSPORTS.stub,
+      backgroundEnrichmentEnabled: true,
       pollCadenceMinutes: 30,
       dailyTopItems: 3,
     },
@@ -95,6 +98,15 @@ function normalizeSpotifySettings(rawSpotify = {}) {
     defaultTrackTitle: toOptionalString(rawSpotify.defaultTrackTitle, defaults.defaultTrackTitle),
     defaultArtist: toOptionalString(rawSpotify.defaultArtist, defaults.defaultArtist),
     defaultAlbum: toOptionalString(rawSpotify.defaultAlbum, defaults.defaultAlbum),
+    backgroundEnrichmentEnabled: toBoolean(
+      rawSpotify.backgroundEnrichmentEnabled,
+      defaults.backgroundEnrichmentEnabled
+    ),
+    pollCadenceMinutes: toPositiveInteger(
+      rawSpotify.pollCadenceMinutes,
+      defaults.pollCadenceMinutes,
+      1
+    ),
   };
 }
 
@@ -104,6 +116,10 @@ function normalizeFreshRssSettings(rawFreshRss = {}) {
     enabled: toBoolean(rawFreshRss.enabled, defaults.enabled),
     available: toBoolean(rawFreshRss.available, defaults.available),
     transport: INTEGRATION_TRANSPORTS.stub,
+    backgroundEnrichmentEnabled: toBoolean(
+      rawFreshRss.backgroundEnrichmentEnabled,
+      defaults.backgroundEnrichmentEnabled
+    ),
     pollCadenceMinutes: toPositiveInteger(rawFreshRss.pollCadenceMinutes, defaults.pollCadenceMinutes, 5),
     dailyTopItems: clamp(toPositiveInteger(rawFreshRss.dailyTopItems, defaults.dailyTopItems, 1), 1, 3),
   };

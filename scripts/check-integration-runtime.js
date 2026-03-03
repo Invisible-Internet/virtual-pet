@@ -31,21 +31,37 @@ function assertIncludes(value, expectedPart, message) {
 function testSettingsNormalization() {
   const defaults = buildDefaultIntegrationSettings();
   assert(defaults.spotify.enabled === true, "spotify should default enabled");
+  assert(defaults.spotify.backgroundEnrichmentEnabled === true, "spotify background enrichment should default enabled");
+  assert(defaults.spotify.pollCadenceMinutes === 10, "spotify cadence should default to 10 minutes");
   assert(defaults.freshRss.dailyTopItems === 3, "freshRss dailyTopItems should default to 3");
 
   const normalized = normalizeIntegrationSettings({
     spotify: {
       available: false,
       defaultTrackTitle: "After Hours",
+      backgroundEnrichmentEnabled: false,
+      pollCadenceMinutes: 2,
     },
     freshRss: {
       available: true,
+      backgroundEnrichmentEnabled: false,
       dailyTopItems: 9,
     },
   });
   assertEqual(normalized.spotify.available, false, "spotify available should normalize");
   assertEqual(normalized.spotify.defaultTrackTitle, "After Hours", "spotify default track should normalize");
+  assertEqual(
+    normalized.spotify.backgroundEnrichmentEnabled,
+    false,
+    "spotify background enrichment should normalize"
+  );
+  assertEqual(normalized.spotify.pollCadenceMinutes, 2, "spotify cadence should normalize");
   assertEqual(normalized.freshRss.available, true, "freshRss available should normalize");
+  assertEqual(
+    normalized.freshRss.backgroundEnrichmentEnabled,
+    false,
+    "freshRss background enrichment should normalize"
+  );
   assertEqual(normalized.freshRss.dailyTopItems, 3, "freshRss dailyTopItems should cap at 3");
 }
 

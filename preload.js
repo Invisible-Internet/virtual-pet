@@ -11,7 +11,15 @@ contextBridge.exposeInMainWorld("petAPI", {
   getCapabilitySnapshot: () => ipcRenderer.invoke("pet:getCapabilitySnapshot"),
   getContractTrace: () => ipcRenderer.invoke("pet:getContractTrace"),
   getMemorySnapshot: () => ipcRenderer.invoke("pet:getMemorySnapshot"),
+  getStateSnapshot: () => ipcRenderer.invoke("pet:getStateSnapshot"),
+  triggerBehaviorState: (stateId, options = {}) =>
+    ipcRenderer.invoke("pet:triggerBehaviorState", {
+      stateId,
+      ...options,
+    }),
+  simulateStateFallback: () => ipcRenderer.invoke("pet:simulateStateFallback"),
   runUserCommand: (command) => ipcRenderer.invoke("pet:runUserCommand", { command }),
+  probeLocalMedia: () => ipcRenderer.invoke("pet:probeLocalMedia"),
   probeSpotifyIntegration: () => ipcRenderer.invoke("pet:probeSpotifyIntegration"),
   probeFreshRssIntegration: () => ipcRenderer.invoke("pet:probeFreshRssIntegration"),
   simulateSpotifyPlayback: (payload = {}) =>
@@ -139,6 +147,18 @@ contextBridge.exposeInMainWorld("petAPI", {
 
     return () => {
       ipcRenderer.removeListener("pet:memory", listener);
+    };
+  },
+  onState: (callback) => {
+    if (typeof callback !== "function") {
+      return () => {};
+    }
+
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on("pet:state", listener);
+
+    return () => {
+      ipcRenderer.removeListener("pet:state", listener);
     };
   },
   onIntegration: (callback) => {

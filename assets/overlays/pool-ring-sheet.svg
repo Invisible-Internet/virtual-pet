@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="384" height="96" viewBox="0 0 384 96">
+  <rect width="384" height="96" fill="none"/>
+  <g transform="translate(0 0)">
+    <ellipse cx="48" cy="54" rx="31" ry="12" fill="none" stroke="#53dfff" stroke-width="8"/>
+    <ellipse cx="48" cy="54" rx="21" ry="6" fill="none" stroke="#e8fdff" stroke-width="2"/>
+    <path d="M22 72 Q32 64 42 72 T62 72 T74 72" stroke="#a8f2ff" stroke-width="3" fill="none"/>
+  </g>
+  <g transform="translate(96 0)">
+    <ellipse cx="48" cy="52" rx="31" ry="12" fill="none" stroke="#53dfff" stroke-width="8"/>
+    <ellipse cx="48" cy="52" rx="21" ry="6" fill="none" stroke="#e8fdff" stroke-width="2"/>
+    <path d="M22 70 Q32 62 42 70 T62 70 T74 70" stroke="#a8f2ff" stroke-width="3" fill="none"/>
+  </g>
+  <g transform="translate(192 0)">
+    <ellipse cx="48" cy="54" rx="31" ry="12" fill="none" stroke="#53dfff" stroke-width="8"/>
+    <ellipse cx="48" cy="54" rx="21" ry="6" fill="none" stroke="#e8fdff" stroke-width="2"/>
+    <path d="M22 72 Q32 65 42 72 T62 72 T74 72" stroke="#a8f2ff" stroke-width="3" fill="none"/>
+  </g>
+  <g transform="translate(288 0)">
+    <ellipse cx="48" cy="53" rx="31" ry="12" fill="none" stroke="#53dfff" stroke-width="8"/>
+    <ellipse cx="48" cy="53" rx="21" ry="6" fill="none" stroke="#e8fdff" stroke-width="2"/>
+    <path d="M22 71 Q32 63 42 71 T62 71 T74 71" stroke="#a8f2ff" stroke-width="3" fill="none"/>
+  </g>
+</svg>

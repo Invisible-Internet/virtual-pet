@@ -12,6 +12,10 @@ const {
   DEFAULT_OPENCLAW_AGENT_TIMEOUT_MS,
 } = require("./openclaw-agent-probe");
 const {
+  buildDefaultLocalMediaSensorSettings,
+  normalizeLocalMediaSensorSettings,
+} = require("./windows-media-sensor");
+const {
   MEMORY_ADAPTER_MODES,
   MUTATION_TRANSPARENCY_POLICIES,
   DEFAULT_OBSIDIAN_VAULT_PATH,
@@ -168,6 +172,9 @@ function validateResolvedPaths(normalized, warnings, errors) {
 function buildDefaultSettings(projectRoot) {
   return {
     integrations: buildDefaultIntegrationSettings(),
+    sensors: {
+      media: buildDefaultLocalMediaSensorSettings(),
+    },
     memory: {
       enabled: true,
       adapterMode: MEMORY_ADAPTER_MODES.local,
@@ -200,6 +207,8 @@ function normalizeSettings(rawSettings, { projectRoot, env, warnings, errors }) 
   const normalized = buildDefaultSettings(projectRoot);
 
   normalized.integrations = normalizeIntegrationSettings(raw.integrations);
+  const sensorsRaw = raw.sensors && typeof raw.sensors === "object" ? raw.sensors : {};
+  normalized.sensors.media = normalizeLocalMediaSensorSettings(sensorsRaw.media);
 
   const memoryRaw = raw.memory && typeof raw.memory === "object" ? raw.memory : {};
   normalized.memory.enabled = toBoolean(memoryRaw.enabled, normalized.memory.enabled);
@@ -395,6 +404,25 @@ function applyEnvOverrides(settings, env, sourceMap) {
       toBoolean(env.PET_SPOTIFY_AVAILABLE, next.integrations.spotify.available)
     );
   }
+  if (Object.prototype.hasOwnProperty.call(env, "PET_SPOTIFY_BACKGROUND_ENRICHMENT")) {
+    set(
+      "integrations.spotify.backgroundEnrichmentEnabled",
+      toBoolean(
+        env.PET_SPOTIFY_BACKGROUND_ENRICHMENT,
+        next.integrations.spotify.backgroundEnrichmentEnabled
+      )
+    );
+  }
+  if (Object.prototype.hasOwnProperty.call(env, "PET_SPOTIFY_POLL_CADENCE_MINUTES")) {
+    set(
+      "integrations.spotify.pollCadenceMinutes",
+      toPositiveInteger(
+        env.PET_SPOTIFY_POLL_CADENCE_MINUTES,
+        next.integrations.spotify.pollCadenceMinutes,
+        1
+      )
+    );
+  }
   if (Object.prototype.hasOwnProperty.call(env, "PET_FRESHRSS_ENABLED")) {
     set(
       "integrations.freshRss.enabled",
@@ -405,6 +433,52 @@ function applyEnvOverrides(settings, env, sourceMap) {
     set(
       "integrations.freshRss.available",
       toBoolean(env.PET_FRESHRSS_AVAILABLE, next.integrations.freshRss.available)
+    );
+  }
+  if (Object.prototype.hasOwnProperty.call(env, "PET_FRESHRSS_BACKGROUND_ENRICHMENT")) {
+    set(
+      "integrations.freshRss.backgroundEnrichmentEnabled",
+      toBoolean(
+        env.PET_FRESHRSS_BACKGROUND_ENRICHMENT,
+        next.integrations.freshRss.backgroundEnrichmentEnabled
+      )
+    );
+  }
+  if (Object.prototype.hasOwnProperty.call(env, "PET_FRESHRSS_POLL_CADENCE_MINUTES")) {
+    set(
+      "integrations.freshRss.pollCadenceMinutes",
+      toPositiveInteger(
+        env.PET_FRESHRSS_POLL_CADENCE_MINUTES,
+        next.integrations.freshRss.pollCadenceMinutes,
+        5
+      )
+    );
+  }
+  if (Object.prototype.hasOwnProperty.call(env, "PET_LOCAL_MEDIA_ENABLED")) {
+    set("sensors.media.enabled", toBoolean(env.PET_LOCAL_MEDIA_ENABLED, next.sensors.media.enabled));
+  }
+  if (Object.prototype.hasOwnProperty.call(env, "PET_LOCAL_MEDIA_BACKEND")) {
+    set("sensors.media.backend", toOptionalString(env.PET_LOCAL_MEDIA_BACKEND, next.sensors.media.backend));
+  }
+  if (Object.prototype.hasOwnProperty.call(env, "PET_LOCAL_MEDIA_POLL_INTERVAL_MS")) {
+    set(
+      "sensors.media.pollIntervalMs",
+      toPositiveInteger(env.PET_LOCAL_MEDIA_POLL_INTERVAL_MS, next.sensors.media.pollIntervalMs, 500)
+    );
+  }
+  if (Object.prototype.hasOwnProperty.call(env, "PET_LOCAL_MEDIA_TIMEOUT_MS")) {
+    set(
+      "sensors.media.probeTimeoutMs",
+      toPositiveInteger(env.PET_LOCAL_MEDIA_TIMEOUT_MS, next.sensors.media.probeTimeoutMs, 250)
+    );
+  }
+  if (Object.prototype.hasOwnProperty.call(env, "PET_LOCAL_MEDIA_INCLUDE_OUTPUT_DEVICE")) {
+    set(
+      "sensors.media.includeOutputDevice",
+      toBoolean(
+        env.PET_LOCAL_MEDIA_INCLUDE_OUTPUT_DEVICE,
+        next.sensors.media.includeOutputDevice
+      )
     );
   }
 
