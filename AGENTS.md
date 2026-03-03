@@ -126,13 +126,13 @@ Status schema:
 | `07c-shell-settings-and-wardrobe-surface` | `done` | `docs/plan/07c-shell-settings-and-wardrobe-surface.md` |
 | `08-test-and-acceptance-matrix` | `done` | `docs/plan/08-test-and-acceptance-matrix.md` |
 | `09-decisions-log` | `in_progress` | `docs/plan/09-decisions-log.md` |
-| `10-local-brain-and-personality-feasibility` | `not_started` | `docs/plan/10-local-brain-and-personality-feasibility.md` |
+| `10-local-brain-and-personality-feasibility` | `done` | `docs/plan/10-local-brain-and-personality-feasibility.md` |
 
 ### Current Progress Snapshot
 - Current Deliverable: `10-local-brain-and-personality-feasibility`
-- Current Status: `not_started`
-- Overall Progress: `12/13 roadmap deliverables done` (D01, D02, D02b, D03, D04, D05a, D05, D06, D07, D07b, D07c, and D08 complete; D10 is next)
-- Gate Snapshot: `Research Gate=not_started`.
+- Current Status: `done`
+- Overall Progress: `13/13 roadmap deliverables done` (D01, D02, D02b, D03, D04, D05a, D05, D06, D07, D07b, D07c, D08, and D10 complete; roadmap deliverables are complete)
+- Gate Snapshot: `Research Gate=passed`.
 - Scope Note: roadmap now explicitly tracks roam modes, baseline state set/priority, tray/settings/wardrobe surface, memory/introspection contracts, and visible acceptance tests.
 - Scope Note: roadmap also explicitly tracks conversation UX (chat/voice), speech bubble/dialog fallback, and lip-sync approximation with degraded-mode behavior.
 - Scope Note: roadmap includes proactive pet messaging, explicit introspection payload expectations, music-mode feedback loop, and memory/hobby governance details.
@@ -153,8 +153,9 @@ Status schema:
 - Scope Note: D08 manual sweep and follow-up operator re-tests surfaced roam-transition issues; runtime fixes for manual zone escape, slow-walk smoothing, locomotion facing, and mid-travel `desktop -> zone` toggles are now accepted by the final operator sweep.
 - Scope Note: Phase 3 is now split across D07 (state runtime), D07b (dialog surface + minimal offline loop), and D07c (shell/settings/wardrobe surface).
 - Scope Note: v1 now explicitly commits to a minimal offline embodiment loop while deferring deeper personality/local-model work to D10 feasibility research.
-- Scope Note: D10 is a post-v1, doc-only research deliverable; external OpenClaw remains the current product baseline.
-- Shipped Outcome (This Session): visible app/runtime change delivered: D08 is now closed with operator-confirmed acceptance of the automated smoke harness, smoother roam movement, correct zone/desktop roam transitions, dialog/proactive-output checks, and tray/fallback shell behavior. Current deliverable advances to D10 research.
+- Scope Note: D10 is now closed as `done`; the research recommendation favors bridge-compatible local-provider work first and keeps structured traits derived instead of canonical.
+- Scope Note: roadmap deliverables are complete; any further work should start as an explicitly approved post-v1 follow-on deliverable.
+- Shipped Outcome (This Session): no visible app change; this session completed the D10 doc-only feasibility deliverable, added ADRs for bridge-compatible local-provider sequencing and Markdown-first personality canon, and closed the roadmap deliverables at `13/13 done`.
 
 ### Gating Rule
 - Do not advance to the next deliverable until the current deliverable is marked `done`, its verification gate is explicitly marked passed, and its implementation slice is explicitly marked passed in its file and mirrored in `docs/plan/00-progress-tracker.md`.

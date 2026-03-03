@@ -137,3 +137,17 @@ Related:
 - **Rationale:** Local OS signals are faster and better aligned with real desktop behavior changes, including non-Spotify playback. Online probes remain valuable for richer metadata and downstream memory analysis but are too slow and incomplete to be the only real-time sensor path.
 - **Alternatives Considered:** Spotify-only real-time music sensing, OpenClaw-first media polling for all playback decisions, no local output-route awareness.
 - **Impacted Files/Modules:** `windows-media-sensor.js`, `scripts/windows-media-probe.ps1`, `main.js`, `state-runtime.js`, D03 media-sensor expectations, D06 enrichment behavior, D07 visible state mapping, D08 media acceptance checks.
+
+## ADR-0020: Any Future Local-Brain Track Must Stay Bridge-Compatible First
+- **Date:** `2026-03-03`
+- **Decision:** If post-v1 local-intelligence work is approved, the first implementation track should preserve the current app-to-OpenClaw contract and add support for OpenClaw-backed local model providers before considering bundled or embedded inference.
+- **Rationale:** This keeps the current local-authority and advisory-AI boundary intact, reuses the degraded-mode behavior already shipped in D04-D08, and avoids prematurely taking on model packaging, GPU/runtime compatibility, and binary-size risk inside the app.
+- **Alternatives Considered:** Bundle OpenClaw immediately, embed model runtime directly into the app, remain permanently remote-only, expand deterministic rules only with no model-provider path.
+- **Impacted Files/Modules:** D10, future post-v1 roadmap branches, OpenClaw bridge/runtime configuration, future provider-health diagnostics.
+
+## ADR-0021: Markdown Remains Canonical; Structured Traits Are Derived
+- **Date:** `2026-03-03`
+- **Decision:** Keep `SOUL.md`, `IDENTITY.md`, and approved Markdown memory artifacts as the canonical personality source. If future runtime work needs fast local reads, derive a read-only structured persona snapshot from those artifacts instead of making traits canonical.
+- **Rationale:** This preserves auditability, operator editability, and the existing Markdown-first memory policy while still allowing deterministic local logic to consume concise trait fields. It also avoids split-brain sync between editable prose and editable structured records.
+- **Alternatives Considered:** Make structured traits canonical now, keep dual canonical sources, avoid structured traits entirely even for runtime derivation.
+- **Impacted Files/Modules:** D05 memory governance, D10 feasibility outcome, any future persona snapshot runtime, `SOUL.md`, `IDENTITY.md`, future memory-derived trait projections.

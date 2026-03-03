@@ -22,10 +22,10 @@ Allowed values:
 
 ## Current Deliverable
 - Current Deliverable: `10-local-brain-and-personality-feasibility`
-- Current Status: `not_started`
-- Overall Progress: `12/13 roadmap deliverables done` (D01, D02, D02b, D03, D04, D05a, D05, D06, D07, D07b, D07c, and D08 complete; D10 is next)
+- Current Status: `done`
+- Overall Progress: `13/13 roadmap deliverables done` (D01, D02, D02b, D03, D04, D05a, D05, D06, D07, D07b, D07c, D08, and D10 complete; roadmap deliverables are complete)
 - Current Gate State:
-  - `Research Gate`: `not_started`
+  - `Research Gate`: `passed`
 
 ## Deliverable Status Table
 | Deliverable | Status | Notes |
@@ -43,18 +43,30 @@ Allowed values:
 | `07b-dialog-surface-and-minimal-offline-loop` | `done` | Doc + implementation gates passed; operator verification confirmed visible history/bubble output, offline labels, announcement cooldown behavior, and smooth drag/fling during talk feedback |
 | `07c-shell-settings-and-wardrobe-surface` | `done` | Doc + implementation gates passed; operator accepted the tray shell, inventory workflow, diagnostics toggle, custom zone flow, and cross-monitor roam behavior for v1 |
 | `08-test-and-acceptance-matrix` | `done` | Doc + implementation gates passed; automated smoke harness and final operator-visible sweep both passed, closing Phase 3 acceptance coverage |
-| `09-decisions-log` | `in_progress` | Seed decisions added |
-| `10-local-brain-and-personality-feasibility` | `not_started` | Post-v1 doc-only research deliverable; non-blocking to v1 closeout |
+| `09-decisions-log` | `in_progress` | ADRs through the D10 recommendation are recorded; living doc remains open |
+| `10-local-brain-and-personality-feasibility` | `done` | Research gate passed; recommendation favors bridge-compatible local-provider work plus derived persona snapshots only if a post-v1 branch is approved |
 
 ## Next 3 Actions
-1. Start D10 by comparing at least three post-v1 local-brain architecture options against the current external OpenClaw baseline.
-2. Evaluate whether structured traits should become the canonical personality source versus the current Markdown-first memory/identity model.
-3. Draft the D10 recommendation so it can either seed a future implementation branch or explicitly keep local-brain work out of scope.
+1. Decide whether to open a new post-v1 deliverable for `local-provider-compatibility-and-derived-persona-snapshot`.
+2. If approved, specify provider-health diagnostics and compatibility targets without changing app authority boundaries.
+3. If approved, define the derived persona snapshot schema and provenance contract from canonical Markdown sources.
 
 ## Blockers
-- None currently; D08 is closed and D10 is a non-blocking research deliverable.
+- None currently; roadmap deliverables are complete, and any further work requires an explicitly approved post-v1 follow-on deliverable.
 
 ## Last Session Summary
+- Completed D10 and closed it as `done`:
+  - compared the current external OpenClaw baseline against local-provider, bundled-service, embedded-model, and rules/traits-only futures
+  - evaluated structured-trait canon explicitly against the current Markdown-first memory and identity model
+  - recommended a narrow post-v1 path: keep the existing bridge boundary, prefer local providers behind OpenClaw first, and keep structured traits derived rather than canonical
+- Recorded D10 follow-on decisions in the ADR log:
+  - `ADR-0020`: any future local-brain track must stay bridge-compatible first
+  - `ADR-0021`: Markdown remains canonical; structured traits are derived
+- Verification status after D10 closeout:
+  - `Research Gate`: `passed`
+  - `Overall`: `done`
+- Shipped outcome note for this session:
+  - no visible app change; this session completed the D10 doc-only research deliverable, recorded the ADR recommendation, and closed the roadmap deliverables at `13/13 done`
 - Operator completed the full D08 manual visible sweep successfully:
   - drag/fling stayed fixed-size and responsive
   - `zone -> desktop` and mid-travel `desktop -> zone` transitions both behaved correctly
