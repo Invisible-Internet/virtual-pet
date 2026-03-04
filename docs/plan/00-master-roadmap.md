@@ -10,7 +10,7 @@ Related:
 - D01-D10 are complete historical v1 records.
 - The v1 roadmap is closed.
 - `11a-openclaw-memory-observability-surface` is accepted as the first completed post-v1 slice.
-- There is no active post-v1 deliverable right now; the workflow is idle until the next slice is chosen.
+- `11b-guided-pet-setup-and-markdown-bootstrap` is the current active post-v1 deliverable.
 - Post-v1 families `11` through `15` are roughed in here:
   - [`11-15-post-v1-roadmap-rough-in.md`](./11-15-post-v1-roadmap-rough-in.md)
 - Future work should be created through the post-v1 workflow and deliverable template:
@@ -47,7 +47,7 @@ This family rough-in is preserved in:
 
 Current planning guidance:
 - `11` now has an accepted baseline through `11a`.
-- `11b-guided-pet-setup-and-markdown-bootstrap` is the next likely detailed slice unless the user reprioritizes.
+- `11b-guided-pet-setup-and-markdown-bootstrap` is the current active deliverable unless the user reprioritizes.
 - `12` through `15` remain rough placeholders until dedicated planning sessions lock their slice-level specs.
 
 ### Status Schema

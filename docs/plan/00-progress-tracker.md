@@ -33,14 +33,15 @@ Historical v1 deliverables keep their original wording and remain archived histo
   - operator-visible demo passes and evidence is logged
 
 ## Current Deliverable
-- Current Deliverable: `none`
-- Workflow State: `idle`
-- Current Status: `none`
+- Current Deliverable: `11b-guided-pet-setup-and-markdown-bootstrap`
+- Workflow State: `active`
+- Current Status: `specifying`
 - Last Completed Deliverable: `11a-openclaw-memory-observability-surface`
-- Next Detailed Target: `11b-guided-pet-setup-and-markdown-bootstrap` (unless reprioritized)
+- Next Detailed Target: `11b-guided-pet-setup-and-markdown-bootstrap`
 - Current Gate State:
-  - no active deliverable
-  - last completed deliverable `11a-openclaw-memory-observability-surface` passed `Spec Gate`, `Build Gate`, and `Acceptance Gate`
+  - `Spec Gate`: `passed`
+  - `Build Gate`: `not_started`
+  - `Acceptance Gate`: `not_started`
 
 ## Post-v1 Family Rough-In
 Locked family order:
@@ -51,7 +52,8 @@ Locked family order:
 5. `15` Extension Showcase
 
 Planning state:
-- `11` now has an accepted baseline through `11a`; `11b` is the next likely slice unless reprioritized.
+- `11` has an accepted baseline through `11a`.
+- `11b` is now the active post-v1 deliverable.
 - `12` through `15` remain rough placeholders and are not implementation-ready yet.
 - Full family notes live in [`11-15-post-v1-roadmap-rough-in.md`](./11-15-post-v1-roadmap-rough-in.md).
 
@@ -64,21 +66,30 @@ Planning state:
 6. Pass `Spec Gate` before implementation begins.
 
 ## Next 3 Actions
-1. Decide whether to start `11b-guided-pet-setup-and-markdown-bootstrap` next or reprioritize another post-v1 slice.
-2. If `11b` stays next, create/spec the deliverable from the template before any implementation work.
-3. Keep `11a` as the observability baseline and avoid scope creep into repair actions or setup-writing flows outside a new deliverable.
+1. Implement shared-shell `Setup` routing (`Setup...` tray entry, `Setup` tab, and `F11` fallback) without breaking the existing `Inventory` / `Status` paths.
+2. Build the managed Markdown preview/apply flow for `SOUL.md`, `STYLE.md`, `IDENTITY.md`, `USER.md`, and `MEMORY.md`, with optional comment-only `HEARTBEAT.md` seeding.
+3. Add deterministic checks for setup target-policy handling, managed-block replacement, local-vs-OpenClaw file topology, and single-sourced `STYLE.md` generation before operator demo.
 
 ## Blockers
-- None currently; `11a-openclaw-memory-observability-surface` is accepted and no new post-v1 deliverable is active yet.
+- None currently; `11b-guided-pet-setup-and-markdown-bootstrap` is spec-passed and ready for implementation when requested.
 
 ## Last Session Summary
-- Closed `11a-openclaw-memory-observability-surface` as `accepted`:
-  - operator confirmed tray `Inventory...` and `Status...` both open the same shared shell window on the correct tab
-  - operator confirmed `F10` opens the same shared shell window directly to `Status`
-  - operator confirmed `Refresh` supports visible degraded and recovery verification without reopening the app
-  - automated checks remain green: `npm run check:syntax`, `node scripts/check-shell-observability.js`, and `npm run check:acceptance` (`14/14 automated checks passed`)
+- Created and spec-passed `11b-guided-pet-setup-and-markdown-bootstrap`:
+  - locked the shared-shell `Setup` tab model with tray `Setup...` and `F11` fallback
+  - defined the target-policy rules for local-only vs dual-target bootstrap
+  - strengthened the file contract using official OpenClaw workspace/bootstrap docs
+  - locked a two-root model: pet-local workspace for offline mode and OpenClaw workspace as the agent-facing mirror
+  - kept `STYLE.md` as a single-sourced first-class managed file with no duplication into `SOUL.md`
+  - kept `HEARTBEAT.md` as an optional effectively empty seed
+  - drafted concrete starter bundles in [`11b-preset-content-drafts.md`](./11b-preset-content-drafts.md) for `gentle_companion`, `playful_friend`, `bookish_helper`, and `bright_sidekick`
+  - tightened those starter bundles with deterministic file skeletons so `SOUL.md`, `STYLE.md`, `IDENTITY.md`, `USER.md`, and `MEMORY.md` can be rendered consistently during implementation
+  - replaced ambiguous emoji glyph defaults in the draft with symbolic ASCII labels to keep the preset content encoding-safe and easy to diff
+  - reviewed and tuned the four starter voices so each preset has a clearer emotional lane and less overlap with its neighbors
+  - added quick-picker guidance and explicitly froze the first four starter bundles so `11b` can move into implementation without more preset churn
+  - defined managed Markdown block ownership for `SOUL.md`, `STYLE.md`, `IDENTITY.md`, `USER.md`, and `MEMORY.md`
+  - grounded the slice against D05a bootstrap rules, D05 memory governance, D07c shell behavior, `11a` status verification, and the user-provided `STYLE.template.md`
 - Historical note:
   - D10 closed the v1 roadmap as a doc-only research deliverable
   - detailed v1 session history is preserved in [`archive/00-progress-tracker-v1-history.md`](./archive/00-progress-tracker-v1-history.md)
 - Shipped outcome note for this session:
-  - visible app/runtime change accepted: `11a` now ships a shared `Inventory` / `Status` shell window, tray and `F10` routing into `Status`, and a refreshable observability surface with operator-confirmed degraded/recovery behavior
+  - no visible app change; this session froze `11b`'s first four starter personalities and added chooser guidance so setup implementation can proceed without more preset editorial churn

@@ -124,14 +124,15 @@ Historical v1 deliverables keep their original status wording and are not retrof
 - `accepted` is the only terminal state for future post-v1 deliverables.
 
 ### Current Workflow Snapshot
-- Current Deliverable: `none`
-- Workflow State: `idle`
-- Current Status: `none`
+- Current Deliverable: `11b-guided-pet-setup-and-markdown-bootstrap`
+- Workflow State: `active`
+- Current Status: `specifying`
 - Last Completed Deliverable: `11a-openclaw-memory-observability-surface`
-- Next Detailed Target: `11b-guided-pet-setup-and-markdown-bootstrap` (unless reprioritized)
+- Next Detailed Target: `11b-guided-pet-setup-and-markdown-bootstrap`
 - Current Gate State:
-  - no active deliverable
-  - last completed deliverable `11a-openclaw-memory-observability-surface` passed `Spec Gate`, `Build Gate`, and `Acceptance Gate`
+  - `Spec Gate`: `passed`
+  - `Build Gate`: `not_started`
+  - `Acceptance Gate`: `not_started`
 - Historical Note:
   - D01-D10 are complete historical v1 records.
   - Detailed v1 session history lives in `docs/plan/archive/00-progress-tracker-v1-history.md`.
@@ -140,7 +141,20 @@ Historical v1 deliverables keep their original status wording and are not retrof
   - `Inventory` preserves the D07c inventory UI; `Status` owns the `11a` observability rows.
   - Dev fallback `F10` routes to the shared shell popup on the `Status` tab.
   - The slice is closed as accepted after operator-confirmed shared-shell routing and degraded/recovery verification.
-  - Shipped outcome (this session): visible app/runtime change accepted via shared shell tabs, `Status...` tray routing, `F10` fallback, and a refreshable `11a` observability surface.
+  - Shipped outcome (previous accepted slice): visible app/runtime change accepted via shared shell tabs, `Status...` tray routing, `F10` fallback, and a refreshable `11a` observability surface.
+- Current `11b` setup contract:
+  - Tray `Setup...` and dev fallback `F11` must open the same shared shell popup on the `Setup` tab.
+  - `Setup` must collect the minimum pet profile fields, preview Markdown before any write, and apply only through an explicit operator action.
+  - Managed setup blocks must update `SOUL.md`, `STYLE.md`, `IDENTITY.md`, `USER.md`, and `MEMORY.md` without rewriting unrelated Markdown.
+  - `STYLE.md` is a first-class project-managed file but not a documented default OpenClaw bootstrap file; keep it single-sourced and do not duplicate its contents into `SOUL.md`.
+  - Pet-local workspace is the offline-mode read source; OpenClaw workspace is the explicit agent-facing mirror target when configured.
+  - `HEARTBEAT.md` may be seeded only as an effectively empty/comment-only file in `11b`; proactive automation content belongs to a later slice.
+  - Starter content bundles now live in `docs/plan/11b-preset-content-drafts.md` and are the current source for `11b` preset copy.
+  - The preset-content draft now locks deterministic file skeletons plus ASCII-safe symbolic emoji defaults so implementation does not have to invent Markdown structure or fight encoding issues.
+  - The four starter voices have been tuned for clearer separation: `gentle` is soothing, `playful` is impish, `bookish` is reflective, and `bright` is action-forward.
+  - The four starter bundles are now frozen for first implementation; use the quick-picker guidance in `docs/plan/11b-preset-content-drafts.md` and do not add more starter bundles before shipping `11b`.
+  - OpenClaw dual-target bootstrap must stay explicit and non-destructive by default, following D05a / ADR-0015 rules.
+  - Shipped outcome (this session): no visible app change; `11b` is now spec-passed with a locked local-vs-OpenClaw file topology, a single-sourced `STYLE.md` contract, and frozen starter preset voices.
 
 ### Post-v1 Roadmap Snapshot
 - Rough-in doc: `docs/plan/11-15-post-v1-roadmap-rough-in.md`
@@ -152,7 +166,7 @@ Historical v1 deliverables keep their original status wording and are not retrof
   - `15` Extension Showcase
 - Planning rule:
   - `11` now has an accepted baseline through `11a`.
-  - `11b-guided-pet-setup-and-markdown-bootstrap` is the next likely detailed slice unless the user explicitly reprioritizes.
+  - `11b-guided-pet-setup-and-markdown-bootstrap` is the current active deliverable unless the user explicitly reprioritizes.
   - `12` through `15` remain rough placeholders and must not be treated as spec-passed deliverables yet.
 
 ### Session-End Sync Rule
