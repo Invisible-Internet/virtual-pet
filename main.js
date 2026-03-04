@@ -62,6 +62,12 @@ const {
   createDragClampLatch,
   applyDragClampHysteresis,
 } = require("./main-clamp");
+const {
+  SHELL_WINDOW_TABS,
+  buildObservabilitySnapshot,
+  normalizeShellWindowTab,
+  resolveShellWindowTabForAction,
+} = require("./shell-observability");
 
 // Master diagnostics toggle: controls console logs, file logs, and renderer overlay.
 let DIAGNOSTICS_ENABLED = false;
@@ -205,6 +211,7 @@ const CAPABILITY_TEST_FLAGS = Object.freeze({
 });
 const SHELL_ACTIONS = Object.freeze({
   openInventory: "open-inventory",
+  openStatus: "open-status",
   roamDesktop: "roam-desktop",
   roamZone: "roam-zone",
   selectRoamZone: "select-roam-zone",
@@ -275,6 +282,7 @@ let latestShellState = null;
 let shellTraySupported = true;
 let shellTrayError = null;
 let inventoryWin = null;
+let inventoryWindowActiveTab = SHELL_WINDOW_TABS.inventory;
 let zoneSelectorWin = null;
 let roamTimer = null;
 let appIsQuitting = false;
@@ -1678,6 +1686,7 @@ function buildShellStateSnapshot() {
     },
     inventoryUi: {
       open: Boolean(inventoryWin && !inventoryWin.isDestroyed()),
+      activeTab: normalizeShellWindowTab(inventoryWindowActiveTab, SHELL_WINDOW_TABS.inventory),
     },
     tray: {
       available: trayAvailable,
@@ -1686,7 +1695,7 @@ function buildShellStateSnapshot() {
     },
     devFallback: {
       enabled: !trayAvailable,
-      hotkeys: ["F6", "F7", "F8", "F9"],
+      hotkeys: ["F6", "F7", "F8", "F9", "F10"],
     },
   };
 }
@@ -1697,6 +1706,43 @@ function emitShellState(snapshot = buildShellStateSnapshot()) {
   emitToWindow(inventoryWin, "pet:shell-state", snapshot);
   syncShellQuickPropWindows();
   return snapshot;
+}
+
+function setInventoryWindowActiveTab(nextTab, emitSnapshot = true) {
+  inventoryWindowActiveTab = normalizeShellWindowTab(nextTab, inventoryWindowActiveTab);
+  if (!emitSnapshot) return latestShellState || buildShellStateSnapshot();
+  return emitShellState(buildShellStateSnapshot());
+}
+
+function buildCurrentObservabilitySnapshot() {
+  const capabilitySnapshot =
+    latestCapabilitySnapshot ||
+    (capabilityRegistry && typeof capabilityRegistry.getSnapshot === "function"
+      ? capabilityRegistry.getSnapshot()
+      : null);
+  const openclawCapabilityState =
+    capabilityRegistry && typeof capabilityRegistry.getCapabilityState === "function"
+      ? capabilityRegistry.getCapabilityState(CAPABILITY_IDS.openclawBridge)
+      : capabilitySnapshot?.capabilities?.find(
+          (entry) => entry?.capabilityId === CAPABILITY_IDS.openclawBridge
+        ) || null;
+  return buildObservabilitySnapshot({
+    capabilitySnapshot,
+    openclawCapabilityState,
+    memorySnapshot:
+      latestMemorySnapshot ||
+      (memoryPipeline && typeof memoryPipeline.getSnapshot === "function"
+        ? memoryPipeline.getSnapshot()
+        : null),
+    settingsSummary: buildRuntimeSettingsSummary(),
+    settingsSourceMap: runtimeSettingsSourceMap,
+    settingsFiles: runtimeSettingsFiles,
+    validationWarnings: runtimeSettingsValidationWarnings,
+    validationErrors: runtimeSettingsValidationErrors,
+    resolvedPaths: runtimeSettingsResolvedPaths,
+    trayAvailable: Boolean(shellTray),
+    ts: Date.now(),
+  });
 }
 
 function setDiagnosticsEnabled(nextEnabled, reason = "settings_update") {
@@ -2825,7 +2871,8 @@ function createInventoryWindow() {
   return inventoryWin;
 }
 
-function openInventoryWindow() {
+function openInventoryWindow(targetTab = SHELL_WINDOW_TABS.inventory) {
+  setInventoryWindowActiveTab(targetTab, false);
   const targetWindow = createInventoryWindow();
   if (!targetWindow) return null;
   if (!targetWindow.isVisible()) {
@@ -2834,6 +2881,10 @@ function openInventoryWindow() {
   targetWindow.focus();
   emitShellState(buildShellStateSnapshot());
   return targetWindow;
+}
+
+function openStatusWindow() {
+  return openInventoryWindow(SHELL_WINDOW_TABS.status);
 }
 
 function closeZoneSelectorWindow() {
@@ -3012,6 +3063,12 @@ function refreshShellTrayMenu() {
         void runShellAction(SHELL_ACTIONS.openInventory);
       },
     },
+    {
+      label: "Status...",
+      click: () => {
+        void runShellAction(SHELL_ACTIONS.openStatus);
+      },
+    },
     { type: "separator" },
     {
       label: "Roam",
@@ -3115,7 +3172,10 @@ async function runShellAction(actionId) {
   try {
     let snapshot = latestShellState || buildShellStateSnapshot();
     if (actionId === SHELL_ACTIONS.openInventory) {
-      openInventoryWindow();
+      openInventoryWindow(resolveShellWindowTabForAction(actionId, inventoryWindowActiveTab));
+      snapshot = emitShellState(buildShellStateSnapshot());
+    } else if (actionId === SHELL_ACTIONS.openStatus) {
+      openStatusWindow();
       snapshot = emitShellState(buildShellStateSnapshot());
     } else if (actionId === SHELL_ACTIONS.roamDesktop) {
       snapshot = applyRuntimeSettingsPatch(
@@ -5194,12 +5254,26 @@ ipcMain.handle("pet:getShellState", () => {
   return latestShellState || buildShellStateSnapshot();
 });
 
+ipcMain.handle("pet:getObservabilitySnapshot", () => {
+  return buildCurrentObservabilitySnapshot();
+});
+
 ipcMain.handle("pet:runShellAction", (_event, payload) => {
   const actionId =
     typeof payload?.actionId === "string" && payload.actionId.trim().length > 0
       ? payload.actionId.trim()
       : "";
   return runShellAction(actionId);
+});
+
+ipcMain.handle("inventory:setActiveTab", (_event, payload) => {
+  const nextTab = normalizeShellWindowTab(payload?.tabId, inventoryWindowActiveTab);
+  const snapshot = setInventoryWindowActiveTab(nextTab, true);
+  return {
+    ok: true,
+    tabId: nextTab,
+    shellState: snapshot,
+  };
 });
 
 ipcMain.handle("inventory:beginPropPlacement", (_event, payload) => {

@@ -168,7 +168,7 @@ If the tracker says:
 then do not start coding immediately.
 
 Instead:
-1. copy [`templates/deliverable-template.md`](./templates/deliverable-template.md) to a new `docs/plan/11a-...md` file
+1. copy [`templates/deliverable-template.md`](./templates/deliverable-template.md) to a new `docs/plan/<family><slice>-...md` file
 2. set the new deliverable status to `specifying`
 3. write the showcase promise, demo script, and failure/recovery script
 4. update the tracker and `AGENTS.md`

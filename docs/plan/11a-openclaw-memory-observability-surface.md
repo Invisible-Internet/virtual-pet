@@ -1,9 +1,9 @@
 # Deliverable 11a: OpenClaw Memory Observability Surface
 
 **Deliverable ID:** `11a-openclaw-memory-observability-surface`  
-**Status:** `specifying`  
+**Status:** `accepted`  
 **Owner:** `Mic + Codex`  
-**Last Updated:** `2026-03-03`  
+**Last Updated:** `2026-03-04`  
 **Depends On:** `04-openclaw-bridge-spec`, `05-memory-pipeline-and-obsidian-adapter`, `05a-obsidian-workspace-bootstrap-and-connectivity`, `07c-shell-settings-and-wardrobe-surface`, `10-local-brain-and-personality-feasibility`  
 **Blocks:** `11b-guided-pet-setup-and-markdown-bootstrap`, `12a-real-openclaw-dialog-parity`, `13a-offline-identity-and-recent-recall`, `15b-extension-authoring-and-debug-visibility`  
 
@@ -12,8 +12,8 @@ Extend the existing inventory popup into a shared tabbed shell window so the app
 
 ## In Scope
 - Extend the existing inventory shell popup into one shared tabbed window.
-- Keep the existing `Inventory` tray entry and add a new `Settings` tray entry.
-- One new dev fallback hotkey to open the shared window directly to the `Settings` tab.
+- Keep the existing `Inventory` tray entry and add a new `Status` tray entry.
+- One new dev fallback hotkey to open the shared window directly to the `Status` tab.
 - One aggregated observability snapshot built from existing runtime state:
   - capability snapshot
   - runtime settings summary
@@ -52,14 +52,14 @@ Extend the existing inventory popup into a shared tabbed shell window so the app
   - an intentionally invalid `paths.openClawWorkspaceRoot` / `paths.obsidianVaultRoot` in the local override layer.
 
 ## Showcase Promise (Mandatory)
-The operator can open the existing shell GUI from either `Inventory` or `Settings`, land on the correct tab in the same shared window, and immediately tell whether the pet is healthy, degraded, or in fallback by reading explicit rows for OpenClaw bridge state, provider/model identity, memory runtime mode, configured roots, and canonical Markdown file health.
+The operator can open the existing shell GUI from either `Inventory` or `Status`, land on the correct tab in the same shared window, and immediately tell whether the pet is healthy, degraded, or in fallback by reading explicit rows for OpenClaw bridge state, provider/model identity, memory runtime mode, configured roots, and canonical Markdown file health.
 
 ## Operator Demo Script (Mandatory)
 1. Start the app in a normal dev run with the current local OpenClaw path configured and the pet fully loaded.
 2. Open `Inventory` from the tray menu and confirm the existing shell GUI opens on the `Inventory` tab, preserving the current inventory appearance and controls.
-3. With that window still open, use the tray `Settings` entry. Confirm the same window is focused and switched to the `Settings` tab instead of creating a second popup.
-4. If tray support is unavailable, use dev fallback hotkey `F10` and confirm it opens the same shared window directly to the `Settings` tab.
-5. Confirm the `Settings` tab is a full shell surface, not the tiny in-pet diagnostics overlay, and that it shows all required rows:
+3. With that window still open, use the tray `Status` entry. Confirm the same window is focused and switched to the `Status` tab instead of creating a second popup.
+4. If tray support is unavailable, use dev fallback hotkey `F10` and confirm it opens the same shared window directly to the `Status` tab.
+5. Confirm the `Status` tab is a full shell surface, not the tiny in-pet diagnostics overlay, and that it shows all required rows:
    - `OpenClaw Bridge`
    - `Provider / Model`
    - `Memory Runtime`
@@ -85,7 +85,7 @@ The operator can open the existing shell GUI from either `Inventory` or `Setting
 1. Start the app with a deterministic degraded condition:
    - either `PET_FORCE_OPENCLAW_FAIL=1`, or
    - an invalid local override path such as a missing `paths.openClawWorkspaceRoot`.
-2. Open `Settings` from the tray or use `F10` so the shared shell window lands on the `Settings` tab, then click `Refresh`.
+2. Open `Status` from the tray or use `F10` so the shared shell window lands on the `Status` tab, then click `Refresh`.
 3. Confirm the affected row becomes visibly degraded or failed:
    - bridge failure must change `OpenClaw Bridge`
    - invalid workspace path must change `Canonical Files`, `Paths / Sources`, or `Validation`
@@ -99,16 +99,16 @@ The operator can open the existing shell GUI from either `Inventory` or `Setting
 - Existing shell action remains:
   - `openInventory`
 - New shell action:
-  - `openSettings`
+  - `openStatus`
 - Tray item labels:
   - `Inventory...`
-  - `Settings...`
+  - `Status...`
 - New dev fallback hotkey:
   - `F10`
 - Existing shared shell window files to extend:
   - `inventory.html`
   - `inventory-preload.js`
-  - `inventory-renderer.js`
+  - `inventory-shell-renderer.js`
 - New main-process snapshot builder:
   - `buildObservabilitySnapshot()`
 - New IPC:
@@ -215,19 +215,19 @@ Rules:
 - Do not overload the tiny in-pet diagnostics overlay with this feature.
 - Required top-level tabs for this slice:
   - `Inventory`
-  - `Settings`
+  - `Status`
 - Routing rules:
   - tray `Inventory...` opens or focuses the shared window on the `Inventory` tab
-  - tray `Settings...` opens or focuses the shared window on the `Settings` tab
-  - dev fallback `F10` opens or focuses the shared window on the `Settings` tab
+  - tray `Status...` opens or focuses the shared window on the `Status` tab
+  - dev fallback `F10` opens or focuses the shared window on the `Status` tab
   - opening one tab must not spawn a duplicate second window if the shared shell window already exists
 - `Inventory` tab must remain recognizably the existing D07c inventory surface.
-- `Settings` tab owns the `11a` observability content.
+- `Status` tab owns the `11a` observability content.
 - Header controls for the shared shell window must include:
   - tab strip or equivalent tab selector
-  - `Refresh` control when the `Settings` tab is active
+  - `Refresh` control when the `Status` tab is active
   - `Close`
-- Required `Settings` tab sections:
+- Required `Status` tab sections:
   - overview summary pills
   - runtime health rows
   - paths and source rows
@@ -242,7 +242,7 @@ Rules:
 ## Acceptance Bar
 - Accepted for `Spec Gate` only when the shared-window tab model, entrypoints, row set, snapshot contract, demo script, and failure/recovery script are explicit enough that implementation does not need to invent UX or data boundaries.
 - Accepted for final operator closure only when:
-  - tray `Inventory...` and `Settings...` entrypoints both work
+  - tray `Inventory...` and `Status...` entrypoints both work
   - `F10` fallback works when tray is unavailable
   - both entrypoints focus the same shared shell window and land on the correct tab
   - all required rows are visible
@@ -256,37 +256,53 @@ Rules:
   - failure and recovery cannot be demonstrated by an operator
 
 ## Implementation Slice (Mandatory)
-- Planned first implementation slice for `Build Gate`:
-  - extend the existing inventory shell window into a shared tabbed shell window
-  - add `openSettings` plus tray `Settings...` and `F10` routing into the shared shell window
-  - add `buildObservabilitySnapshot()` and `pet:getObservabilitySnapshot`
-  - render the six required rows in the `Settings` tab with visible state pills and a manual `Refresh` button
-  - populate the snapshot from existing capability, settings, memory, and file-check sources before adding any deeper repair/provenance tooling
+- Implemented first slice for `Build Gate`:
+  - extended the existing inventory shell window into a shared tabbed `Inventory` / `Status` popup
+  - added tray `Status...`, renderer dev fallback `F10`, and main-process tab routing into the shared shell window
+  - added a reusable `shell-observability.js` builder plus `pet:getObservabilitySnapshot`
+  - rendered the six required rows in the `Status` tab with visible state pills and a manual `Refresh` button
+  - populated the snapshot from capability, settings, memory, validation, and canonical file-check sources
 - Targeted checks to add or update:
-  - one deterministic snapshot-builder check covering healthy and degraded row output
-  - one shell-action check covering tab routing for `openInventory` and `openSettings`
-  - one acceptance-matrix row for visible observability surface behavior
-- No runtime code was changed in this session; this section defines the first implementation slice only.
+  - added `scripts/check-shell-observability.js` to cover healthy/degraded snapshot rows plus `openInventory` / `openStatus` tab routing
+  - extended `npm run check:acceptance` with smoke row `D11a-shell-observability`
+  - kept `npm run check:syntax` green after the shell-window, preload, and renderer changes
 
 ## Visible App Outcome
-- After implementation, the operator will have one shared shell window with separate `Inventory` and `Settings` tabs.
-- The `Settings` tab will explain the app's current OpenClaw, memory, path, and canonical-file state in one place.
+- After implementation, the operator will have one shared shell window with separate `Inventory` and `Status` tabs.
+- The `Status` tab will explain the app's current OpenClaw, memory, path, and canonical-file state in one place.
 - This surface will replace guesswork and log-hunting as the primary way to understand why the pet is healthy, degraded, or running with fallback behavior.
 
 ## Acceptance Notes
-- Not yet run. This session defines the spec only.
+- Automated build checks passed on `2026-03-04`:
+  - `npm run check:syntax`
+  - `node scripts/check-shell-observability.js`
+  - `npm run check:acceptance` -> `14/14 automated checks passed`
+- Operator-visible demo passed on `2026-03-04`:
+  - tray `Inventory...` opened the shared shell window on `Inventory`
+  - tray `Status...` focused the same shared shell window on `Status`
+  - dev fallback `F10` opened the same shared shell window on `Status`
+  - `Refresh` re-read the snapshot without reopening the app
+- Operator-visible failure/recovery pass confirmed on `2026-03-04`:
+  - degraded rows remained visible instead of collapsing
+  - affected rows recovered after restoring the healthy condition and using `Refresh`
 
 ## Iteration Log
 - `2026-03-03`: Initial spec created from the post-v1 deliverable template and grounded against the existing shell, bridge, settings, and memory runtime code.
-- `2026-03-03`: Refined the surface contract so `11a` extends the existing inventory window into a shared tabbed shell window; tray `Inventory...` and `Settings...` now target different tabs in the same popup instead of creating a separate observability window.
+- `2026-03-03`: Refined the surface contract so `11a` extends the existing inventory window into a shared tabbed shell window; tray `Inventory...` and `Status...` now target different tabs in the same popup instead of creating a separate observability window.
+- `2026-03-04`: Implemented the first `11a` runtime slice: shared shell tab routing, tray `Status...`, `F10` fallback, aggregated observability snapshot builder, status-tab UI rows, and deterministic smoke coverage.
+- `2026-03-04`: Renamed the shared-shell operator label from `Settings` to `Status` across the tray entry, tab label, fallback wording, and active planning docs while keeping the same `11a` scope and behavior.
+- `2026-03-04`: Operator ran the shared-shell demo and degraded/recovery checks; the `Inventory`/`Status` routing, `F10` fallback, and `Refresh`-driven status recovery all passed, closing `11a`.
 
 ## Gate Status
 - `Spec Gate`: `passed`
-- `Build Gate`: `not_started`
-- `Acceptance Gate`: `not_started`
-- `Overall`: `specifying`
+- `Build Gate`: `passed`
+- `Acceptance Gate`: `passed`
+- `Overall`: `accepted`
 
 ## Change Log
 - `2026-03-03`: File created from the post-v1 deliverable template.
 - `2026-03-03`: Locked the first `11a` operator surface contract and aggregated observability snapshot.
-- `2026-03-03`: Replaced the dedicated observability-popup approach with a shared tabbed shell-window model: tray `Inventory...` and `Settings...` plus `F10` all route into the same popup, with `Settings` owning the `11a` observability rows.
+- `2026-03-03`: Replaced the dedicated observability-popup approach with a shared tabbed shell-window model: tray `Inventory...` and `Status...` plus `F10` all route into the same popup, with `Status` owning the `11a` observability rows.
+- `2026-03-04`: Implemented the first build slice with shared shell tabs, a refreshable `Status` tab, main-process observability snapshot IPC, deterministic observability checks, and a new D11a smoke row in the acceptance runner.
+- `2026-03-04`: Renamed the user-facing `Settings` label to `Status` in the tray menu, shared shell tab, fallback wording, and active workflow docs.
+- `2026-03-04`: Closed `11a` as accepted after operator-confirmed `Inventory` / `Status` tray routing, `F10` fallback behavior, and degraded/recovery verification.

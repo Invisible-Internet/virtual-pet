@@ -3,7 +3,7 @@
 **Deliverable ID:** `08-test-and-acceptance-matrix`
 **Status:** `done`
 **Owner:** `Mic + Codex`
-**Last Updated:** `2026-03-03`
+**Last Updated:** `2026-03-04`
 **Depends On:** `02-architecture-capability-registry`, `02b-extension-framework-and-pack-sdk`, `03-pet-core-events-intents-suggestions`, `04-openclaw-bridge-spec`, `05a-obsidian-workspace-bootstrap-and-connectivity`, `05-memory-pipeline-and-obsidian-adapter`, `06-integrations-freshrss-spotify`, `07-state-system-extension-guide`, `07b-dialog-surface-and-minimal-offline-loop`, `07c-shell-settings-and-wardrobe-surface`
 **Blocks:** `Roadmap closeout`
 **Verification Gate:** `Matrix covers core runtime/capability degradation/memory/integration failures and includes executed evidence for representative visible scenarios`
@@ -68,6 +68,7 @@ Define the acceptance and regression matrix for the shipped runtime, then tie th
 | `D07c-ACC` | `manual` | Tray/dev fallback shell changes roam mode, diagnostics visibility, and accessories without restart. | Inventory/tray controls persist through settings and visibly change roam/wardrobe/runtime behavior. | Tray or `F6`-`F9` path plus D07c operator evidence. |
 | `D07c-FAIL` | `manual` | Tray path is unavailable or roam zone changes mid-session. | Dev fallback remains usable, settings persist, and custom zone / cross-monitor roam behavior remains non-fatal. | Tray fallback behavior and D07c operator evidence. |
 | `D08-ACC` | `auto + manual` | Acceptance suite produces executed evidence instead of a placeholder checklist. | `npm run check:acceptance` writes a report artifact and D08 maps manual visible rows to concrete evidence links. | [`artifacts/08-acceptance-smoke.md`](./artifacts/08-acceptance-smoke.md) and this file. |
+| `D11a-ACC` | `auto + manual` | Shared shell `Status` tab exposes the observability rows without creating a second popup. | `Inventory...`, `Status...`, and `F10` route to the same shell window, required rows render, and the snapshot builder remains deterministic across healthy/degraded cases. | Shared shell window plus smoke row `D11a-shell-observability`. |
 | `D08-FAIL` | `auto + manual` | A smoke or manual row fails during consolidation. | Failure is surfaced with row ID, evidence, and blocker note; D08 remains below `done`. | Acceptance artifact failure row or tracker blocker note. |
 
 ## Required Visible Target Coverage
@@ -97,6 +98,7 @@ Define the acceptance and regression matrix for the shipped runtime, then tie th
 | D07 missing-asset fallback | `D07-FAIL`, smoke row `D07-state-runtime` |
 | D07b visible input + bubble + non-blocking talk feedback | `D07b-ACC`, D07b operator evidence |
 | D07c shell/settings toggles without restart | `D07c-ACC`, D07c operator evidence |
+| D11a shared shell `Status` tab and observability rows | `D11a-ACC`, smoke row `D11a-shell-observability` |
 
 ## Extension Visible Target Coverage
 | Target | Covered By |
@@ -120,7 +122,7 @@ Define the acceptance and regression matrix for the shipped runtime, then tie th
 | Drag/fling/size invariants remain unchanged | movement invariants smoke row plus D04/D07b/D07c operator evidence |
 
 ## Executed Evidence
-### Automated Smoke Executed On `2026-03-03`
+### Automated Smoke Evidence
 - Command: `npm run check:acceptance`
 - Artifact: [`artifacts/08-acceptance-smoke.md`](./artifacts/08-acceptance-smoke.md)
 - Machine-readable artifact: [`artifacts/08-acceptance-smoke.json`](./artifacts/08-acceptance-smoke.json)
@@ -137,6 +139,7 @@ Define the acceptance and regression matrix for the shipped runtime, then tie th
 | `2026-03-03` | `D06-ACC`, `D06-FAIL` | `passed` | `Codex automated smoke` | Smoke rows `D06-integrations` and `D06-local-media-sensor`. |
 | `2026-03-03` | `D07-ACC`, `D07-FAIL` | `passed` | `Codex automated smoke` | Smoke row `D07-state-runtime` -> `[state-runtime] checks passed`. |
 | `2026-03-03` | `D07b-FAIL` offline dialog fallback | `passed` | `Codex automated smoke` | Smoke row `D07b-dialog-runtime` -> `[dialog] offline dialog checks passed`. |
+| `2026-03-04` | `D11a-ACC` automated builder/tab-routing coverage | `passed` | `Codex automated smoke` | Smoke row `D11a-shell-observability` -> `[shell-observability] checks passed`. |
 | `2026-03-03` | renderer/layout regression backing D07/D07c | `passed` | `Codex automated smoke` | Smoke rows `Layout-assets` and `Sprite-assets`. |
 
 ### Current Manual Retest Status
@@ -162,7 +165,7 @@ Define the acceptance and regression matrix for the shipped runtime, then tie th
 ## Repeatable Run Path
 ### Automated
 1. Run `npm run check:acceptance`.
-2. Confirm the console summary ends with `13/13 automated checks passed`.
+2. Confirm the console summary ends with `14/14 automated checks passed`.
 3. Confirm the artifact files were updated:
    - [`artifacts/08-acceptance-smoke.md`](./artifacts/08-acceptance-smoke.md)
    - [`artifacts/08-acceptance-smoke.json`](./artifacts/08-acceptance-smoke.json)
@@ -192,10 +195,11 @@ Define the acceptance and regression matrix for the shipped runtime, then tie th
 ## Visible App Outcome
 - D08 now contains executed evidence instead of a placeholder test list.
 - One command (`npm run check:acceptance`) produces pass/fail output for capability, extension, bridge, memory, integration, state, dialog, and invariant coverage.
+- One command (`npm run check:acceptance`) produces pass/fail output for capability, extension, bridge, memory, integration, state, dialog, observability, and invariant coverage.
 - The manual visible sweep is now short, concrete, and mapped to the actual runtime controls used across D07, D07b, and D07c.
 
 ## Implementation Verification (Manual)
-1. Run `npm run check:acceptance` and verify the artifact summary reports `13/13 automated checks passed`.
+1. Run `npm run check:acceptance` and verify the artifact summary reports `14/14 automated checks passed`.
 2. Run `npm start` and verify one drag/fling regression pass.
 3. Verify one offline/degraded bridge/dialog scenario (`U`, `Y`, or offline mode) still yields visible fallback output.
 4. Verify one extension or shell path remains visibly usable (`P`, `O`, tray, or `F6`-`F9` fallback).
@@ -211,6 +215,7 @@ Define the acceptance and regression matrix for the shipped runtime, then tie th
 - `2026-02-26`: Updated for `spec + implementation slice` workflow with mandatory implementation/visible outcome sections and dual-gate status.
 - `2026-03-02`: Expanded dependencies and visible-test coverage to include D07b and D07c, plus explicit executed-row requirements for the split Phase 3 deliverables.
 - `2026-03-03`: Added the D08 acceptance runner (`npm run check:acceptance`), new deterministic capability/extension/invariant checks, automated smoke artifacts, a full acceptance matrix, and executed evidence links for both automated and prior operator-visible passes. `Doc Gate` and `Implementation Gate` are now `passed`; deliverable moves to `review`.
+- `2026-03-04`: Extended the automated smoke runner with `D11a-shell-observability` so shared-shell tab routing and observability snapshot rows now contribute to the acceptance artifact (`14/14 automated checks passed`).
 - `2026-03-03`: Operator D08 step `2` exposed a roam follow-up issue: leaving a custom zone via manual drag/fling could later pull the pet back unexpectedly, walk-speed travel could feel jerky, and roam animation direction could drift from actual motion. Applied a follow-up runtime patch; manual re-test is still required before D08 can close.
 - `2026-03-03`: Operator re-test confirmed the first roam fix improved smoothing and `zone -> desktop` fallback, but exposed one remaining step `2` issue: toggling `desktop -> zone` mid-travel could still snap the pet back to the zone edge on the next loop. Applied a second runtime patch so forced roam-mode transitions rebuild a safe zone-entry leg instead of resuming with stale motion state. Manual re-test is still required before D08 can close.
 - `2026-03-03`: Operator completed the full D08 manual visible sweep successfully after the roam follow-up fixes. D08 is now closed as `done`.

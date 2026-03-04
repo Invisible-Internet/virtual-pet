@@ -76,6 +76,12 @@ const CASES = Object.freeze([
     script: "scripts/check-dialog-runtime.js",
   },
   {
+    id: "D11a-shell-observability",
+    deliverable: "11a-openclaw-memory-observability-surface",
+    scenario: "Shared shell tab routing and observability snapshot rows stay deterministic.",
+    script: "scripts/check-shell-observability.js",
+  },
+  {
     id: "Layout-assets",
     deliverable: "core-renderer-assets",
     scenario: "Layout bounds and required sprite assets remain internally consistent.",

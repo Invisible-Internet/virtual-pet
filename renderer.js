@@ -159,6 +159,7 @@ const DIALOG_BUBBLE_VISIBLE_MS = 9000;
 const DIALOG_TALK_FEEDBACK_MS = 2600;
 const SHELL_ACTIONS = Object.freeze({
   openInventory: "open-inventory",
+  openStatus: "open-status",
   roamDesktop: "roam-desktop",
   roamZone: "roam-zone",
   toggleDiagnostics: "toggle-diagnostics",
@@ -188,6 +189,7 @@ const DEFAULT_SHELL_STATE = Object.freeze({
   }),
   inventoryUi: Object.freeze({
     open: false,
+    activeTab: "inventory",
   }),
   tray: Object.freeze({
     available: false,
@@ -196,7 +198,7 @@ const DEFAULT_SHELL_STATE = Object.freeze({
   }),
   devFallback: Object.freeze({
     enabled: true,
-    hotkeys: Object.freeze(["F6", "F7", "F8", "F9"]),
+    hotkeys: Object.freeze(["F6", "F7", "F8", "F9", "F10"]),
   }),
 });
 const TAIL_STYLES = Object.freeze({
@@ -442,6 +444,7 @@ function normalizeShellState(payload = {}) {
     },
     inventoryUi: {
       open: Boolean(inventoryUi.open),
+      activeTab: inventoryUi.activeTab === "status" ? "status" : "inventory",
     },
     tray: {
       available: Boolean(tray.available),
@@ -1117,6 +1120,11 @@ function onMovementKeyDown(event) {
     }
     if (key === "f9") {
       void runShellAction(SHELL_ACTIONS.toggleAlwaysShowBubble);
+      event.preventDefault();
+      return;
+    }
+    if (key === "f10") {
+      void runShellAction(SHELL_ACTIONS.openStatus);
       event.preventDefault();
       return;
     }

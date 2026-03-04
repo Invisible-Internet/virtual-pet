@@ -18,7 +18,8 @@ Locked ordering:
 5. `15` Extension Showcase
 
 Planning status:
-- `11` is the active family currently being specified through `11a`.
+- `11a` is accepted and now serves as the observability baseline for the family.
+- `11b` is the next likely slice if priority stays within family `11`.
 - `12` through `15` are intentionally rough placeholders and are not implementation-ready yet.
 - All future work follows the post-v1 workflow in [`00-development-workflow.md`](./00-development-workflow.md).
 
@@ -32,7 +33,7 @@ Planning status:
 ## Family Index
 | Family | Theme | Why It Exists | Current Planning State |
 | --- | --- | --- | --- |
-| `11` | Observability / Setup / Provenance | Make the current OpenClaw, model, memory, and fallback setup visible and understandable inside the app. | Active via `11a` |
+| `11` | Observability / Setup / Provenance | Make the current OpenClaw, model, memory, and fallback setup visible and understandable inside the app. | `11a` accepted; `11b` next likely |
 | `12` | Conversation / Bridge | Make pet chat feel like real OpenClaw conversation, not narrow status/introspection. | Rough only |
 | `13` | Memory / Persona Continuity | Make online and offline feel like the same pet with recall and stable personality. | Rough only |
 | `14` | Embodiment / Autonomy | Make the pet move and react more deliberately, unobtrusively, and believably. | Rough only |
@@ -339,8 +340,8 @@ These are roadmap placeholders, not final contracts.
 2. Read [`00-progress-tracker.md`](./00-progress-tracker.md).
 3. Read [`10-local-brain-and-personality-feasibility.md`](./10-local-brain-and-personality-feasibility.md).
 4. Use this roadmap rough-in to confirm the locked family order and assumptions.
-5. Start detailed planning with `11a-openclaw-memory-observability-surface`.
-6. Do not start coding until the `11a` spec passes `Spec Gate`.
+5. Start detailed planning with `11b-guided-pet-setup-and-markdown-bootstrap` unless the user reprioritizes another slice.
+6. Do not start coding until the chosen deliverable spec passes `Spec Gate`.
 
 ## Test And Demo Anchors To Preserve
 These are the minimum user-visible anchors we should remember when detailed planning resumes.
@@ -379,5 +380,6 @@ These are the minimum user-visible anchors we should remember when detailed plan
 - `13` follows `12`.
 - `14` follows `13`.
 - `15` follows `14`.
-- `11a` is the first real post-v1 implementation target.
+- `11a` is the accepted first post-v1 implementation target and baseline for family `11`.
+- `11b` is the next likely implementation target unless the user reprioritizes.
 - `12` through `15` are roadmap placeholders only until future detailed planning sessions lock their slice-level specs.

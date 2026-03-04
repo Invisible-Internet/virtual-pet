@@ -124,22 +124,23 @@ Historical v1 deliverables keep their original status wording and are not retrof
 - `accepted` is the only terminal state for future post-v1 deliverables.
 
 ### Current Workflow Snapshot
-- Current Deliverable: `11a-openclaw-memory-observability-surface`
-- Workflow State: `active`
-- Current Status: `specifying`
-- Last Completed Deliverable: `D10`
-- Next Detailed Target: `11a-openclaw-memory-observability-surface`
+- Current Deliverable: `none`
+- Workflow State: `idle`
+- Current Status: `none`
+- Last Completed Deliverable: `11a-openclaw-memory-observability-surface`
+- Next Detailed Target: `11b-guided-pet-setup-and-markdown-bootstrap` (unless reprioritized)
 - Current Gate State:
-  - `Spec Gate`: `passed`
-  - `Build Gate`: `not_started`
-  - `Acceptance Gate`: `not_started`
+  - no active deliverable
+  - last completed deliverable `11a-openclaw-memory-observability-surface` passed `Spec Gate`, `Build Gate`, and `Acceptance Gate`
 - Historical Note:
   - D01-D10 are complete historical v1 records.
   - Detailed v1 session history lives in `docs/plan/archive/00-progress-tracker-v1-history.md`.
-- Current `11a` surface contract:
-  - Tray `Inventory...` and `Settings...` must open the same shared shell popup on different tabs.
-  - `Inventory` preserves the D07c inventory UI; `Settings` owns the `11a` observability rows.
-  - Dev fallback `F10` must route to the shared shell popup on the `Settings` tab.
+- Last completed `11a` outcome:
+  - Tray `Inventory...` and `Status...` open the same shared shell popup on different tabs.
+  - `Inventory` preserves the D07c inventory UI; `Status` owns the `11a` observability rows.
+  - Dev fallback `F10` routes to the shared shell popup on the `Status` tab.
+  - The slice is closed as accepted after operator-confirmed shared-shell routing and degraded/recovery verification.
+  - Shipped outcome (this session): visible app/runtime change accepted via shared shell tabs, `Status...` tray routing, `F10` fallback, and a refreshable `11a` observability surface.
 
 ### Post-v1 Roadmap Snapshot
 - Rough-in doc: `docs/plan/11-15-post-v1-roadmap-rough-in.md`
@@ -150,8 +151,8 @@ Historical v1 deliverables keep their original status wording and are not retrof
   - `14` Embodiment / Autonomy
   - `15` Extension Showcase
 - Planning rule:
-  - `11` is the active family currently being specified through `11a`.
-  - `11a-openclaw-memory-observability-surface` is the current active post-v1 deliverable unless the user explicitly reprioritizes.
+  - `11` now has an accepted baseline through `11a`.
+  - `11b-guided-pet-setup-and-markdown-bootstrap` is the next likely detailed slice unless the user explicitly reprioritizes.
   - `12` through `15` remain rough placeholders and must not be treated as spec-passed deliverables yet.
 
 ### Session-End Sync Rule

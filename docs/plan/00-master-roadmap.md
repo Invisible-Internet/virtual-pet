@@ -9,8 +9,8 @@ Related:
 ## Current State
 - D01-D10 are complete historical v1 records.
 - The v1 roadmap is closed.
-- The current active post-v1 deliverable is `11a-openclaw-memory-observability-surface`.
-- `11a` has a passed `Spec Gate`; build work has not started yet.
+- `11a-openclaw-memory-observability-surface` is accepted as the first completed post-v1 slice.
+- There is no active post-v1 deliverable right now; the workflow is idle until the next slice is chosen.
 - Post-v1 families `11` through `15` are roughed in here:
   - [`11-15-post-v1-roadmap-rough-in.md`](./11-15-post-v1-roadmap-rough-in.md)
 - Future work should be created through the post-v1 workflow and deliverable template:
@@ -46,8 +46,8 @@ This family rough-in is preserved in:
 - [`11-15-post-v1-roadmap-rough-in.md`](./11-15-post-v1-roadmap-rough-in.md)
 
 Current planning guidance:
-- `11` is the active family currently being specified through `11a`.
-- `11a-openclaw-memory-observability-surface` is the current spec-passed deliverable.
+- `11` now has an accepted baseline through `11a`.
+- `11b-guided-pet-setup-and-markdown-bootstrap` is the next likely detailed slice unless the user reprioritizes.
 - `12` through `15` remain rough placeholders until dedicated planning sessions lock their slice-level specs.
 
 ### Status Schema
@@ -67,7 +67,7 @@ Current planning guidance:
   - operator-visible demo and failure/recovery script both pass with evidence logged
 
 ### Start Rule
-1. If no deliverable is active, create a new `11a-...md` file from the template.
+1. If no deliverable is active, create a new `<family><slice>-...md` file from the template.
 2. Set status to `specifying`.
 3. Pass `Spec Gate`.
 4. Only then begin implementation.

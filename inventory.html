@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Virtual Pet Inventory</title>
+    <title>Virtual Pet Shell</title>
     <style>
       :root {
         color-scheme: dark;
@@ -18,6 +18,7 @@
         --accent-strong: #b9f1ff;
         --ok: #b6f2c7;
         --warning: #ffd4a8;
+        --danger: #ffb7b7;
         --live: #fff4b3;
       }
 
@@ -42,7 +43,7 @@
 
       .inventory-shell {
         display: grid;
-        grid-template-rows: auto 1fr;
+        grid-template-rows: auto auto auto 1fr;
         gap: 10px;
         width: 100%;
         height: 100%;
@@ -59,7 +60,7 @@
 
       .inventory-header {
         display: flex;
-        align-items: center;
+        align-items: flex-start;
         justify-content: space-between;
         gap: 12px;
         padding: 10px 12px;
@@ -76,6 +77,97 @@
         font-size: 28px;
         font-weight: 700;
         letter-spacing: 0.02em;
+      }
+
+      .header-copy {
+        display: grid;
+        gap: 4px;
+      }
+
+      .eyebrow {
+        margin: 0;
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+      }
+
+      .header-description {
+        margin: 0;
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.45;
+      }
+
+      .header-actions {
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+        -webkit-app-region: no-drag;
+      }
+
+      .tab-strip {
+        display: flex;
+        gap: 8px;
+      }
+
+      .tab-button {
+        min-height: 40px;
+        padding: 0 16px;
+        border-radius: 12px;
+        border: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.05);
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .tab-button.is-active {
+        border-color: rgba(125, 214, 255, 0.5);
+        background: rgba(125, 214, 255, 0.16);
+        color: var(--accent-strong);
+        box-shadow: inset 0 0 0 1px rgba(125, 214, 255, 0.18);
+      }
+
+      .status-strip {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        min-height: 38px;
+        padding: 0 12px;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: rgba(6, 10, 16, 0.46);
+      }
+
+      .status-pills {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        min-width: 0;
+      }
+
+      .status-line {
+        margin: 0;
+        color: var(--muted);
+        font-size: 13px;
+        text-align: right;
+      }
+
+      .status-line[data-tone="ok"] {
+        color: var(--ok);
+      }
+
+      .status-line[data-tone="warning"] {
+        color: var(--warning);
+      }
+
+      .status-line[data-tone="live"] {
+        color: var(--live);
       }
 
       .inventory-scroll {
@@ -96,7 +188,8 @@
       }
 
       .meta-pill,
-      .chip {
+      .chip,
+      .state-pill {
         display: inline-flex;
         align-items: center;
         justify-content: center;
@@ -116,7 +209,25 @@
         color: var(--warning);
       }
 
+      .state-pill[data-state="healthy"] {
+        color: var(--ok);
+      }
+
+      .state-pill[data-state="degraded"],
+      .state-pill[data-state="unknown"] {
+        color: var(--warning);
+      }
+
+      .state-pill[data-state="failed"] {
+        color: var(--danger);
+      }
+
+      .state-pill[data-state="disabled"] {
+        color: var(--muted);
+      }
+
       .window-button,
+      .tab-button,
       .minor-button,
       .card-button,
       .card-surface {
@@ -131,23 +242,30 @@
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        width: 40px;
+        min-width: 40px;
         height: 40px;
-        padding: 0;
+        padding: 0 12px;
         border-radius: 12px;
         border: 1px solid var(--line-strong);
         background: rgba(255, 255, 255, 0.08);
         color: var(--text);
-        font-size: 18px;
+        font-size: 13px;
         font-weight: 700;
         line-height: 1;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
       }
 
       .window-button:hover,
+      .tab-button:hover,
       .minor-button:hover,
       .card-button:hover,
       .card-surface:hover {
         filter: brightness(1.08);
+      }
+
+      .window-button[hidden] {
+        display: none;
       }
 
       .section {
@@ -180,10 +298,26 @@
         gap: 12px;
       }
 
+      .settings-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 12px;
+      }
+
       .inventory-card {
         display: grid;
         gap: 10px;
         min-height: 162px;
+        padding: 14px;
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        background: linear-gradient(180deg, rgba(17, 26, 37, 0.88), rgba(9, 14, 20, 0.96));
+      }
+
+      .settings-card {
+        display: grid;
+        gap: 10px;
+        min-height: 0;
         padding: 14px;
         border: 1px solid var(--line);
         border-radius: 18px;
@@ -276,6 +410,58 @@
         line-height: 1.45;
       }
 
+      .settings-card-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 10px;
+      }
+
+      .settings-card h3 {
+        margin: 0;
+        font-size: 18px;
+      }
+
+      .settings-card-note {
+        display: block;
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.45;
+      }
+
+      .overview-pills {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+
+      .settings-detail-list {
+        display: grid;
+        gap: 8px;
+        margin: 0;
+      }
+
+      .settings-detail-row {
+        display: grid;
+        gap: 2px;
+        padding-top: 8px;
+        border-top: 1px solid rgba(171, 213, 255, 0.1);
+      }
+
+      .settings-detail-label {
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .settings-detail-value {
+        font-size: 13px;
+        line-height: 1.45;
+        word-break: break-word;
+      }
+
       .minor-button {
         margin-top: auto;
         min-height: 38px;
@@ -293,26 +479,69 @@
         opacity: 0.45;
         filter: none;
       }
+
+      .tab-panel {
+        display: none;
+        gap: 16px;
+      }
+
+      .tab-panel.is-active {
+        display: grid;
+      }
     </style>
   </head>
   <body>
     <main class="inventory-shell">
       <header class="inventory-header">
-        <div>
-          <h1>Inventory</h1>
+        <div class="header-copy">
+          <p class="eyebrow">Virtual Pet Shell</p>
+          <h1 id="shell-title">Inventory</h1>
+          <p id="shell-subtitle" class="header-description">
+            Wardrobe, roaming, and trusted prop controls.
+          </p>
         </div>
-        <button
-          id="close-window"
-          class="window-button"
-          type="button"
-          aria-label="Close inventory"
-          title="Close inventory"
-        >
-          X
-        </button>
+        <div class="header-actions">
+          <button
+            id="refresh-observability"
+            class="window-button"
+            type="button"
+            aria-label="Refresh status view"
+            title="Refresh status view"
+            hidden
+          >
+            Refresh
+          </button>
+          <button
+            id="close-window"
+            class="window-button"
+            type="button"
+            aria-label="Close shell window"
+            title="Close shell window"
+          >
+            X
+          </button>
+        </div>
       </header>
 
+      <nav class="tab-strip" aria-label="Shell sections">
+        <button id="tab-inventory" class="tab-button is-active" type="button" aria-pressed="true">
+          Inventory
+        </button>
+        <button id="tab-status" class="tab-button" type="button" aria-pressed="false">
+          Status
+        </button>
+      </nav>
+
+      <section class="status-strip" aria-live="polite">
+        <div class="status-pills">
+          <span id="tray-badge" class="meta-pill">Tray Ready</span>
+          <span id="roam-badge" class="meta-pill">Roam: Desktop</span>
+        </div>
+        <p id="status-line" class="status-line">Loading shell state...</p>
+      </section>
+
       <section class="inventory-scroll">
+        <section id="tab-panel-inventory" class="tab-panel is-active">
         <section class="section">
           <div class="section-header">
             <h2>Roaming</h2>
@@ -415,8 +644,36 @@
             </article>
           </div>
         </section>
+
+        </section>
+
+        <section id="tab-panel-status" class="tab-panel" aria-live="polite">
+          <section class="section">
+            <div class="section-header">
+              <h2>Overview</h2>
+              <p>Quick summary of runtime health, fallback mode, and shell availability.</p>
+            </div>
+            <div id="observability-overview" class="overview-pills"></div>
+          </section>
+
+          <section class="section">
+            <div class="section-header">
+              <h2>Runtime Health</h2>
+              <p>Bridge, provider, and memory rows update when you press Refresh.</p>
+            </div>
+            <div id="observability-runtime-rows" class="settings-grid"></div>
+          </section>
+
+          <section class="section">
+            <div class="section-header">
+              <h2>Files And Paths</h2>
+              <p>Canonical Markdown presence, configured roots, and settings sources.</p>
+            </div>
+            <div id="observability-config-rows" class="settings-grid"></div>
+          </section>
+        </section>
       </section>
     </main>
-    <script src="inventory-renderer.js"></script>
+    <script src="inventory-shell-renderer.js"></script>
   </body>
 </html>

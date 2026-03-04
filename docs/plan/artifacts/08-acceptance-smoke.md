@@ -1,8 +1,8 @@
 # D08 Acceptance Smoke Report
 
-- Generated: 2026-03-03T18:32:28.379Z
+- Generated: 2026-03-04T00:17:13.621Z
 - Runner: Codex automated smoke
-- Summary: 13/13 automated checks passed
+- Summary: 14/14 automated checks passed
 
 | ID | Deliverable | Status | Command | Evidence |
 | --- | --- | --- | --- | --- |
@@ -17,6 +17,7 @@
 | D06-local-media-sensor | 06-integrations-freshrss-spotify | passed | `node scripts/check-windows-media-sensor.js` | `[windows-media-sensor] checks passed` |
 | D07-state-runtime | 07-state-system-extension-guide | passed | `node scripts/check-state-runtime.js` | `[state-runtime] checks passed` |
 | D07b-dialog-runtime | 07b-dialog-surface-and-minimal-offline-loop | passed | `node scripts/check-dialog-runtime.js` | `[dialog] offline dialog checks passed` |
+| D11a-shell-observability | 11a-openclaw-memory-observability-surface | passed | `node scripts/check-shell-observability.js` | `[shell-observability] checks passed` |
 | Layout-assets | core-renderer-assets | passed | `node scripts/check-layout.js` | `layout checks passed` |
 | Sprite-assets | core-renderer-assets | passed | `node scripts/check-assets.js` | `[assets] girl: manifest OK (7 states)
 [assets] checks passed` |
