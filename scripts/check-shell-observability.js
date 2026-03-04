@@ -31,7 +31,7 @@ function createWorkspace(root, files) {
 function run() {
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "virtual-pet-observability-"));
   const localRoot = path.join(tempRoot, "local");
-  createWorkspace(localRoot, ["SOUL.md", "IDENTITY.md", "USER.md", "MEMORY.md"]);
+  createWorkspace(localRoot, ["SOUL.md", "STYLE.md", "IDENTITY.md", "USER.md", "MEMORY.md"]);
 
   const healthy = buildObservabilitySnapshot({
     capabilitySnapshot: {
@@ -91,7 +91,7 @@ function run() {
   assertEqual(healthy.rows.memory.state, "healthy", "memory row should be healthy");
   assertEqual(
     healthy.rows.canonicalFiles.localWorkspace.readableCount,
-    4,
+    5,
     "local canonical files should be readable"
   );
   assert(
@@ -173,6 +173,11 @@ function run() {
     resolveShellWindowTabForAction("open-status", SHELL_WINDOW_TABS.inventory),
     SHELL_WINDOW_TABS.status,
     "status action should route to status tab"
+  );
+  assertEqual(
+    resolveShellWindowTabForAction("open-setup", SHELL_WINDOW_TABS.inventory),
+    SHELL_WINDOW_TABS.setup,
+    "setup action should route to setup tab"
   );
 
   fs.rmSync(tempRoot, { recursive: true, force: true });

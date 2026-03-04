@@ -1,4 +1,5 @@
 const SHELL_ACTIONS = Object.freeze({
+  openSetup: "open-setup",
   roamDesktop: "roam-desktop",
   roamZone: "roam-zone",
   selectRoamZone: "select-roam-zone",
@@ -9,6 +10,7 @@ const SHELL_ACTIONS = Object.freeze({
 const TAB_IDS = Object.freeze({
   inventory: "inventory",
   status: "status",
+  setup: "setup",
 });
 
 const DEFAULT_SHELL_STATE = Object.freeze({
@@ -20,7 +22,7 @@ const DEFAULT_SHELL_STATE = Object.freeze({
   tray: Object.freeze({ available: false, supported: true, error: null }),
   devFallback: Object.freeze({
     enabled: true,
-    hotkeys: Object.freeze(["F6", "F7", "F8", "F9", "F10"]),
+    hotkeys: Object.freeze(["F6", "F7", "F8", "F9", "F10", "F11"]),
   }),
 });
 
@@ -33,8 +35,10 @@ const roamBadge = document.getElementById("roam-badge");
 const statusLine = document.getElementById("status-line");
 const tabInventoryButton = document.getElementById("tab-inventory");
 const tabStatusButton = document.getElementById("tab-status");
+const tabSetupButton = document.getElementById("tab-setup");
 const inventoryPanel = document.getElementById("tab-panel-inventory");
 const statusPanel = document.getElementById("tab-panel-status");
+const setupPanel = document.getElementById("tab-panel-setup");
 const overviewContainer = document.getElementById("observability-overview");
 const runtimeRowsContainer = document.getElementById("observability-runtime-rows");
 const configRowsContainer = document.getElementById("observability-config-rows");
@@ -48,9 +52,35 @@ const headphonesChip = document.getElementById("headphones-chip");
 const poolRingDragHandle = document.getElementById("drag-pool-ring");
 const poolRingChip = document.getElementById("pool-ring-chip");
 const poolRingRemoveButton = document.getElementById("remove-pool-ring");
+const setupTargets = document.getElementById("setup-targets");
+const setupPresets = document.getElementById("setup-presets");
+const setupPetName = document.getElementById("setup-pet-name");
+const setupBirthday = document.getElementById("setup-birthday");
+const setupCompanionName = document.getElementById("setup-companion-name");
+const setupCompanionTimezone = document.getElementById("setup-companion-timezone");
+const setupStarterNote = document.getElementById("setup-starter-note");
+const setupCompanionCallName = document.getElementById("setup-companion-call-name");
+const setupCompanionPronouns = document.getElementById("setup-companion-pronouns");
+const setupCreatureLabel = document.getElementById("setup-creature-label");
+const setupSignatureEmoji = document.getElementById("setup-signature-emoji");
+const setupAvatarPath = document.getElementById("setup-avatar-path");
+const setupSeedHeartbeat = document.getElementById("setup-seed-heartbeat");
+const setupReloadTargetsButton = document.getElementById("setup-reload-targets");
+const setupPreviewButton = document.getElementById("setup-preview");
+const setupApplyButton = document.getElementById("setup-apply");
+const setupPreviewTabs = document.getElementById("setup-preview-tabs");
+const setupPreviewCopy = document.getElementById("setup-preview-copy");
+const setupPreviewMarkdown = document.getElementById("setup-preview-markdown");
+const setupResult = document.getElementById("setup-result");
 
 let latestShellState = { ...DEFAULT_SHELL_STATE };
 let latestObservabilitySnapshot = null;
+let latestSetupSnapshot = null;
+let latestSetupPreview = null;
+let setupLoading = false;
+let setupApplying = false;
+let setupDirty = true;
+let activeSetupPreviewFileId = "SOUL.md";
 let observabilityLoading = false;
 let statusTone = "muted";
 let statusMessage = "";
@@ -106,7 +136,12 @@ function normalizeShellState(payload = {}) {
     },
     inventoryUi: {
       open: Boolean(inventoryUi.open),
-      activeTab: inventoryUi.activeTab === TAB_IDS.status ? TAB_IDS.status : TAB_IDS.inventory,
+      activeTab:
+        inventoryUi.activeTab === TAB_IDS.status
+          ? TAB_IDS.status
+          : inventoryUi.activeTab === TAB_IDS.setup
+            ? TAB_IDS.setup
+            : TAB_IDS.inventory,
     },
     tray: {
       available: Boolean(tray.available),
@@ -124,7 +159,9 @@ function normalizeShellState(payload = {}) {
 }
 
 function getActiveTab() {
-  return latestShellState.inventoryUi.activeTab === TAB_IDS.status ? TAB_IDS.status : TAB_IDS.inventory;
+  if (latestShellState.inventoryUi.activeTab === TAB_IDS.status) return TAB_IDS.status;
+  if (latestShellState.inventoryUi.activeTab === TAB_IDS.setup) return TAB_IDS.setup;
+  return TAB_IDS.inventory;
 }
 
 function getRoamZoneLabel() {
@@ -150,6 +187,42 @@ function formatReason(value) {
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
+function escapeCode(value) {
+  return escapeHtml(value).replace(/`/g, "&#96;");
+}
+
+function getSetupFormInput() {
+  return {
+    petName: setupPetName?.value || "",
+    birthday: setupBirthday?.value || "",
+    companionName: setupCompanionName?.value || "",
+    companionTimezone: setupCompanionTimezone?.value || "",
+    starterNote: setupStarterNote?.value || "",
+    companionCallName: setupCompanionCallName?.value || "",
+    companionPronouns: setupCompanionPronouns?.value || "",
+    creatureLabel: setupCreatureLabel?.value || "",
+    signatureEmoji: setupSignatureEmoji?.value || "",
+    avatarPath: setupAvatarPath?.value || "",
+    seedHeartbeatFile: Boolean(setupSeedHeartbeat?.checked),
+    personaPresetId:
+      setupPresets?.querySelector(".setup-card-button.is-active")?.dataset.presetId ||
+      latestSetupSnapshot?.formDefaults?.personaPresetId ||
+      "gentle_companion",
+  };
+}
+
+function markSetupDirty() {
+  setupDirty = true;
+  latestSetupPreview = null;
+  if (setupApplyButton) setupApplyButton.disabled = true;
+}
+
+function setSetupResult(message, tone = "muted") {
+  if (!setupResult) return;
+  setupResult.textContent = message;
+  setupResult.dataset.tone = tone;
+}
+
 function setStatus(message, tone = "muted") {
   statusMessage = typeof message === "string" ? message : "";
   statusTone = tone;
@@ -163,6 +236,8 @@ function renderStatus() {
   if (!message) {
     if (getActiveTab() === TAB_IDS.status) {
       message = "Refresh re-reads bridge, memory, path, and canonical file health.";
+    } else if (getActiveTab() === TAB_IDS.setup) {
+      message = "Preview setup first, then apply an explicit local workspace bootstrap.";
     } else if (latestShellState.roaming.mode === "zone" && !latestShellState.roaming.zoneRect) {
       message = "Draw a roam zone to keep the pet moving inside a marquee area.";
       tone = "warning";
@@ -178,14 +253,20 @@ function renderStatus() {
 }
 
 function renderHeader() {
-  const statusTab = getActiveTab() === TAB_IDS.status;
-  if (shellTitle) shellTitle.textContent = statusTab ? "Status" : "Inventory";
-  if (shellSubtitle) {
-    shellSubtitle.textContent = statusTab
-      ? "Bridge, memory, canonical files, and runtime path visibility."
-      : "Wardrobe, roaming, and trusted prop controls.";
+  const activeTab = getActiveTab();
+  if (shellTitle) {
+    shellTitle.textContent =
+      activeTab === TAB_IDS.status ? "Status" : activeTab === TAB_IDS.setup ? "Setup" : "Inventory";
   }
-  if (refreshButton) refreshButton.hidden = !statusTab;
+  if (shellSubtitle) {
+    shellSubtitle.textContent =
+      activeTab === TAB_IDS.status
+        ? "Bridge, memory, canonical files, and runtime path visibility."
+        : activeTab === TAB_IDS.setup
+          ? "Bootstrap the pet's canonical Markdown files with an explicit preview/apply flow."
+          : "Wardrobe, roaming, and trusted prop controls.";
+  }
+  if (refreshButton) refreshButton.hidden = activeTab !== TAB_IDS.status;
 }
 
 function renderTabs() {
@@ -198,8 +279,13 @@ function renderTabs() {
     tabStatusButton.classList.toggle("is-active", activeTab === TAB_IDS.status);
     tabStatusButton.setAttribute("aria-pressed", String(activeTab === TAB_IDS.status));
   }
+  if (tabSetupButton) {
+    tabSetupButton.classList.toggle("is-active", activeTab === TAB_IDS.setup);
+    tabSetupButton.setAttribute("aria-pressed", String(activeTab === TAB_IDS.setup));
+  }
   if (inventoryPanel) inventoryPanel.classList.toggle("is-active", activeTab === TAB_IDS.inventory);
   if (statusPanel) statusPanel.classList.toggle("is-active", activeTab === TAB_IDS.status);
+  if (setupPanel) setupPanel.classList.toggle("is-active", activeTab === TAB_IDS.setup);
 }
 
 function buildDetailRow(label, value) {
@@ -275,6 +361,106 @@ function renderObservability() {
   }
 }
 
+function buildSetupTargetCard(label, target, description) {
+  const accessLabel = target?.observedOnly
+    ? target?.readable
+      ? "Readable (observed only)"
+      : "Observed, not currently readable"
+    : target?.writable
+      ? "Readable + writable"
+      : "Not writable";
+  return `<article class="setup-card"><div class="settings-card-header"><div><h3>${escapeHtml(label)}</h3><span class="settings-card-note">${escapeHtml(description)}</span></div><span class="state-pill" data-state="${escapeHtml(target?.state || "unknown")}">${escapeHtml(target?.state || "unknown")}</span></div><div class="settings-detail-list">${buildDetailRow("Root", formatText(target?.root, "Unavailable"))}${buildDetailRow("Access", accessLabel)}${buildDetailRow("Reason", formatReason(target?.reason))}</div></article>`;
+}
+
+function renderSetupTargets() {
+  if (!setupTargets) return;
+  if (!latestSetupSnapshot) {
+    setupTargets.innerHTML =
+      '<article class="setup-card"><h3>Waiting For Targets</h3><span class="setup-card-copy">Open the Setup tab and press Reload Targets if the target summary does not appear.</span></article>';
+    return;
+  }
+  const applyModeLabel = latestSetupSnapshot.applyMode === "local_only" ? "Local Writes Only" : "Blocked";
+  setupTargets.innerHTML = [
+    buildSetupTargetCard("Local Workspace", latestSetupSnapshot.targets.local, "Offline-mode read source and required bootstrap target."),
+    buildSetupTargetCard("OpenClaw Workspace", latestSetupSnapshot.targets.openClaw, "Agent-facing observed workspace. Setup does not write here."),
+    `<article class="setup-card"><div class="settings-card-header"><div><h3>Write Policy</h3><span class="settings-card-note">Preview and apply stay explicit; setup writes only to the pet-local workspace.</span></div><span class="state-pill" data-state="${escapeHtml(latestSetupSnapshot.applyMode === "blocked" ? "failed" : "healthy")}">${escapeHtml(applyModeLabel)}</span></div><div class="settings-detail-list">${buildDetailRow("Presets", String(latestSetupSnapshot.presets?.length || 0))}${buildDetailRow("Heartbeat Seed", "Optional, empty/comment-only")}${buildDetailRow("OpenClaw", latestSetupSnapshot.targets.openClaw?.configured ? "Observed only" : "Not configured")}</div></article>`,
+  ].join("");
+}
+
+function applySetupDefaultsIfEmpty() {
+  const defaults = latestSetupSnapshot?.formDefaults || {};
+  if (setupPetName && !setupPetName.value) setupPetName.value = defaults.petName || "";
+  if (setupBirthday && !setupBirthday.value) setupBirthday.value = defaults.birthday || "";
+  if (setupCompanionName && !setupCompanionName.value) setupCompanionName.value = defaults.companionName || "";
+  if (setupCompanionTimezone && !setupCompanionTimezone.value) {
+    setupCompanionTimezone.value = defaults.companionTimezone || "";
+  }
+  if (setupStarterNote && !setupStarterNote.value) setupStarterNote.value = defaults.starterNote || "";
+}
+
+function renderSetupPresets() {
+  if (!setupPresets) return;
+  if (!latestSetupSnapshot?.presets?.length) {
+    setupPresets.innerHTML = "";
+    return;
+  }
+  const selectedPresetId = getSetupFormInput().personaPresetId;
+  setupPresets.innerHTML = latestSetupSnapshot.presets
+    .map(
+      (preset) =>
+        `<button class="setup-card-button ${selectedPresetId === preset.id ? "is-active" : ""}" type="button" data-preset-id="${escapeHtml(preset.id)}"><strong>${escapeHtml(preset.label)}</strong><span class="setup-card-button-copy">${escapeHtml(preset.summary)}</span><span class="setup-card-button-copy">${escapeHtml(preset.quickPicker || "")}</span></button>`
+    )
+    .join("");
+  for (const button of setupPresets.querySelectorAll("[data-preset-id]")) {
+    button.addEventListener("click", () => {
+      for (const other of setupPresets.querySelectorAll("[data-preset-id]")) {
+        other.classList.toggle("is-active", other === button);
+      }
+      markSetupDirty();
+      renderSetupPreview();
+    });
+  }
+}
+
+function renderSetupPreview() {
+  if (setupPreviewButton) setupPreviewButton.disabled = setupLoading || setupApplying;
+  if (setupReloadTargetsButton) setupReloadTargetsButton.disabled = setupLoading || setupApplying;
+  if (setupApplyButton) {
+    setupApplyButton.disabled = setupLoading || setupApplying || !latestSetupPreview || setupDirty;
+  }
+  if (!setupPreviewTabs || !setupPreviewCopy || !setupPreviewMarkdown) return;
+  if (!latestSetupPreview) {
+    setupPreviewTabs.innerHTML = "";
+    setupPreviewCopy.textContent =
+      "Choose a preset and press Preview to generate the managed Markdown output.";
+    setupPreviewMarkdown.textContent = "";
+    return;
+  }
+  const files = Array.isArray(latestSetupPreview.files) ? latestSetupPreview.files : [];
+  if (!files.find((file) => file.fileId === activeSetupPreviewFileId) && files.length > 0) {
+    activeSetupPreviewFileId = files[0].fileId;
+  }
+  setupPreviewTabs.innerHTML = files
+    .map(
+      (file) =>
+        `<button class="preview-tab-button ${file.fileId === activeSetupPreviewFileId ? "is-active" : ""}" type="button" data-file-id="${escapeHtml(file.fileId)}">${escapeHtml(file.fileId)}</button>`
+    )
+    .join("");
+  for (const button of setupPreviewTabs.querySelectorAll("[data-file-id]")) {
+    button.addEventListener("click", () => {
+      activeSetupPreviewFileId = button.dataset.fileId || activeSetupPreviewFileId;
+      renderSetupPreview();
+    });
+  }
+  const selectedFile = files.find((file) => file.fileId === activeSetupPreviewFileId) || files[0];
+  const writeTargets = (latestSetupPreview.writePlan || []).map((plan) => `${plan.targetId}: ${plan.root}`);
+  setupPreviewCopy.textContent =
+    latestSetupPreview.applyMode === "local_only"
+      ? `Local-write preview. Planned root: ${writeTargets.join(" | ") || "Unavailable"}. OpenClaw stays observed/read-only.`
+      : "Preview blocked until the local target and required fields are valid.";
+  setupPreviewMarkdown.textContent = selectedFile?.previewMarkdown || "";
+}
+
 function render() {
   renderHeader();
   renderTabs();
@@ -298,6 +484,9 @@ function render() {
   if (refreshButton) refreshButton.disabled = observabilityLoading;
   renderStatus();
   renderObservability();
+  renderSetupTargets();
+  renderSetupPresets();
+  renderSetupPreview();
 }
 
 async function refreshObservability(successMessage = "Status refreshed.") {
@@ -311,6 +500,89 @@ async function refreshObservability(successMessage = "Status refreshed.") {
     setStatus(error?.message || "Status refresh failed.", "warning");
   } finally {
     observabilityLoading = false;
+    render();
+  }
+}
+
+async function refreshSetupSnapshot(successMessage = "Setup targets refreshed.") {
+  if (typeof window.inventoryAPI?.getSetupBootstrapSnapshot !== "function") return;
+  setupLoading = true;
+  render();
+  try {
+    latestSetupSnapshot = await window.inventoryAPI.getSetupBootstrapSnapshot();
+    applySetupDefaultsIfEmpty();
+    setSetupResult(successMessage, "ok");
+  } catch (error) {
+    setSetupResult(error?.message || "Setup targets failed to load.", "warning");
+  } finally {
+    setupLoading = false;
+    render();
+  }
+}
+
+async function previewSetup() {
+  if (typeof window.inventoryAPI?.previewSetupBootstrap !== "function") return;
+  setupLoading = true;
+  render();
+  try {
+    const preview = await window.inventoryAPI.previewSetupBootstrap(getSetupFormInput());
+    latestSetupPreview = preview;
+    setupDirty = false;
+    activeSetupPreviewFileId = preview?.files?.[0]?.fileId || activeSetupPreviewFileId;
+    if (preview?.ok) {
+      setSetupResult(
+        "Preview ready. Apply will write to the local workspace only; OpenClaw stays observed/read-only.",
+        "ok"
+      );
+      setStatus("Setup preview generated.", "ok");
+    } else {
+      const errorText =
+        Array.isArray(preview?.errors) && preview.errors.length > 0
+          ? preview.errors.map((entry) => formatReason(entry)).join(", ")
+          : "Setup preview is blocked.";
+      setSetupResult(errorText, "warning");
+      setStatus(errorText, "warning");
+    }
+  } catch (error) {
+    latestSetupPreview = null;
+    setupDirty = true;
+    setSetupResult(error?.message || "Setup preview failed.", "warning");
+    setStatus(error?.message || "Setup preview failed.", "warning");
+  } finally {
+    setupLoading = false;
+    render();
+  }
+}
+
+async function applySetup() {
+  if (!latestSetupPreview || setupDirty || typeof window.inventoryAPI?.applySetupBootstrap !== "function") {
+    return;
+  }
+  setupApplying = true;
+  render();
+  try {
+    const result = await window.inventoryAPI.applySetupBootstrap(getSetupFormInput());
+    if (!result?.ok) {
+      const errorText = result?.error || "Setup apply failed.";
+      setSetupResult(errorText, "warning");
+      setStatus(errorText, "warning");
+      return;
+    }
+    const targetSummary = (result.targetResults || [])
+      .map((target) => `${target.targetId}: ${target.root}`)
+      .join(" | ");
+    latestSetupPreview = null;
+    setupDirty = true;
+    const successMessage = `Setup applied. Local workspace written: ${targetSummary || "none"}. OpenClaw remained read-only.`;
+    setSetupResult(successMessage, "ok");
+    setStatus("Setup applied. Open Status and press Refresh to verify local canonical file health.", "ok");
+    await refreshSetupSnapshot("Setup targets refreshed after apply.");
+    setSetupResult(successMessage, "ok");
+  } catch (error) {
+    setSetupResult(error?.message || "Setup apply failed.", "warning");
+    setStatus(error?.message || "Setup apply failed.", "warning");
+  } finally {
+    setupApplying = false;
     render();
   }
 }
@@ -400,6 +672,9 @@ function syncShellState(payload) {
   if (getActiveTab() === TAB_IDS.status && (previousTab !== TAB_IDS.status || !latestObservabilitySnapshot)) {
     void refreshObservability("Status loaded.");
   }
+  if (getActiveTab() === TAB_IDS.setup && (previousTab !== TAB_IDS.setup || !latestSetupSnapshot)) {
+    void refreshSetupSnapshot("Setup targets loaded.");
+  }
 }
 
 async function initialize() {
@@ -430,6 +705,9 @@ tabInventoryButton?.addEventListener("click", () => {
 tabStatusButton?.addEventListener("click", () => {
   void switchTab(TAB_IDS.status);
 });
+tabSetupButton?.addEventListener("click", () => {
+  void switchTab(TAB_IDS.setup);
+});
 headphonesToggle?.addEventListener("click", () => {
   void runShellAction(SHELL_ACTIONS.toggleHeadphones, latestShellState.wardrobe.hasHeadphones ? "Headphones removed from the pet." : "Headphones equipped on the pet.", "Headphones toggle failed.");
 });
@@ -454,6 +732,39 @@ poolRingDragHandle?.addEventListener("lostpointercapture", (event) => {
 });
 poolRingRemoveButton?.addEventListener("click", () => {
   void runShellAction(SHELL_ACTIONS.togglePoolRing, "Pool ring removed from the desktop.", "Pool ring removal failed.");
+});
+
+for (const field of [
+  setupPetName,
+  setupBirthday,
+  setupCompanionName,
+  setupCompanionTimezone,
+  setupStarterNote,
+  setupCompanionCallName,
+  setupCompanionPronouns,
+  setupCreatureLabel,
+  setupSignatureEmoji,
+  setupAvatarPath,
+  setupSeedHeartbeat,
+]) {
+  field?.addEventListener("input", () => {
+    markSetupDirty();
+    renderSetupPreview();
+  });
+  field?.addEventListener("change", () => {
+    markSetupDirty();
+    renderSetupPreview();
+  });
+}
+
+setupReloadTargetsButton?.addEventListener("click", () => {
+  void refreshSetupSnapshot("Setup targets refreshed.");
+});
+setupPreviewButton?.addEventListener("click", () => {
+  void previewSetup();
+});
+setupApplyButton?.addEventListener("click", () => {
+  void applySetup();
 });
 
 window.addEventListener("keydown", (event) => {

@@ -1,14 +1,14 @@
 # Deliverable 11b: Guided Pet Setup and Markdown Bootstrap
 
 **Deliverable ID:** `11b-guided-pet-setup-and-markdown-bootstrap`  
-**Status:** `specifying`  
+**Status:** `accepted`  
 **Owner:** `Mic + Codex`  
 **Last Updated:** `2026-03-04`  
 **Depends On:** `05a-obsidian-workspace-bootstrap-and-connectivity`, `05-memory-pipeline-and-obsidian-adapter`, `07c-shell-settings-and-wardrobe-surface`, `11a-openclaw-memory-observability-surface`, `10-local-brain-and-personality-feasibility`  
 **Blocks:** `11c-repair-actions-and-provenance-visibility`, `12a-real-openclaw-dialog-parity`, `13a-offline-identity-and-recent-recall`, `13b-derived-persona-snapshot-from-markdown`  
 
 ## Objective
-Extend the shared shell window with an explicit `Setup` flow so the operator can enter the pet's minimum identity/profile information once, preview the exact Markdown that will be written, and explicitly bootstrap a project-standard canonical Markdown set for both the pet-local workspace and the configured OpenClaw workspace without relying on hidden scripts or ad hoc manual file editing.
+Extend the shared shell window with an explicit `Setup` flow so the operator can enter the pet's minimum identity/profile information once, preview the exact Markdown that will be written, and explicitly bootstrap a project-standard canonical Markdown set for the pet-local workspace while surfacing the configured OpenClaw workspace as an observed/read-only companion target instead of a direct write target.
 
 ## In Scope
 - Extend the shared shell window from `Inventory` / `Status` to `Inventory` / `Status` / `Setup`.
@@ -17,7 +17,7 @@ Extend the shared shell window with an explicit `Setup` flow so the operator can
 - Show a setup-target summary for:
   - local workspace root
   - OpenClaw workspace root
-  - whether each target is writable/eligible for bootstrap in the current mode
+  - whether the local target is writable and whether the OpenClaw target is readable/observed in the current mode
 - Collect the minimum setup fields:
   - pet name
   - birthday
@@ -34,8 +34,8 @@ Extend the shared shell window with an explicit `Setup` flow so the operator can
   - `USER.md`
   - `MEMORY.md`
 - Optionally seed `HEARTBEAT.md` as an intentionally empty/comment-only file so proactive automation stays disabled until a later deliverable.
-- Write the same managed Markdown content to both targets when OpenClaw workspace bootstrap is configured and healthy.
-- Allow local-only bootstrap when OpenClaw is disabled or not configured.
+- Apply setup only to the pet-local workspace in `11b`.
+- Keep the OpenClaw workspace read-only from the virtual-pet app's perspective in `11b`.
 - Reuse the `11a` status surface as the operator-visible verification path after setup is applied.
 - Lock file-by-file content boundaries based on official OpenClaw workspace guidance before implementation starts.
 
@@ -44,6 +44,7 @@ Extend the shared shell window with an explicit `Setup` flow so the operator can
 - Full persona authoring or structured-trait editing.
 - Automatic writes on startup.
 - Hidden background bootstrap of the OpenClaw workspace outside an explicit setup action.
+- Any direct write from the virtual-pet app into the OpenClaw workspace.
 - Deep merge/parsing of arbitrary existing Markdown beyond managed setup blocks.
 - Editing `config/settings.json`, `settings.local.json`, or OpenClaw hook/config values from the GUI.
 - Implementing OpenClaw hook/config mutation from the GUI so `STYLE.md` is injected automatically on every turn.
@@ -54,13 +55,13 @@ Extend the shared shell window with an explicit `Setup` flow so the operator can
 - Existing runtime settings stack from `config/settings.json`, optional local override, and environment overrides.
 - `11a` observability surface available for post-apply verification.
 - Local workspace root must resolve to a writable directory.
-- OpenClaw dual-target bootstrap requires:
+- OpenClaw observation in `11b` requires:
   - `openclaw.enabled=true`
   - `paths.openClawWorkspaceRoot` configured
-  - target root exists and is a writable directory
+  - target root exists and is at least readable if status should show it as healthy
 - This slice respects ADR-0015:
   - normal runtime remains non-destructive by default
-  - OpenClaw workspace bootstrap happens only from this explicit operator flow
+  - `11b` writes only to the pet-local workspace from this explicit operator flow
 - Official OpenClaw bootstrap injection uses a fixed file set. Nonstandard companion files require either:
   - a future custom hook/injection path, or
   - an explicit agent-read strategy directed by workspace instructions
@@ -135,16 +136,16 @@ Required project-managed files:
 
 ### 2. OpenClaw workspace root
 Purpose:
-- agent-facing mirror of the same personality/identity/memory baseline
-- explicit bootstrap target when OpenClaw workspace is configured and healthy
+- agent-facing observed workspace for status/verification context
+- future ingestion/sync destination owned by later integration work, not by `11b`
 
-Required project-managed files:
+Observed files of interest:
 - `SOUL.md`
 - `STYLE.md`
 - `IDENTITY.md`
 - `USER.md`
 - `MEMORY.md`
-- `HEARTBEAT.md` optional and empty/comment-only for now
+- `HEARTBEAT.md`
 - `memory/YYYY-MM-DD.md`
 
 OpenClaw-owned files outside this slice may also exist there:
@@ -153,9 +154,10 @@ OpenClaw-owned files outside this slice may also exist there:
 - `BOOTSTRAP.md`
 
 ### Sync Rule
-- `11b` writes the same managed setup blocks to both roots when `applyMode=dual_target`.
-- When OpenClaw is disabled or not configured, `11b` writes only to the pet-local workspace.
-- After apply, the Markdown files themselves become the canonical artifacts.
+- `11b` writes managed setup blocks only to the pet-local workspace.
+- The configured OpenClaw workspace is observed/read-only from the app's perspective in this slice.
+- After apply, the pet-local Markdown files become the canonical bootstrap artifacts for offline mode.
+- Any future OpenClaw ingestion or sync path must consume those canonical local artifacts without requiring direct `11b` writes into the agent workspace.
 - For offline mode, the pet reads the pet-local workspace only.
 
 ## Offline Required File Set
@@ -180,15 +182,15 @@ Offline interpretation rule:
 - `MEMORY.md` = durable relationship and preference facts
 
 ## Showcase Promise (Mandatory)
-The operator can open `Setup` in the same shared shell window, enter the pet's baseline identity once, preview the exact canonical Markdown that will be written, explicitly apply it, and then immediately verify through `Status` that the target canonical files now exist and read healthy.
+The operator can open `Setup` in the same shared shell window, enter the pet's baseline identity once, preview the exact canonical Markdown that will be written, explicitly apply it to the pet-local workspace, and then immediately verify through `Status` that the local canonical files now exist and read healthy while the OpenClaw workspace remains visible as an observed/read-only context target.
 
 ## Operator Demo Script (Mandatory)
-1. Start the app with a valid local workspace root and a valid OpenClaw workspace root configured.
+1. Start the app with a valid local workspace root and, optionally, a valid OpenClaw workspace root configured.
 2. Open `Setup...` from the tray and confirm the existing shared shell window opens or focuses on the `Setup` tab instead of spawning a second popup.
 3. If tray support is unavailable, use dev fallback hotkey `F11` and confirm it opens the same shared shell window directly to the `Setup` tab.
 4. Confirm the `Setup` tab shows:
    - local target summary
-   - OpenClaw target summary
+   - OpenClaw target summary marked as observed/read-only
    - required input fields
    - persona preset selector
    - preview/apply controls
@@ -206,23 +208,21 @@ The operator can open `Setup` in the same shared shell window, enter the pet's b
    - `USER.md`
    - `MEMORY.md`
 7. If the UI offers `Seed HEARTBEAT.md`, confirm the preview explains that the seeded file stays effectively empty/comment-only so OpenClaw heartbeat calls remain skipped until later configuration.
-8. Confirm the preview clearly states which targets will be written:
-   - local only, or
-   - local + OpenClaw
-9. Press `Apply Setup` and confirm the success state lists the written files and target roots.
-10. Switch to `Status` in the same shared shell window and confirm `Canonical Files` now reports healthy/readable files for the configured targets.
+8. Confirm the preview clearly states that only the local workspace will be written and that the OpenClaw workspace remains observed/read-only.
+9. Press `Apply Setup` and confirm the success state lists the written local files and local target root.
+10. Switch to `Status` in the same shared shell window and confirm `Canonical Files` now reports healthy/readable local files; if an OpenClaw root is configured, confirm its row remains informational rather than a required setup-write success condition.
 11. Confirm the app did not create a second shell window or require restart to show the result.
 
 ## Failure / Recovery Script (Mandatory)
-1. Start the app with local workspace healthy but OpenClaw workspace configured to an invalid or missing path.
+1. Start the app with a healthy local workspace and an OpenClaw workspace configured to an invalid or missing path.
 2. Open `Setup...` from the tray or use `F11`.
 3. Confirm the `Setup` tab still renders and clearly marks the OpenClaw target as degraded or unavailable.
 4. Confirm write behavior follows the target policy:
-   - if OpenClaw is enabled and configured, dual-target apply is blocked until the target is healthy
-   - if OpenClaw is disabled or not configured, local-only apply remains available and is labeled as local-only
-5. Fix the OpenClaw path or disable OpenClaw so the target policy becomes valid.
-6. Use `Reload Targets` or re-open `Setup`.
-7. Confirm the target summary recovers and the expected apply action becomes available.
+   - local apply remains available as long as the local target is writable
+   - OpenClaw degradation is visible but does not trigger a direct write attempt
+5. Break the local workspace path and confirm apply becomes blocked with a local-target reason.
+6. Fix the local path, then use `Reload Targets` or re-open `Setup`.
+7. Confirm local apply becomes available again and the OpenClaw summary remains read-only/observed.
 
 ## Public Interfaces / Touchpoints
 - New deliverable file: `docs/plan/11b-guided-pet-setup-and-markdown-bootstrap.md`
@@ -298,15 +298,17 @@ Required target summary shape:
       reason: "string"
     },
     openClaw: {
-      state: "ready|degraded|disabled|missing_config|failed",
+      state: "ready|degraded|disabled|missing_config",
       root: "string|null",
-      writable: true,
+      readable: true,
+      writable: false,
       configured: true,
-      requiredForApply: true,
+      requiredForApply: false,
+      observedOnly: true,
       reason: "string"
     }
   },
-  applyMode: "local_only|dual_target|blocked",
+  applyMode: "local_only|blocked",
   formDefaults: {
     petName: "",
     birthday: "",
@@ -368,7 +370,7 @@ Future setup/install should walk the operator through a small question set:
 7. What are your pronouns?
 8. What timezone are you in?
 9. Is there one short relationship note or starter memory the pet should keep?
-10. Should setup write to local only, or to local + OpenClaw?
+10. Should setup seed the optional empty `HEARTBEAT.md` placeholder now, or leave it absent?
 
 ### Reconstruction Goal
 The answers plus presets must be sufficient to regenerate:
@@ -490,34 +492,45 @@ Required file intent and boundaries:
   - the same shared shell window is reused
   - preview is visible before any write
   - apply is explicit and operator-readable
-  - local-only vs dual-target behavior is clear
+  - local-write / observed-OpenClaw behavior is clear
   - local-vs-OpenClaw workspace topology is visible and understandable
   - the offline-required local file set is fully bootstrapped
   - `SOUL.md`, `STYLE.md`, `IDENTITY.md`, `USER.md`, and `MEMORY.md` previews all follow the locked content boundaries
-  - configured OpenClaw target failures are visible and actionable
-  - canonical files become healthy in `Status` after a successful apply
+  - configured OpenClaw target failures are visible and actionable without causing a direct write attempt
+  - local canonical files become healthy in `Status` after a successful apply
 - Not acceptable if:
   - setup opens a separate competing popup
   - setup silently writes files on load
   - setup rewrites arbitrary Markdown outside a managed block
-  - setup hides target eligibility or dual-target failure reasons
+  - setup hides local target eligibility or the OpenClaw read-only boundary
   - setup duplicates `STYLE.md` content into `SOUL.md`
   - setup claims `STYLE.md` is automatically injected by OpenClaw without an actual hook/integration path
+  - setup attempts to write directly into the configured OpenClaw workspace
   - the operator cannot tell exactly what will be written before pressing apply
 
 ## Implementation Slice (Mandatory)
-- Not started yet.
-- First implementation slice should:
-  - add `Setup` routing to the shared shell window (`tray` + `F11`)
-  - render the target summary, required fields, preset selector, and preview/apply controls
-  - add a deterministic Markdown preview builder with managed-block output for `SOUL.md`, `STYLE.md`, `IDENTITY.md`, `USER.md`, and `MEMORY.md`
-  - optionally seed a comment-only `HEARTBEAT.md`
-  - implement explicit apply for local-only and dual-target modes using the managed-block rules
-- Targeted checks to add or update:
-  - one deterministic setup-preview/apply check for managed-block generation and replacement behavior
-  - one deterministic content-shape check to confirm `STYLE.md` is generated as the single voice/style source and `SOUL.md` stays style-light
-  - one shell routing check for `openSetup`
-  - one acceptance smoke row for `11b` after the first runtime slice exists
+- First implementation slice is now shipped:
+  - added `Setup...` tray routing, shared-shell `Setup` tab support, and `F11` dev fallback
+  - extended the existing shell window so `Inventory`, `Status`, and `Setup` all reuse the same popup
+  - added `setup-bootstrap.js` for target-policy resolution, preset metadata, managed-block preview generation, and explicit apply
+  - added setup IPC endpoints:
+    - `pet:getSetupBootstrapSnapshot`
+    - `pet:previewSetupBootstrap`
+    - `pet:applySetupBootstrap`
+  - rendered the `Setup` tab with:
+    - target readiness summary
+    - required fields
+    - advanced optional fields
+    - frozen preset chooser
+    - per-file preview tabs
+    - explicit `Reload Targets`, `Preview`, and `Apply Setup` controls
+  - implemented managed-block write rules for the pet-local `SOUL.md`, `STYLE.md`, `IDENTITY.md`, `USER.md`, `MEMORY.md`, and optional empty/comment-only `HEARTBEAT.md`
+  - extended the `11a` canonical file health row so `STYLE.md` is now part of shell verification coverage
+- Targeted checks now shipped and passing:
+  - `scripts/check-setup-bootstrap.js`
+  - updated `scripts/check-shell-observability.js`
+  - updated `npm run check:contracts`
+  - updated `npm run check:acceptance` smoke row `D11b-setup-bootstrap`
 
 ## Visible App Outcome
 - After implementation, the operator will have one clear place to initialize or re-bootstrap the pet's canonical identity docs.
@@ -526,15 +539,30 @@ Required file intent and boundaries:
   - `Setup` writes the baseline
   - `Status` verifies the result
 - The pet-local workspace will become the offline-mode read source for personality and identity files.
+- `11b` no longer assumes the virtual-pet app can mutate the OpenClaw workspace directly.
 
 ## Acceptance Notes
-- Spec-only session on `2026-03-04`.
-- No operator demo run yet.
-- No runtime code or GUI behavior changed in this spec pass.
+- Spec and first runtime slice both landed on `2026-03-04`.
+- First runtime implementation slice now exists and automated checks are green.
+- Operator feedback exposed one contract issue: the first build incorrectly attempted to write into the configured OpenClaw workspace and hit `EPERM` on a `\\\\wsl$\\...` root.
+- Post-iteration automated verification re-passed after the local-only write fix:
+  - `npm run check:syntax`
+  - `npm run check:contracts`
+  - `npm run check:acceptance`
+- Operator acceptance passed:
+  - tray `Setup...` and fallback `F11` reused the shared shell window correctly
+  - preview/apply completed successfully against the pet-local workspace
+  - no direct OpenClaw workspace write attempt was observed in the runtime logs
+  - `Status` verification remained coherent after apply
 - This spec pass added OpenClaw-first file-content boundaries plus `STYLE.md` / `HEARTBEAT.md` rules before implementation.
 - Preset starter content now lives in a companion draft with deterministic file skeletons and encoding-safe symbolic emoji defaults.
 - The four starter voices have now been reviewed and tuned to sharpen bundle-to-bundle differentiation before implementation.
 - The preset draft now includes quick-picker guidance and a freeze recommendation, so `11b` no longer needs more preset editorial work before runtime implementation starts.
+- Current iteration rule:
+  - `11b` writes only to the pet-local workspace
+  - configured OpenClaw roots are status/observation targets only until a later ingestion/sync slice exists
+- Closeout note:
+  - the generated local bootstrap Markdown files are now intentionally ignored in the repo's `.gitignore`
 
 ## Iteration Log
 - `2026-03-04`: Initial `11b` spec created and grounded against D05a path/bootstrap rules, D05 memory governance, D07c shared shell behavior, `11a` observability, and the current shell-window runtime.
@@ -543,12 +571,16 @@ Required file intent and boundaries:
 - `2026-03-04`: Tightened the companion preset drafts with deterministic file skeletons, four concrete starter bundles, and ASCII-safe symbolic emoji defaults so implementation can render managed blocks without inventing content structure.
 - `2026-03-04`: Reviewed and tuned the four starter voices so `gentle`, `playful`, `bookish`, and `bright` are easier to distinguish during setup preview and later runtime behavior.
 - `2026-03-04`: Added quick-picker guidance and a freeze recommendation to the preset draft so `11b` can move into implementation without further preset expansion.
+- `2026-03-04`: Shipped the first implementation slice: shared-shell `Setup` tab, tray/`F11` routing, deterministic preview/apply IPC, managed-block file writes, and automated `D11b` smoke coverage.
+- `2026-03-04`: Operator demo exposed a direct-write failure against the configured OpenClaw workspace (`EPERM` on `\\\\wsl$\\...\\MEMORY.md`). Re-scoped `11b` so setup writes only to the pet-local workspace and treats the OpenClaw root as observed/read-only.
+- `2026-03-04`: Re-ran `npm run check:syntax`, `npm run check:contracts`, and `npm run check:acceptance` after the local-only write fix; all passed and `Build Gate` remains passed while operator re-test is pending.
+- `2026-03-04`: Operator re-test passed. The shared-shell `Setup` flow completed without `EPERM`, local-only bootstrap writes worked, and the OpenClaw workspace remained read-only from the pet app's perspective.
 
 ## Gate Status
 - `Spec Gate`: `passed`
-- `Build Gate`: `not_started`
-- `Acceptance Gate`: `not_started`
-- `Overall`: `specifying`
+- `Build Gate`: `passed`
+- `Acceptance Gate`: `passed`
+- `Overall`: `accepted`
 
 ## Change Log
 - `2026-03-04`: File created from the post-v1 deliverable template and expanded into a spec-passed shared-shell setup/bootstrap slice.
@@ -557,3 +589,6 @@ Required file intent and boundaries:
 - `2026-03-04`: Refined the preset-content draft into implementation-grade starter copy with stable file skeletons and symbolic emoji defaults.
 - `2026-03-04`: Tuned the four starter voices to reduce overlap and make preset selection more legible.
 - `2026-03-04`: Froze the first four starter bundles for implementation and added chooser guidance to the companion preset draft.
+- `2026-03-04`: Implemented the first shared-shell `Setup` slice with preview/apply bootstrap flow and automated `D11b` smoke coverage.
+- `2026-03-04`: Updated the `11b` contract after operator feedback so setup writes only to the pet-local workspace; the OpenClaw workspace is now explicitly observed/read-only for this slice.
+- `2026-03-04`: Closed `11b` as accepted after operator-confirmed local-only setup writes, read-only OpenClaw observation, and coherent post-apply status verification.

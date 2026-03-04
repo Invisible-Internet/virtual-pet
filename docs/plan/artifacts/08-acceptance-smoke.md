@@ -1,8 +1,8 @@
 # D08 Acceptance Smoke Report
 
-- Generated: 2026-03-04T00:17:13.621Z
+- Generated: 2026-03-04T03:04:39.501Z
 - Runner: Codex automated smoke
-- Summary: 14/14 automated checks passed
+- Summary: 15/15 automated checks passed
 
 | ID | Deliverable | Status | Command | Evidence |
 | --- | --- | --- | --- | --- |
@@ -18,6 +18,7 @@
 | D07-state-runtime | 07-state-system-extension-guide | passed | `node scripts/check-state-runtime.js` | `[state-runtime] checks passed` |
 | D07b-dialog-runtime | 07b-dialog-surface-and-minimal-offline-loop | passed | `node scripts/check-dialog-runtime.js` | `[dialog] offline dialog checks passed` |
 | D11a-shell-observability | 11a-openclaw-memory-observability-surface | passed | `node scripts/check-shell-observability.js` | `[shell-observability] checks passed` |
+| D11b-setup-bootstrap | 11b-guided-pet-setup-and-markdown-bootstrap | passed | `node scripts/check-setup-bootstrap.js` | `[setup-bootstrap] checks passed` |
 | Layout-assets | core-renderer-assets | passed | `node scripts/check-layout.js` | `layout checks passed` |
 | Sprite-assets | core-renderer-assets | passed | `node scripts/check-assets.js` | `[assets] girl: manifest OK (7 states)
 [assets] checks passed` |

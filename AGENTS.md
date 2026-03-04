@@ -124,15 +124,15 @@ Historical v1 deliverables keep their original status wording and are not retrof
 - `accepted` is the only terminal state for future post-v1 deliverables.
 
 ### Current Workflow Snapshot
-- Current Deliverable: `11b-guided-pet-setup-and-markdown-bootstrap`
-- Workflow State: `active`
-- Current Status: `specifying`
-- Last Completed Deliverable: `11a-openclaw-memory-observability-surface`
-- Next Detailed Target: `11b-guided-pet-setup-and-markdown-bootstrap`
+- Current Deliverable: `none`
+- Workflow State: `idle`
+- Current Status: `accepted`
+- Last Completed Deliverable: `11b-guided-pet-setup-and-markdown-bootstrap`
+- Next Detailed Target: `11c-repair-actions-and-provenance-visibility`
 - Current Gate State:
-  - `Spec Gate`: `passed`
-  - `Build Gate`: `not_started`
-  - `Acceptance Gate`: `not_started`
+  - `Spec Gate`: `n/a`
+  - `Build Gate`: `n/a`
+  - `Acceptance Gate`: `n/a`
 - Historical Note:
   - D01-D10 are complete historical v1 records.
   - Detailed v1 session history lives in `docs/plan/archive/00-progress-tracker-v1-history.md`.
@@ -147,14 +147,30 @@ Historical v1 deliverables keep their original status wording and are not retrof
   - `Setup` must collect the minimum pet profile fields, preview Markdown before any write, and apply only through an explicit operator action.
   - Managed setup blocks must update `SOUL.md`, `STYLE.md`, `IDENTITY.md`, `USER.md`, and `MEMORY.md` without rewriting unrelated Markdown.
   - `STYLE.md` is a first-class project-managed file but not a documented default OpenClaw bootstrap file; keep it single-sourced and do not duplicate its contents into `SOUL.md`.
-  - Pet-local workspace is the offline-mode read source; OpenClaw workspace is the explicit agent-facing mirror target when configured.
+  - Pet-local workspace is the offline-mode read source and the only direct `11b` write target.
+  - OpenClaw workspace is an observed/read-only agent-facing context target in `11b`; do not write to it from the pet app.
   - `HEARTBEAT.md` may be seeded only as an effectively empty/comment-only file in `11b`; proactive automation content belongs to a later slice.
   - Starter content bundles now live in `docs/plan/11b-preset-content-drafts.md` and are the current source for `11b` preset copy.
   - The preset-content draft now locks deterministic file skeletons plus ASCII-safe symbolic emoji defaults so implementation does not have to invent Markdown structure or fight encoding issues.
   - The four starter voices have been tuned for clearer separation: `gentle` is soothing, `playful` is impish, `bookish` is reflective, and `bright` is action-forward.
   - The four starter bundles are now frozen for first implementation; use the quick-picker guidance in `docs/plan/11b-preset-content-drafts.md` and do not add more starter bundles before shipping `11b`.
-  - OpenClaw dual-target bootstrap must stay explicit and non-destructive by default, following D05a / ADR-0015 rules.
-  - Shipped outcome (this session): no visible app change; `11b` is now spec-passed with a locked local-vs-OpenClaw file topology, a single-sourced `STYLE.md` contract, and frozen starter preset voices.
+  - First implementation slice is now present:
+    - shared shell window supports `Inventory`, `Status`, and `Setup`
+    - tray `Setup...` and fallback `F11` route to the shared shell window on the `Setup` tab
+    - preview/apply uses `setup-bootstrap.js` for target-policy resolution, preset generation, and managed-block writes
+    - shell canonical file health now includes `STYLE.md`
+    - automated smoke row `D11b-setup-bootstrap` is passing
+  - Operator feedback changed the active `11b` contract:
+    - the initial build attempted to write into the configured OpenClaw workspace and hit `EPERM`
+    - `11b` now iterates on a local-only write policy while leaving the OpenClaw workspace observed/read-only
+  - Post-iteration verification:
+    - `npm run check:syntax`
+    - `npm run check:contracts`
+    - `npm run check:acceptance` -> `15/15 automated checks passed`
+  - Operator acceptance:
+    - shared-shell `Setup` routing, preview/apply, and post-apply `Status` verification all passed in-app
+    - no direct OpenClaw workspace write attempt was observed during the accepted run
+  - Shipped outcome (this session): visible app/runtime change accepted; `11b` now has a working shared-shell `Setup` tab, explicit bootstrap preview/apply flow, a local-only write boundary, and repo-local bootstrap Markdown ignored by default.
 
 ### Post-v1 Roadmap Snapshot
 - Rough-in doc: `docs/plan/11-15-post-v1-roadmap-rough-in.md`
@@ -166,7 +182,8 @@ Historical v1 deliverables keep their original status wording and are not retrof
   - `15` Extension Showcase
 - Planning rule:
   - `11` now has an accepted baseline through `11a`.
-  - `11b-guided-pet-setup-and-markdown-bootstrap` is the current active deliverable unless the user explicitly reprioritizes.
+  - `11b-guided-pet-setup-and-markdown-bootstrap` is accepted and closed.
+  - `11c-repair-actions-and-provenance-visibility` is the next likely slice unless the user explicitly reprioritizes.
   - `12` through `15` remain rough placeholders and must not be treated as spec-passed deliverables yet.
 
 ### Session-End Sync Rule

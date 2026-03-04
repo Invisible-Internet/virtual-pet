@@ -160,6 +160,7 @@ const DIALOG_TALK_FEEDBACK_MS = 2600;
 const SHELL_ACTIONS = Object.freeze({
   openInventory: "open-inventory",
   openStatus: "open-status",
+  openSetup: "open-setup",
   roamDesktop: "roam-desktop",
   roamZone: "roam-zone",
   toggleDiagnostics: "toggle-diagnostics",
@@ -198,7 +199,7 @@ const DEFAULT_SHELL_STATE = Object.freeze({
   }),
   devFallback: Object.freeze({
     enabled: true,
-    hotkeys: Object.freeze(["F6", "F7", "F8", "F9", "F10"]),
+    hotkeys: Object.freeze(["F6", "F7", "F8", "F9", "F10", "F11"]),
   }),
 });
 const TAIL_STYLES = Object.freeze({
@@ -1125,6 +1126,11 @@ function onMovementKeyDown(event) {
     }
     if (key === "f10") {
       void runShellAction(SHELL_ACTIONS.openStatus);
+      event.preventDefault();
+      return;
+    }
+    if (key === "f11") {
+      void runShellAction(SHELL_ACTIONS.openSetup);
       event.preventDefault();
       return;
     }

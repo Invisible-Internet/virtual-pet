@@ -19,21 +19,22 @@ Locked ordering:
 
 Planning status:
 - `11a` is accepted and now serves as the observability baseline for the family.
-- `11b` is now the active spec-passed slice in family `11`.
+- `11b` is accepted and now serves as the setup/bootstrap baseline for family `11`.
+- There is currently no active post-v1 deliverable.
 - `12` through `15` are intentionally rough placeholders and are not implementation-ready yet.
 - All future work follows the post-v1 workflow in [`00-development-workflow.md`](./00-development-workflow.md).
 
 ## Locked Assumptions
 - `11a` is observability-first.
 - Markdown remains canonical for personality and identity.
-- Future guided setup writes synchronized canonical Markdown to both the pet-local workspace and the OpenClaw-facing workspace.
+- Guided setup in `11b` writes canonical Markdown only to the pet-local workspace and treats the OpenClaw-facing workspace as observed/read-only.
 - Any OpenClaw-to-pet action lane uses guarded requests only; the app remains authoritative.
 - Existing v1 deliverables remain historical records and are not retrofitted.
 
 ## Family Index
 | Family | Theme | Why It Exists | Current Planning State |
 | --- | --- | --- | --- |
-| `11` | Observability / Setup / Provenance | Make the current OpenClaw, model, memory, and fallback setup visible and understandable inside the app. | `11a` accepted; `11b` active |
+| `11` | Observability / Setup / Provenance | Make the current OpenClaw, model, memory, and fallback setup visible and understandable inside the app. | `11a` and `11b` accepted; `11c` next likely |
 | `12` | Conversation / Bridge | Make pet chat feel like real OpenClaw conversation, not narrow status/introspection. | Rough only |
 | `13` | Memory / Persona Continuity | Make online and offline feel like the same pet with recall and stable personality. | Rough only |
 | `14` | Embodiment / Autonomy | Make the pet move and react more deliberately, unobtrusively, and believably. | Rough only |
@@ -90,16 +91,14 @@ The user can open one visible diagnostics/setup surface and immediately understa
 - No memory-behavior rewrite.
 
 ### `11b` Rough Intent
-Add a guided Pet Setup flow that collects the minimum identity/profile inputs once and writes synchronized Markdown to:
-- the pet-local workspace
-- the OpenClaw-facing workspace
+Add a guided Pet Setup flow that collects the minimum identity/profile inputs once, writes canonical Markdown to the pet-local workspace, and surfaces the configured OpenClaw workspace as an observed/read-only context target.
 
 ### `11b` Rough Demo Anchor
 1. Open setup.
 2. Enter pet name, birthday, and baseline identity/personality choices.
-3. Confirm the app writes canonical Markdown to both configured targets.
+3. Confirm the app writes canonical Markdown only to the pet-local workspace.
 4. Re-open the observability surface.
-5. Confirm both targets now read healthy and synchronized.
+5. Confirm the local target reads healthy and the OpenClaw target remains informational/observed.
 
 ### `11c` Rough Intent
 Expose repair actions and provenance so the user can see why the system believes what it believes.
@@ -340,7 +339,7 @@ These are roadmap placeholders, not final contracts.
 2. Read [`00-progress-tracker.md`](./00-progress-tracker.md).
 3. Read [`10-local-brain-and-personality-feasibility.md`](./10-local-brain-and-personality-feasibility.md).
 4. Use this roadmap rough-in to confirm the locked family order and assumptions.
-5. Start detailed planning with `11b-guided-pet-setup-and-markdown-bootstrap` unless the user reprioritizes another slice.
+5. Start detailed planning with `11c-repair-actions-and-provenance-visibility` unless the user reprioritizes another slice.
 6. Do not start coding until the chosen deliverable spec passes `Spec Gate`.
 
 ## Test And Demo Anchors To Preserve
@@ -381,5 +380,6 @@ These are the minimum user-visible anchors we should remember when detailed plan
 - `14` follows `13`.
 - `15` follows `14`.
 - `11a` is the accepted first post-v1 implementation target and baseline for family `11`.
-- `11b` is the current active implementation target unless the user reprioritizes.
+- `11b` is the accepted setup/bootstrap baseline for family `11`.
+- `11c` is the next likely planning target unless the user reprioritizes.
 - `12` through `15` are roadmap placeholders only until future detailed planning sessions lock their slice-level specs.

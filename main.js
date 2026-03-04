@@ -68,6 +68,11 @@ const {
   normalizeShellWindowTab,
   resolveShellWindowTabForAction,
 } = require("./shell-observability");
+const {
+  buildSetupBootstrapSnapshot,
+  previewSetupBootstrap,
+  applySetupBootstrap,
+} = require("./setup-bootstrap");
 
 // Master diagnostics toggle: controls console logs, file logs, and renderer overlay.
 let DIAGNOSTICS_ENABLED = false;
@@ -212,6 +217,7 @@ const CAPABILITY_TEST_FLAGS = Object.freeze({
 const SHELL_ACTIONS = Object.freeze({
   openInventory: "open-inventory",
   openStatus: "open-status",
+  openSetup: "open-setup",
   roamDesktop: "roam-desktop",
   roamZone: "roam-zone",
   selectRoamZone: "select-roam-zone",
@@ -1695,7 +1701,7 @@ function buildShellStateSnapshot() {
     },
     devFallback: {
       enabled: !trayAvailable,
-      hotkeys: ["F6", "F7", "F8", "F9", "F10"],
+      hotkeys: ["F6", "F7", "F8", "F9", "F10", "F11"],
     },
   };
 }
@@ -1741,6 +1747,14 @@ function buildCurrentObservabilitySnapshot() {
     validationErrors: runtimeSettingsValidationErrors,
     resolvedPaths: runtimeSettingsResolvedPaths,
     trayAvailable: Boolean(shellTray),
+    ts: Date.now(),
+  });
+}
+
+function buildCurrentSetupBootstrapSnapshot() {
+  return buildSetupBootstrapSnapshot({
+    settingsSummary: buildRuntimeSettingsSummary(),
+    resolvedPaths: runtimeSettingsResolvedPaths,
     ts: Date.now(),
   });
 }
@@ -2887,6 +2901,10 @@ function openStatusWindow() {
   return openInventoryWindow(SHELL_WINDOW_TABS.status);
 }
 
+function openSetupWindow() {
+  return openInventoryWindow(SHELL_WINDOW_TABS.setup);
+}
+
 function closeZoneSelectorWindow() {
   if (!zoneSelectorWin || zoneSelectorWin.isDestroyed()) {
     zoneSelectorWin = null;
@@ -3069,6 +3087,12 @@ function refreshShellTrayMenu() {
         void runShellAction(SHELL_ACTIONS.openStatus);
       },
     },
+    {
+      label: "Setup...",
+      click: () => {
+        void runShellAction(SHELL_ACTIONS.openSetup);
+      },
+    },
     { type: "separator" },
     {
       label: "Roam",
@@ -3176,6 +3200,9 @@ async function runShellAction(actionId) {
       snapshot = emitShellState(buildShellStateSnapshot());
     } else if (actionId === SHELL_ACTIONS.openStatus) {
       openStatusWindow();
+      snapshot = emitShellState(buildShellStateSnapshot());
+    } else if (actionId === SHELL_ACTIONS.openSetup) {
+      openSetupWindow();
       snapshot = emitShellState(buildShellStateSnapshot());
     } else if (actionId === SHELL_ACTIONS.roamDesktop) {
       snapshot = applyRuntimeSettingsPatch(
@@ -5256,6 +5283,29 @@ ipcMain.handle("pet:getShellState", () => {
 
 ipcMain.handle("pet:getObservabilitySnapshot", () => {
   return buildCurrentObservabilitySnapshot();
+});
+
+ipcMain.handle("pet:getSetupBootstrapSnapshot", () => {
+  return buildCurrentSetupBootstrapSnapshot();
+});
+
+ipcMain.handle("pet:previewSetupBootstrap", (_event, payload) => {
+  return previewSetupBootstrap({
+    input: payload?.input,
+    settingsSummary: buildRuntimeSettingsSummary(),
+    resolvedPaths: runtimeSettingsResolvedPaths,
+    ts: Date.now(),
+  });
+});
+
+ipcMain.handle("pet:applySetupBootstrap", async (_event, payload) => {
+  const result = await applySetupBootstrap({
+    input: payload?.input,
+    settingsSummary: buildRuntimeSettingsSummary(),
+    resolvedPaths: runtimeSettingsResolvedPaths,
+    ts: Date.now(),
+  });
+  return result;
 });
 
 ipcMain.handle("pet:runShellAction", (_event, payload) => {

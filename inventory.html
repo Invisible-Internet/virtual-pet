@@ -488,6 +488,207 @@
       .tab-panel.is-active {
         display: grid;
       }
+
+      .setup-grid {
+        display: grid;
+        gap: 16px;
+      }
+
+      .setup-target-grid,
+      .setup-form-grid,
+      .setup-preview-grid,
+      .setup-preset-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 12px;
+      }
+
+      .setup-card {
+        display: grid;
+        gap: 10px;
+        min-height: 0;
+        padding: 14px;
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        background: linear-gradient(180deg, rgba(17, 26, 37, 0.88), rgba(9, 14, 20, 0.96));
+      }
+
+      .setup-card h3,
+      .setup-card h4 {
+        margin: 0;
+      }
+
+      .setup-card-copy {
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.45;
+      }
+
+      .setup-field {
+        display: grid;
+        gap: 6px;
+      }
+
+      .setup-label {
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .setup-input,
+      .setup-select,
+      .setup-textarea {
+        width: 100%;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.05);
+        color: var(--text);
+        font: inherit;
+      }
+
+      .setup-input,
+      .setup-select {
+        min-height: 42px;
+        padding: 0 12px;
+      }
+
+      .setup-textarea {
+        min-height: 108px;
+        padding: 10px 12px;
+        resize: vertical;
+      }
+
+      .setup-checkbox {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        color: var(--text);
+        font-size: 13px;
+      }
+
+      .setup-card-button {
+        display: grid;
+        gap: 6px;
+        width: 100%;
+        padding: 14px;
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        background: rgba(255, 255, 255, 0.04);
+        color: var(--text);
+        text-align: left;
+        cursor: pointer;
+      }
+
+      .setup-card-button.is-active {
+        border-color: rgba(125, 214, 255, 0.5);
+        background: rgba(125, 214, 255, 0.12);
+        box-shadow: inset 0 0 0 1px rgba(125, 214, 255, 0.18);
+      }
+
+      .setup-card-button-copy {
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.45;
+      }
+
+      .setup-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+
+      .setup-action-button {
+        min-height: 40px;
+        padding: 0 16px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.08);
+        color: var(--text);
+        font: inherit;
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        cursor: pointer;
+      }
+
+      .setup-action-button:disabled {
+        cursor: default;
+        opacity: 0.45;
+      }
+
+      .preview-tab-strip {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .preview-tab-button {
+        min-height: 34px;
+        padding: 0 12px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.04);
+        color: var(--muted);
+        font: inherit;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        cursor: pointer;
+      }
+
+      .preview-tab-button.is-active {
+        border-color: rgba(125, 214, 255, 0.5);
+        background: rgba(125, 214, 255, 0.16);
+        color: var(--accent-strong);
+      }
+
+      .preview-pane {
+        min-height: 260px;
+        padding: 14px;
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        background: rgba(5, 9, 14, 0.9);
+      }
+
+      .preview-copy {
+        margin: 0 0 10px;
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.45;
+      }
+
+      .preview-code {
+        margin: 0;
+        color: var(--text);
+        font-family: Consolas, "Courier New", monospace;
+        font-size: 12px;
+        line-height: 1.55;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+
+      .result-banner {
+        min-height: 44px;
+        padding: 10px 12px;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: rgba(6, 10, 16, 0.52);
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.45;
+      }
+
+      .result-banner[data-tone="ok"] {
+        color: var(--ok);
+      }
+
+      .result-banner[data-tone="warning"] {
+        color: var(--warning);
+      }
     </style>
   </head>
   <body>
@@ -529,6 +730,9 @@
         </button>
         <button id="tab-status" class="tab-button" type="button" aria-pressed="false">
           Status
+        </button>
+        <button id="tab-setup" class="tab-button" type="button" aria-pressed="false">
+          Setup
         </button>
       </nav>
 
@@ -670,6 +874,114 @@
               <p>Canonical Markdown presence, configured roots, and settings sources.</p>
             </div>
             <div id="observability-config-rows" class="settings-grid"></div>
+          </section>
+        </section>
+
+        <section id="tab-panel-setup" class="tab-panel" aria-live="polite">
+          <section class="setup-grid">
+            <section class="section">
+              <div class="section-header">
+                <h2>Targets</h2>
+                <p>See where setup will write and whether local-only or dual-target apply is available.</p>
+              </div>
+              <div id="setup-targets" class="setup-target-grid"></div>
+            </section>
+
+            <section class="section">
+              <div class="section-header">
+                <h2>Profile</h2>
+                <p>Enter the minimum facts needed to bootstrap the pet's canonical Markdown files.</p>
+              </div>
+              <div class="setup-card">
+                <div id="setup-required-fields" class="setup-form-grid">
+                  <label class="setup-field">
+                    <span class="setup-label">Pet Name</span>
+                    <input id="setup-pet-name" class="setup-input" type="text" autocomplete="off" />
+                  </label>
+                  <label class="setup-field">
+                    <span class="setup-label">Birthday</span>
+                    <input id="setup-birthday" class="setup-input" type="text" autocomplete="off" />
+                  </label>
+                  <label class="setup-field">
+                    <span class="setup-label">Companion Name</span>
+                    <input id="setup-companion-name" class="setup-input" type="text" autocomplete="off" />
+                  </label>
+                  <label class="setup-field">
+                    <span class="setup-label">Companion Timezone</span>
+                    <input id="setup-companion-timezone" class="setup-input" type="text" autocomplete="off" />
+                  </label>
+                </div>
+                <label class="setup-field">
+                  <span class="setup-label">Starter Note</span>
+                  <textarea id="setup-starter-note" class="setup-textarea"></textarea>
+                </label>
+              </div>
+            </section>
+
+            <section class="section">
+              <div class="section-header">
+                <h2>Preset</h2>
+                <p>Select one frozen starter personality bundle for the first bootstrap pass.</p>
+              </div>
+              <div id="setup-presets" class="setup-preset-grid"></div>
+            </section>
+
+            <section class="section">
+              <div class="section-header">
+                <h2>Advanced</h2>
+                <p>Optional identity and relationship fields. Leave blank to use preset defaults where allowed.</p>
+              </div>
+              <div class="setup-card">
+                <div class="setup-form-grid">
+                  <label class="setup-field">
+                    <span class="setup-label">Companion Call Name</span>
+                    <input id="setup-companion-call-name" class="setup-input" type="text" autocomplete="off" />
+                  </label>
+                  <label class="setup-field">
+                    <span class="setup-label">Companion Pronouns</span>
+                    <input id="setup-companion-pronouns" class="setup-input" type="text" autocomplete="off" />
+                  </label>
+                  <label class="setup-field">
+                    <span class="setup-label">Creature Label</span>
+                    <input id="setup-creature-label" class="setup-input" type="text" autocomplete="off" />
+                  </label>
+                  <label class="setup-field">
+                    <span class="setup-label">Signature Emoji</span>
+                    <input id="setup-signature-emoji" class="setup-input" type="text" autocomplete="off" />
+                  </label>
+                  <label class="setup-field">
+                    <span class="setup-label">Avatar Path</span>
+                    <input id="setup-avatar-path" class="setup-input" type="text" autocomplete="off" />
+                  </label>
+                </div>
+                <label class="setup-checkbox">
+                  <input id="setup-seed-heartbeat" type="checkbox" />
+                  <span>Seed an intentionally empty `HEARTBEAT.md` placeholder.</span>
+                </label>
+              </div>
+            </section>
+
+            <section class="section">
+              <div class="section-header">
+                <h2>Preview</h2>
+                <p>Preview the exact managed Markdown block for each file before any write happens.</p>
+              </div>
+              <div class="setup-card">
+                <div class="setup-actions">
+                  <button id="setup-reload-targets" class="setup-action-button" type="button">Reload Targets</button>
+                  <button id="setup-preview" class="setup-action-button" type="button">Preview</button>
+                  <button id="setup-apply" class="setup-action-button" type="button" disabled>Apply Setup</button>
+                </div>
+                <div id="setup-preview-tabs" class="preview-tab-strip"></div>
+                <div class="preview-pane">
+                  <p id="setup-preview-copy" class="preview-copy">
+                    Choose a preset and press Preview to generate the managed Markdown output.
+                  </p>
+                  <pre id="setup-preview-markdown" class="preview-code"></pre>
+                </div>
+                <div id="setup-result" class="result-banner">Setup preview has not been generated yet.</div>
+              </div>
+            </section>
           </section>
         </section>
       </section>

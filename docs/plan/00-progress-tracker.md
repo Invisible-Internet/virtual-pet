@@ -33,15 +33,15 @@ Historical v1 deliverables keep their original wording and remain archived histo
   - operator-visible demo passes and evidence is logged
 
 ## Current Deliverable
-- Current Deliverable: `11b-guided-pet-setup-and-markdown-bootstrap`
-- Workflow State: `active`
-- Current Status: `specifying`
-- Last Completed Deliverable: `11a-openclaw-memory-observability-surface`
-- Next Detailed Target: `11b-guided-pet-setup-and-markdown-bootstrap`
+- Current Deliverable: `none`
+- Workflow State: `idle`
+- Current Status: `accepted`
+- Last Completed Deliverable: `11b-guided-pet-setup-and-markdown-bootstrap`
+- Next Detailed Target: `11c-repair-actions-and-provenance-visibility`
 - Current Gate State:
-  - `Spec Gate`: `passed`
-  - `Build Gate`: `not_started`
-  - `Acceptance Gate`: `not_started`
+  - `Spec Gate`: `n/a`
+  - `Build Gate`: `n/a`
+  - `Acceptance Gate`: `n/a`
 
 ## Post-v1 Family Rough-In
 Locked family order:
@@ -53,7 +53,7 @@ Locked family order:
 
 Planning state:
 - `11` has an accepted baseline through `11a`.
-- `11b` is now the active post-v1 deliverable.
+- `11b` is now accepted and closed.
 - `12` through `15` remain rough placeholders and are not implementation-ready yet.
 - Full family notes live in [`11-15-post-v1-roadmap-rough-in.md`](./11-15-post-v1-roadmap-rough-in.md).
 
@@ -66,19 +66,19 @@ Planning state:
 6. Pass `Spec Gate` before implementation begins.
 
 ## Next 3 Actions
-1. Implement shared-shell `Setup` routing (`Setup...` tray entry, `Setup` tab, and `F11` fallback) without breaking the existing `Inventory` / `Status` paths.
-2. Build the managed Markdown preview/apply flow for `SOUL.md`, `STYLE.md`, `IDENTITY.md`, `USER.md`, and `MEMORY.md`, with optional comment-only `HEARTBEAT.md` seeding.
-3. Add deterministic checks for setup target-policy handling, managed-block replacement, local-vs-OpenClaw file topology, and single-sourced `STYLE.md` generation before operator demo.
+1. Decide whether to start/spec `11c-repair-actions-and-provenance-visibility` next or reprioritize another post-v1 slice.
+2. If `11c` stays next, lock the visible repair/provenance surface for local canonical files, OpenClaw observation, and setup-related diagnostics.
+3. Keep the local bootstrap Markdown files repo-local unless you intentionally decide to version them later.
 
 ## Blockers
-- None currently; `11b-guided-pet-setup-and-markdown-bootstrap` is spec-passed and ready for implementation when requested.
+- None currently; there is no active post-v1 deliverable.
 
 ## Last Session Summary
 - Created and spec-passed `11b-guided-pet-setup-and-markdown-bootstrap`:
   - locked the shared-shell `Setup` tab model with tray `Setup...` and `F11` fallback
-  - defined the target-policy rules for local-only vs dual-target bootstrap
+  - defined the initial target-policy rules for setup bootstrap before operator iteration tightened the write boundary
   - strengthened the file contract using official OpenClaw workspace/bootstrap docs
-  - locked a two-root model: pet-local workspace for offline mode and OpenClaw workspace as the agent-facing mirror
+  - locked a two-root model: pet-local workspace for offline mode and OpenClaw workspace as the observed agent-facing context root
   - kept `STYLE.md` as a single-sourced first-class managed file with no duplication into `SOUL.md`
   - kept `HEARTBEAT.md` as an optional effectively empty seed
   - drafted concrete starter bundles in [`11b-preset-content-drafts.md`](./11b-preset-content-drafts.md) for `gentle_companion`, `playful_friend`, `bookish_helper`, and `bright_sidekick`
@@ -88,8 +88,27 @@ Planning state:
   - added quick-picker guidance and explicitly froze the first four starter bundles so `11b` can move into implementation without more preset churn
   - defined managed Markdown block ownership for `SOUL.md`, `STYLE.md`, `IDENTITY.md`, `USER.md`, and `MEMORY.md`
   - grounded the slice against D05a bootstrap rules, D05 memory governance, D07c shell behavior, `11a` status verification, and the user-provided `STYLE.template.md`
+- First implementation slice for `11b` is now shipped:
+  - shared shell window now supports `Inventory`, `Status`, and `Setup`
+  - tray `Setup...` and fallback `F11` route to the shared shell window on the `Setup` tab
+  - `Setup` now shows target readiness, frozen preset choices, required/advanced fields, preview tabs, and explicit `Preview` / `Apply Setup` controls
+  - added `setup-bootstrap.js` for target-policy resolution, managed Markdown generation, and file apply rules
+  - explicit apply now writes managed blocks only into the pet-local `SOUL.md`, `STYLE.md`, `IDENTITY.md`, `USER.md`, `MEMORY.md`, and optional empty/comment-only `HEARTBEAT.md`
+  - extended shell observability so `STYLE.md` now participates in canonical file health
+  - added smoke row `D11b-setup-bootstrap` and updated the acceptance artifact to `15/15 automated checks passed`
+- Operator feedback and first iteration outcome:
+  - the initial `11b` build incorrectly attempted to write into the configured OpenClaw workspace and hit `EPERM` on a `\\\\wsl$\\...` path
+  - `11b` is now being iterated so setup writes only to the pet-local workspace and treats the OpenClaw workspace as observed/read-only
+  - post-iteration verification is green again:
+    - `npm run check:syntax`
+    - `npm run check:contracts`
+    - `npm run check:acceptance` -> `15/15 automated checks passed`
+- Final operator acceptance:
+  - the local-only setup flow completed successfully in-app
+  - the OpenClaw workspace remained read-only from the pet app's perspective
+  - `11b` is now closed as `accepted`
 - Historical note:
   - D10 closed the v1 roadmap as a doc-only research deliverable
   - detailed v1 session history is preserved in [`archive/00-progress-tracker-v1-history.md`](./archive/00-progress-tracker-v1-history.md)
 - Shipped outcome note for this session:
-  - no visible app change; this session froze `11b`'s first four starter personalities and added chooser guidance so setup implementation can proceed without more preset editorial churn
+  - visible app/runtime change accepted; `11b` now ships a working shared-shell `Setup` flow with local-only bootstrap writes, read-only OpenClaw observation, and ignored local bootstrap Markdown files

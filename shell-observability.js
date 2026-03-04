@@ -4,7 +4,7 @@ const fs = require("fs");
 const path = require("path");
 const { BRIDGE_TRANSPORTS, isLoopbackUrl } = require("./openclaw-bridge");
 
-const CANONICAL_FILE_IDS = Object.freeze(["SOUL.md", "IDENTITY.md", "USER.md", "MEMORY.md"]);
+const CANONICAL_FILE_IDS = Object.freeze(["SOUL.md", "STYLE.md", "IDENTITY.md", "USER.md", "MEMORY.md"]);
 const OBSERVABILITY_ROW_STATES = Object.freeze({
   healthy: "healthy",
   degraded: "degraded",
@@ -15,6 +15,7 @@ const OBSERVABILITY_ROW_STATES = Object.freeze({
 const SHELL_WINDOW_TABS = Object.freeze({
   inventory: "inventory",
   status: "status",
+  setup: "setup",
 });
 
 function toOptionalString(value, fallback = null) {
@@ -25,15 +26,22 @@ function toOptionalString(value, fallback = null) {
 
 function normalizeShellWindowTab(value, fallback = SHELL_WINDOW_TABS.inventory) {
   const normalized = toOptionalString(value, fallback);
-  return normalized === SHELL_WINDOW_TABS.status
-    ? SHELL_WINDOW_TABS.status
-    : SHELL_WINDOW_TABS.inventory;
+  if (normalized === SHELL_WINDOW_TABS.status) {
+    return SHELL_WINDOW_TABS.status;
+  }
+  if (normalized === SHELL_WINDOW_TABS.setup) {
+    return SHELL_WINDOW_TABS.setup;
+  }
+  return SHELL_WINDOW_TABS.inventory;
 }
 
 function resolveShellWindowTabForAction(actionId, fallback = SHELL_WINDOW_TABS.inventory) {
   const normalizedActionId = toOptionalString(actionId, "");
   if (normalizedActionId === "open-status") {
     return SHELL_WINDOW_TABS.status;
+  }
+  if (normalizedActionId === "open-setup") {
+    return SHELL_WINDOW_TABS.setup;
   }
   if (normalizedActionId === "open-inventory") {
     return SHELL_WINDOW_TABS.inventory;

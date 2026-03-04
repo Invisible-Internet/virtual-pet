@@ -69,6 +69,7 @@ Define the acceptance and regression matrix for the shipped runtime, then tie th
 | `D07c-FAIL` | `manual` | Tray path is unavailable or roam zone changes mid-session. | Dev fallback remains usable, settings persist, and custom zone / cross-monitor roam behavior remains non-fatal. | Tray fallback behavior and D07c operator evidence. |
 | `D08-ACC` | `auto + manual` | Acceptance suite produces executed evidence instead of a placeholder checklist. | `npm run check:acceptance` writes a report artifact and D08 maps manual visible rows to concrete evidence links. | [`artifacts/08-acceptance-smoke.md`](./artifacts/08-acceptance-smoke.md) and this file. |
 | `D11a-ACC` | `auto + manual` | Shared shell `Status` tab exposes the observability rows without creating a second popup. | `Inventory...`, `Status...`, and `F10` route to the same shell window, required rows render, and the snapshot builder remains deterministic across healthy/degraded cases. | Shared shell window plus smoke row `D11a-shell-observability`. |
+| `D11b-ACC` | `auto + manual` | Shared shell `Setup` tab previews and explicitly applies canonical Markdown bootstrap without creating a second popup. | `Setup...` and `F11` route to the shared shell window, local-write/apply-mode logic stays deterministic, the OpenClaw target remains observed/read-only, and managed Markdown blocks preview cleanly. | Shared shell window plus smoke row `D11b-setup-bootstrap`. |
 | `D08-FAIL` | `auto + manual` | A smoke or manual row fails during consolidation. | Failure is surfaced with row ID, evidence, and blocker note; D08 remains below `done`. | Acceptance artifact failure row or tracker blocker note. |
 
 ## Required Visible Target Coverage
@@ -99,6 +100,7 @@ Define the acceptance and regression matrix for the shipped runtime, then tie th
 | D07b visible input + bubble + non-blocking talk feedback | `D07b-ACC`, D07b operator evidence |
 | D07c shell/settings toggles without restart | `D07c-ACC`, D07c operator evidence |
 | D11a shared shell `Status` tab and observability rows | `D11a-ACC`, smoke row `D11a-shell-observability` |
+| D11b shared shell `Setup` tab, target-policy summary, and managed Markdown bootstrap preview/apply | `D11b-ACC`, smoke row `D11b-setup-bootstrap` |
 
 ## Extension Visible Target Coverage
 | Target | Covered By |
@@ -140,6 +142,7 @@ Define the acceptance and regression matrix for the shipped runtime, then tie th
 | `2026-03-03` | `D07-ACC`, `D07-FAIL` | `passed` | `Codex automated smoke` | Smoke row `D07-state-runtime` -> `[state-runtime] checks passed`. |
 | `2026-03-03` | `D07b-FAIL` offline dialog fallback | `passed` | `Codex automated smoke` | Smoke row `D07b-dialog-runtime` -> `[dialog] offline dialog checks passed`. |
 | `2026-03-04` | `D11a-ACC` automated builder/tab-routing coverage | `passed` | `Codex automated smoke` | Smoke row `D11a-shell-observability` -> `[shell-observability] checks passed`. |
+| `2026-03-04` | `D11b-ACC` automated setup preview/apply coverage | `passed` | `Codex automated smoke` | Smoke row `D11b-setup-bootstrap` -> `[setup-bootstrap] checks passed`. |
 | `2026-03-03` | renderer/layout regression backing D07/D07c | `passed` | `Codex automated smoke` | Smoke rows `Layout-assets` and `Sprite-assets`. |
 
 ### Current Manual Retest Status
@@ -149,6 +152,7 @@ Define the acceptance and regression matrix for the shipped runtime, then tie th
 | `2026-03-03` | step `2` operator re-test after first roam fix | `failed` | `operator` | Operator confirmed smoother roam motion plus correct `zone -> desktop` fallback after manual drag/fling escape, but found a remaining step `2` issue: toggling `desktop -> zone` while a roam leg is already in flight can still cause the pet to pop back to the zone on the next loop instead of traveling there. Console output was captured from `npm start`. |
 | `2026-03-03` | step `2` second follow-up fix | `pending_retest` | `Codex` | Forced roam-mode sync now cancels stale in-flight roam legs, clears stale queued destinations, and queues a desktop-bounded zone-entry leg before zone roaming resumes. This should prevent the mid-travel `desktop -> zone` toggle from snapping instantly to the zone edge. Awaiting operator re-test. |
 | `2026-03-03` | steps `2-7` final manual visible sweep | `passed` | `operator` | Operator confirmed the full D08 manual visible sweep passed after the roam follow-up fixes: drag/fling stayed fixed-size and responsive, `zone <-> desktop` transitions traveled correctly, D07 hotkeys/fallback states worked, dialog/bubble/talk feedback worked, proactive output respected cooldown, and tray/fallback shell toggles worked without restart. Console output was captured from `npm start`. |
+| `2026-03-04` | `D11b-ACC` | `passed` | `operator` | Operator confirmed the shared-shell `Setup` flow passed after the local-only write fix: `Setup...`/`F11` routing worked, preview/apply completed successfully, local canonical files were written, and no direct OpenClaw workspace write attempt appeared in the runtime output. |
 
 ### Prior Operator-Visible Rows Reused By D08
 | Date | Row IDs | Result | Runner | Evidence |
@@ -165,7 +169,7 @@ Define the acceptance and regression matrix for the shipped runtime, then tie th
 ## Repeatable Run Path
 ### Automated
 1. Run `npm run check:acceptance`.
-2. Confirm the console summary ends with `14/14 automated checks passed`.
+2. Confirm the console summary ends with `15/15 automated checks passed`.
 3. Confirm the artifact files were updated:
    - [`artifacts/08-acceptance-smoke.md`](./artifacts/08-acceptance-smoke.md)
    - [`artifacts/08-acceptance-smoke.json`](./artifacts/08-acceptance-smoke.json)
@@ -216,6 +220,7 @@ Define the acceptance and regression matrix for the shipped runtime, then tie th
 - `2026-03-02`: Expanded dependencies and visible-test coverage to include D07b and D07c, plus explicit executed-row requirements for the split Phase 3 deliverables.
 - `2026-03-03`: Added the D08 acceptance runner (`npm run check:acceptance`), new deterministic capability/extension/invariant checks, automated smoke artifacts, a full acceptance matrix, and executed evidence links for both automated and prior operator-visible passes. `Doc Gate` and `Implementation Gate` are now `passed`; deliverable moves to `review`.
 - `2026-03-04`: Extended the automated smoke runner with `D11a-shell-observability` so shared-shell tab routing and observability snapshot rows now contribute to the acceptance artifact (`14/14 automated checks passed`).
+- `2026-03-04`: Added `D11b-setup-bootstrap` so the shared-shell setup snapshot/apply-mode logic, managed Markdown preview output, and block-replacement rules now contribute to the acceptance artifact (`15/15 automated checks passed`).
 - `2026-03-03`: Operator D08 step `2` exposed a roam follow-up issue: leaving a custom zone via manual drag/fling could later pull the pet back unexpectedly, walk-speed travel could feel jerky, and roam animation direction could drift from actual motion. Applied a follow-up runtime patch; manual re-test is still required before D08 can close.
 - `2026-03-03`: Operator re-test confirmed the first roam fix improved smoothing and `zone -> desktop` fallback, but exposed one remaining step `2` issue: toggling `desktop -> zone` mid-travel could still snap the pet back to the zone edge on the next loop. Applied a second runtime patch so forced roam-mode transitions rebuild a safe zone-entry leg instead of resuming with stale motion state. Manual re-test is still required before D08 can close.
 - `2026-03-03`: Operator completed the full D08 manual visible sweep successfully after the roam follow-up fixes. D08 is now closed as `done`.

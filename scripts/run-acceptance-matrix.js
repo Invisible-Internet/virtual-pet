@@ -82,6 +82,12 @@ const CASES = Object.freeze([
     script: "scripts/check-shell-observability.js",
   },
   {
+    id: "D11b-setup-bootstrap",
+    deliverable: "11b-guided-pet-setup-and-markdown-bootstrap",
+    scenario: "Setup local-write policy, observed OpenClaw target, managed Markdown preview, and block replacement stay deterministic.",
+    script: "scripts/check-setup-bootstrap.js",
+  },
+  {
     id: "Layout-assets",
     deliverable: "core-renderer-assets",
     scenario: "Layout bounds and required sprite assets remain internally consistent.",
