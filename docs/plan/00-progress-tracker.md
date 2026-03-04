@@ -33,16 +33,16 @@ Historical v1 deliverables keep their original wording and remain archived histo
   - operator-visible demo passes and evidence is logged
 
 ## Current Deliverable
-- Current Deliverable: `none`
-- Workflow State: `idle`
-- Current Status: `accepted`
+- Current Deliverable: `11d-settings-editor-and-service-controls`
+- Workflow State: `specifying`
+- Current Status: `specifying`
 - Last Completed Deliverable: `11c-repair-actions-and-provenance-visibility`
 - Next Detailed Target: `11d-settings-editor-and-service-controls`
-- Next Queued Target: `11d-settings-editor-and-service-controls`
+- Next Queued Target: `12a-real-openclaw-dialog-parity`
 - Current Gate State:
-  - `Spec Gate`: `n/a`
-  - `Build Gate`: `n/a`
-  - `Acceptance Gate`: `n/a`
+  - `Spec Gate`: `passed`
+  - `Build Gate`: `not_started`
+  - `Acceptance Gate`: `not_started`
 
 ## Post-v1 Family Rough-In
 Locked family order:
@@ -56,7 +56,7 @@ Planning state:
 - `11` has an accepted baseline through `11a`.
 - `11b` is now accepted and closed.
 - `11c` is now accepted and closed.
-- `11d-settings-editor-and-service-controls` is staged as the immediate next slice after `11c`.
+- `11d-settings-editor-and-service-controls` is now active in `specifying` with `Spec Gate=passed`.
 - `12` through `15` remain rough placeholders and are not implementation-ready yet.
 - Full family notes live in [`11-15-post-v1-roadmap-rough-in.md`](./11-15-post-v1-roadmap-rough-in.md).
 
@@ -69,14 +69,20 @@ Planning state:
 6. Pass `Spec Gate` before implementation begins.
 
 ## Next 3 Actions
-1. Move `11d-settings-editor-and-service-controls` from `queued` to `specifying`.
-2. Lock the `11d` write-safety contract for GUI settings editing and persistence boundaries.
-3. Define `11d` demo and failure/recovery scripts before implementation starts.
+1. Implement the first `11d` runtime/settings IPC lane (`get/apply`) with whitelist validation and explicit apply semantics.
+2. Add `Setup` `Advanced Settings` controls for the `11d` key set with provenance/effective-value visibility.
+3. Add deterministic `11d` coverage (`scripts/check-shell-settings-editor.js`) and wire a `D11d-settings-editor` row into the acceptance matrix.
 
 ## Blockers
-- None currently; `11c` is closed and `11d` is ready to enter `specifying`.
+- None currently; `11d` spec is locked and ready to enter implementation.
 
 ## Last Session Summary
+- Started `11d-settings-editor-and-service-controls` as the active deliverable and completed spec work:
+  - promoted `11d` from queued placeholder to a full spec using the post-v1 template contract
+  - locked the first-slice settings whitelist, blocked-key policy, and persistence/provenance behavior
+  - defined explicit operator demo and failure/recovery scripts
+  - locked first-slice character sizing settings contract and validation ranges
+  - passed `Spec Gate` for `11d` without starting implementation
 - Iterated Setup UX from operator feedback:
   - split setup questions into `User Profile` and `Pet Profile` so user/pet data is no longer mixed
   - renamed labels to clearer child-friendly wording (for example `Pet Birthday`, `What type of creature is pet?`)
@@ -163,4 +169,4 @@ Planning state:
   - D10 closed the v1 roadmap as a doc-only research deliverable
   - detailed v1 session history is preserved in [`archive/00-progress-tracker-v1-history.md`](./archive/00-progress-tracker-v1-history.md)
 - Shipped outcome note for this session:
-  - visible app/runtime change delivered and accepted; `11c` is closed with status detail/repair UX plus setup-form polish, and `11d` is now the next queued slice
+  - no visible app change; session delivered `11d` spec-only planning and gate updates before implementation

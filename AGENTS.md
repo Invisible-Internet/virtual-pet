@@ -124,19 +124,24 @@ Historical v1 deliverables keep their original status wording and are not retrof
 - `accepted` is the only terminal state for future post-v1 deliverables.
 
 ### Current Workflow Snapshot
-- Current Deliverable: `none`
-- Workflow State: `idle`
-- Current Status: `accepted`
+- Current Deliverable: `11d-settings-editor-and-service-controls`
+- Workflow State: `specifying`
+- Current Status: `specifying`
 - Last Completed Deliverable: `11c-repair-actions-and-provenance-visibility`
 - Next Detailed Target: `11d-settings-editor-and-service-controls`
-- Next Queued Target: `11d-settings-editor-and-service-controls`
+- Next Queued Target: `12a-real-openclaw-dialog-parity`
 - Current Gate State:
-  - `Spec Gate`: `n/a`
-  - `Build Gate`: `n/a`
-  - `Acceptance Gate`: `n/a`
+  - `Spec Gate`: `passed`
+  - `Build Gate`: `not_started`
+  - `Acceptance Gate`: `not_started`
 - Historical Note:
   - D01-D10 are complete historical v1 records.
   - Detailed v1 session history lives in `docs/plan/archive/00-progress-tracker-v1-history.md`.
+- Current `11d` spec outcome:
+  - Shared-shell `Setup` owns an `Advanced Settings` first slice for bounded settings edits.
+  - Write safety is locked to a whitelist with explicit blocked-key behavior and env-override visibility.
+  - `11d` demo and failure/recovery scripts are defined, and `Spec Gate` passed on `2026-03-04`.
+  - No implementation started yet; `Build Gate` remains `not_started`.
 - Last completed `11a` outcome:
   - Tray `Inventory...` and `Status...` open the same shared shell popup on different tabs.
   - `Inventory` preserves the D07c inventory UI; `Status` owns the `11a` observability rows.
@@ -194,7 +199,7 @@ Historical v1 deliverables keep their original status wording and are not retrof
 - Planning rule:
   - `11` now has accepted baselines through `11a` and `11b`.
   - `11c-repair-actions-and-provenance-visibility` is accepted and closed.
-  - `11d-settings-editor-and-service-controls` is staged as the next slice and should move to `specifying` next unless reprioritized.
+  - `11d-settings-editor-and-service-controls` is the active slice in `specifying` with `Spec Gate=passed`.
   - `12` through `15` remain rough placeholders and must not be treated as spec-passed deliverables yet.
 
 ### Session-End Sync Rule
