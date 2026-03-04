@@ -151,8 +151,10 @@ async function run() {
       birthday: "2026-03-05",
       companionName: "Mic",
       companionTimezone: "America/New_York",
+      userGender: "boy",
       starterNote: "Now likes rainy afternoons.",
       personaPresetId: "bright_sidekick",
+      petGender: "thing",
     },
     settingsSummary: {
       openclaw: { enabled: false },
@@ -169,6 +171,51 @@ async function run() {
   const updatedLocalSoul = fs.readFileSync(path.join(localRoot, "SOUL.md"), "utf8");
   assert(updatedLocalSoul.includes("Bring momentum."), "re-apply should replace the managed block content");
   assertEqual(updatedLocalSoul.split(MANAGED_BLOCK_START).length - 1, 1, "re-apply should keep a single managed block");
+  const updatedIdentity = fs.readFileSync(path.join(localRoot, "IDENTITY.md"), "utf8");
+  assert(updatedIdentity.includes("Pronouns: they/them/it"), "identity should include pet pronouns from pet gender");
+  const updatedUser = fs.readFileSync(path.join(localRoot, "USER.md"), "utf8");
+  assert(updatedUser.includes("Pronouns: he/him"), "user should include pronouns from user gender");
+
+  const recoveredDefaultsSnapshot = buildSetupBootstrapSnapshot({
+    settingsSummary: {
+      openclaw: { enabled: true },
+      paths: { localWorkspaceRoot: localRoot, openClawWorkspaceRoot: openClawRoot },
+    },
+    resolvedPaths: {
+      localRoot,
+      openClawRoot,
+    },
+  });
+  assertEqual(
+    recoveredDefaultsSnapshot.formDefaults.petName,
+    "Mochi",
+    "snapshot should recover pet name from managed files"
+  );
+  assertEqual(
+    recoveredDefaultsSnapshot.formDefaults.companionName,
+    "Mic",
+    "snapshot should recover companion name from managed files"
+  );
+  assertEqual(
+    recoveredDefaultsSnapshot.formDefaults.companionTimezone,
+    "America/New_York",
+    "snapshot should recover timezone from managed files"
+  );
+  assertEqual(
+    recoveredDefaultsSnapshot.formDefaults.personaPresetId,
+    "bright_sidekick",
+    "snapshot should infer preset from recovered values"
+  );
+  assertEqual(
+    recoveredDefaultsSnapshot.formDefaults.userGender,
+    "boy",
+    "snapshot should recover user gender from saved pronouns"
+  );
+  assertEqual(
+    recoveredDefaultsSnapshot.formDefaults.petGender,
+    "thing",
+    "snapshot should recover pet gender from saved pronouns"
+  );
 
   fs.rmSync(tempRoot, { recursive: true, force: true });
   console.log("[setup-bootstrap] checks passed");

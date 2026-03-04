@@ -3,6 +3,7 @@
 const fs = require("fs");
 const path = require("path");
 const { BRIDGE_TRANSPORTS, isLoopbackUrl } = require("./openclaw-bridge");
+const { MANAGED_BLOCK_START, MANAGED_BLOCK_END } = require("./setup-bootstrap");
 
 const CANONICAL_FILE_IDS = Object.freeze(["SOUL.md", "STYLE.md", "IDENTITY.md", "USER.md", "MEMORY.md"]);
 const OBSERVABILITY_ROW_STATES = Object.freeze({
@@ -16,6 +17,21 @@ const SHELL_WINDOW_TABS = Object.freeze({
   inventory: "inventory",
   status: "status",
   setup: "setup",
+});
+const OBSERVABILITY_SUBJECT_IDS = Object.freeze({
+  bridge: "bridge",
+  provider: "provider",
+  memory: "memory",
+  canonicalFiles: "canonicalFiles",
+  paths: "paths",
+  validation: "validation",
+});
+const DEFAULT_OBSERVABILITY_SUBJECT_ID = OBSERVABILITY_SUBJECT_IDS.bridge;
+const OBSERVABILITY_DETAIL_ACTION_IDS = Object.freeze({
+  refreshStatus: "refresh_status",
+  openSetup: "open_setup",
+  copyPath: "copy_path",
+  copyDetails: "copy_details",
 });
 
 function toOptionalString(value, fallback = null) {
@@ -461,10 +477,670 @@ function buildObservabilitySnapshot({
   };
 }
 
+function toSentence(value, fallback = "unknown") {
+  const text = toOptionalString(value, fallback) || fallback;
+  return text
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/_/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function normalizeStateLabel(value) {
+  return toSentence(value || OBSERVABILITY_ROW_STATES.unknown, "unknown");
+}
+
+function normalizeReasonLabel(value) {
+  return toSentence(value || "unknown_reason", "unknown reason");
+}
+
+function toStatePill(state, fallback = OBSERVABILITY_ROW_STATES.unknown) {
+  switch (state) {
+    case OBSERVABILITY_ROW_STATES.healthy:
+    case OBSERVABILITY_ROW_STATES.degraded:
+    case OBSERVABILITY_ROW_STATES.failed:
+    case OBSERVABILITY_ROW_STATES.disabled:
+    case OBSERVABILITY_ROW_STATES.unknown:
+      return state;
+    default:
+      return fallback;
+  }
+}
+
+function getPathSource(settingsSourceMap, pathKey) {
+  const source =
+    settingsSourceMap && typeof settingsSourceMap === "object"
+      ? settingsSourceMap[`paths.${pathKey}`]
+      : null;
+  return toOptionalString(source, "unknown");
+}
+
+function getWorkspaceKey(workspaceId) {
+  if (workspaceId === "openClaw") return "openClawWorkspace";
+  return "localWorkspace";
+}
+
+function getWorkspacePathKey(workspaceId) {
+  if (workspaceId === "openClaw") return "openClawWorkspaceRoot";
+  return "localWorkspaceRoot";
+}
+
+function resolveCanonicalSubject(rawSubjectId, rows) {
+  const canonicalRow = rows?.canonicalFiles || {};
+  const tokens = String(rawSubjectId || "").split("/");
+  const workspaceId = tokens[1] === "openClaw" ? "openClaw" : tokens[1] === "local" ? "local" : null;
+  if (!workspaceId) return null;
+  const workspace = canonicalRow[getWorkspaceKey(workspaceId)];
+  if (!workspace || typeof workspace !== "object") return null;
+  const fileId = tokens.length >= 3 ? tokens.slice(2).join("/") : null;
+  if (fileId && !CANONICAL_FILE_IDS.includes(fileId)) return null;
+  return {
+    subjectKind: fileId ? "file" : "workspace",
+    subjectId: fileId ? `canonicalFiles/${workspaceId}/${fileId}` : `canonicalFiles/${workspaceId}`,
+    rowId: OBSERVABILITY_SUBJECT_IDS.canonicalFiles,
+    workspaceId,
+    fileId,
+    workspace,
+  };
+}
+
+function resolveObservabilitySubjectId(subjectId, rows) {
+  const normalized = toOptionalString(subjectId, DEFAULT_OBSERVABILITY_SUBJECT_ID);
+  if (!normalized) return { subjectId: DEFAULT_OBSERVABILITY_SUBJECT_ID, subjectKind: "row" };
+  if (normalized.startsWith("canonicalFiles/")) {
+    const resolved = resolveCanonicalSubject(normalized, rows);
+    if (resolved) return resolved;
+  }
+  if (normalized === OBSERVABILITY_SUBJECT_IDS.canonicalFiles) {
+    return {
+      subjectKind: "row",
+      subjectId: OBSERVABILITY_SUBJECT_IDS.canonicalFiles,
+      rowId: OBSERVABILITY_SUBJECT_IDS.canonicalFiles,
+      workspaceId: null,
+      fileId: null,
+    };
+  }
+  if (
+    normalized === OBSERVABILITY_SUBJECT_IDS.bridge ||
+    normalized === OBSERVABILITY_SUBJECT_IDS.provider ||
+    normalized === OBSERVABILITY_SUBJECT_IDS.memory ||
+    normalized === OBSERVABILITY_SUBJECT_IDS.paths ||
+    normalized === OBSERVABILITY_SUBJECT_IDS.validation
+  ) {
+    return {
+      subjectKind: "row",
+      subjectId: normalized,
+      rowId: normalized,
+      workspaceId: null,
+      fileId: null,
+    };
+  }
+  return {
+    subjectKind: "row",
+    subjectId: DEFAULT_OBSERVABILITY_SUBJECT_ID,
+    rowId: DEFAULT_OBSERVABILITY_SUBJECT_ID,
+    workspaceId: null,
+    fileId: null,
+  };
+}
+
+function buildDetailAction(actionId, label, kind = "secondary", enabled = true) {
+  return {
+    actionId,
+    label,
+    kind,
+    enabled: Boolean(enabled),
+  };
+}
+
+function buildDetailActions({ allowOpenSetup = false, hasPath = false } = {}) {
+  const actions = [];
+  if (allowOpenSetup) {
+    actions.push(
+      buildDetailAction(
+        OBSERVABILITY_DETAIL_ACTION_IDS.openSetup,
+        "Open Setup",
+        "primary",
+        true
+      )
+    );
+    actions.push(
+      buildDetailAction(
+        OBSERVABILITY_DETAIL_ACTION_IDS.refreshStatus,
+        "Refresh Status",
+        "secondary",
+        true
+      )
+    );
+  } else {
+    actions.push(
+      buildDetailAction(
+        OBSERVABILITY_DETAIL_ACTION_IDS.refreshStatus,
+        "Refresh Status",
+        "primary",
+        true
+      )
+    );
+  }
+  if (hasPath) {
+    actions.push(
+      buildDetailAction(
+        OBSERVABILITY_DETAIL_ACTION_IDS.copyPath,
+        "Copy Path",
+        "secondary",
+        true
+      )
+    );
+  }
+  actions.push(
+    buildDetailAction(
+      OBSERVABILITY_DETAIL_ACTION_IDS.copyDetails,
+      "Copy Details",
+      "secondary",
+      true
+    )
+  );
+  return actions;
+}
+
+function findFirstUnreadableFile(workspace) {
+  if (!workspace || !Array.isArray(workspace.files)) return null;
+  return workspace.files.find((entry) => !entry.readable) || null;
+}
+
+function mapCanonicalWorkspaceState(workspaceId, workspace) {
+  if (!workspace?.root) {
+    return workspaceId === "local"
+      ? OBSERVABILITY_ROW_STATES.failed
+      : OBSERVABILITY_ROW_STATES.degraded;
+  }
+  if (!fs.existsSync(workspace.root)) {
+    return workspaceId === "local"
+      ? OBSERVABILITY_ROW_STATES.failed
+      : OBSERVABILITY_ROW_STATES.degraded;
+  }
+  const issue = findFirstUnreadableFile(workspace);
+  if (issue) return OBSERVABILITY_ROW_STATES.degraded;
+  return OBSERVABILITY_ROW_STATES.healthy;
+}
+
+function deriveManagedBlockState(file) {
+  if (!file?.readable || !file?.path) return "not_checked";
+  try {
+    const content = fs.readFileSync(file.path, "utf8");
+    return content.includes(MANAGED_BLOCK_START) && content.includes(MANAGED_BLOCK_END)
+      ? "managed_block_present"
+      : "managed_block_missing";
+  } catch {
+    return "managed_block_unreadable";
+  }
+}
+
+function buildCanonicalRepairability({
+  workspaceId,
+  workspace,
+  file,
+  managedBlockState = "not_checked",
+}) {
+  if (workspaceId === "openClaw") return "observed_only";
+  if (!workspace?.root || !fs.existsSync(workspace.root)) return "manual";
+  if (file) {
+    if (file.status === "file_missing") return "guided";
+    if (managedBlockState === "managed_block_missing") return "guided";
+    return file.readable ? "refresh_only" : "manual";
+  }
+  const unreadable = findFirstUnreadableFile(workspace);
+  if (!unreadable) return "refresh_only";
+  if (unreadable.status === "file_missing") return "guided";
+  return "manual";
+}
+
+function buildRowDetail({
+  rowId,
+  row,
+  settingsSourceMap,
+}) {
+  const state = toStatePill(row?.state);
+  let label = "Status Row";
+  let headline = "Status row detail is available.";
+  let impact = "Use Refresh Status to confirm the latest runtime data.";
+  let ownership = "manual_runtime";
+  const provenance = [];
+  const suggestedSteps = ["Press Refresh Status to re-check this row."];
+
+  if (rowId === OBSERVABILITY_SUBJECT_IDS.bridge) {
+    label = "OpenClaw Bridge";
+    headline = `OpenClaw bridge is ${normalizeStateLabel(state)}.`;
+    impact = "Bridge state controls whether online advisory responses are available.";
+    provenance.push(
+      { label: "Transport", kind: "runtime", value: toSentence(row?.transport, "unknown") },
+      { label: "Mode", kind: "runtime", value: toSentence(row?.mode, "unknown") },
+      { label: "Reason", kind: "runtime", value: normalizeReasonLabel(row?.reason) }
+    );
+    if (row?.endpoint) {
+      provenance.push({ label: "Endpoint", kind: "path", value: row.endpoint });
+    }
+  } else if (rowId === OBSERVABILITY_SUBJECT_IDS.provider) {
+    label = "Provider / Model";
+    headline = `Provider identity is ${normalizeStateLabel(state)}.`;
+    impact = "Provider/model identity explains which LLM path is currently visible.";
+    provenance.push(
+      { label: "Provider", kind: "runtime", value: toSentence(row?.providerLabel, "unavailable") },
+      { label: "Model", kind: "runtime", value: toSentence(row?.modelLabel, "unavailable") },
+      { label: "Source", kind: "runtime", value: toSentence(row?.source, "unknown") },
+      { label: "Reason", kind: "runtime", value: normalizeReasonLabel(row?.reason) }
+    );
+  } else if (rowId === OBSERVABILITY_SUBJECT_IDS.memory) {
+    label = "Memory Runtime";
+    headline = `Memory runtime is ${normalizeStateLabel(state)}.`;
+    impact = "Memory mode controls whether runtime writes stay in the requested adapter.";
+    provenance.push(
+      {
+        label: "Requested Adapter",
+        kind: "runtime",
+        value: toSentence(row?.requestedAdapterMode, "unknown"),
+      },
+      {
+        label: "Active Adapter",
+        kind: "runtime",
+        value: toSentence(row?.activeAdapterMode, "unknown"),
+      },
+      { label: "Fallback", kind: "runtime", value: toSentence(row?.fallbackReason, "none") },
+      { label: "Reason", kind: "runtime", value: normalizeReasonLabel(row?.reason) }
+    );
+  } else if (rowId === OBSERVABILITY_SUBJECT_IDS.paths) {
+    label = "Paths / Sources";
+    headline = `Path configuration is ${normalizeStateLabel(state)}.`;
+    impact = "Path roots decide where the app reads canonical files and observed context.";
+    const localRoot = toOptionalString(row?.localWorkspaceRoot, null);
+    const openClawRoot = toOptionalString(row?.openClawWorkspaceRoot, null);
+    const obsidianRoot = toOptionalString(row?.obsidianVaultRoot, null);
+    if (localRoot) provenance.push({ label: "Local Root", kind: "path", value: localRoot });
+    if (openClawRoot) provenance.push({ label: "OpenClaw Root", kind: "path", value: openClawRoot });
+    if (obsidianRoot) provenance.push({ label: "Obsidian Root", kind: "path", value: obsidianRoot });
+    provenance.push(
+      {
+        label: "Local Root Source",
+        kind: "settings",
+        value: getPathSource(settingsSourceMap, "localWorkspaceRoot"),
+      },
+      {
+        label: "OpenClaw Root Source",
+        kind: "settings",
+        value: getPathSource(settingsSourceMap, "openClawWorkspaceRoot"),
+      },
+      {
+        label: "Obsidian Root Source",
+        kind: "settings",
+        value: getPathSource(settingsSourceMap, "obsidianVaultRoot"),
+      },
+      { label: "Reason", kind: "runtime", value: normalizeReasonLabel(row?.reason) }
+    );
+    suggestedSteps.length = 0;
+    suggestedSteps.push(
+      "Confirm path values in settings and env overrides, then press Refresh Status."
+    );
+  } else if (rowId === OBSERVABILITY_SUBJECT_IDS.validation) {
+    label = "Validation";
+    headline = `Validation is ${normalizeStateLabel(state)}.`;
+    impact = "Warnings/errors explain configuration drift before runtime failures spread.";
+    provenance.push(
+      { label: "Warnings", kind: "runtime", value: String(row?.warningCount || 0) },
+      { label: "Errors", kind: "runtime", value: String(row?.errorCount || 0) },
+      {
+        label: "First Warning",
+        kind: "runtime",
+        value: toSentence(row?.warnings?.[0], "none"),
+      },
+      {
+        label: "First Error",
+        kind: "runtime",
+        value: toSentence(row?.errors?.[0], "none"),
+      },
+      { label: "Reason", kind: "runtime", value: normalizeReasonLabel(row?.reason) }
+    );
+    suggestedSteps.length = 0;
+    suggestedSteps.push("Fix the reported validation issue, then press Refresh Status.");
+  } else {
+    label = "OpenClaw Bridge";
+    headline = `OpenClaw bridge is ${normalizeStateLabel(state)}.`;
+    provenance.push({ label: "Reason", kind: "runtime", value: normalizeReasonLabel(row?.reason) });
+  }
+
+  const hasPath = provenance.some(
+    (entry) => entry.kind === "path" && toOptionalString(entry.value, null)
+  );
+  return {
+    subject: {
+      subjectId: rowId,
+      subjectKind: "row",
+      rowId,
+      workspaceId: null,
+      fileId: null,
+      label,
+      state,
+      reason: toOptionalString(row?.reason, "unknown"),
+    },
+    summary: {
+      headline,
+      impact,
+      ownership,
+      repairability: "refresh_only",
+    },
+    provenance,
+    suggestedSteps,
+    actions: buildDetailActions({ allowOpenSetup: false, hasPath }),
+  };
+}
+
+function buildCanonicalRowDetail({ row, settingsSourceMap }) {
+  const localWorkspace = row?.localWorkspace || {};
+  const openClawWorkspace = row?.openClawWorkspace || {};
+  const state = toStatePill(row?.state);
+  const localIssue = findFirstUnreadableFile(localWorkspace);
+  const repairability = buildCanonicalRepairability({
+    workspaceId: "local",
+    workspace: localWorkspace,
+    file: localIssue,
+  });
+  const allowOpenSetup = repairability === "guided";
+  const provenance = [
+    {
+      label: "Local Root",
+      kind: "path",
+      value: toOptionalString(localWorkspace?.root, "Unavailable"),
+    },
+    {
+      label: "Local Root Source",
+      kind: "settings",
+      value: getPathSource(settingsSourceMap, "localWorkspaceRoot"),
+    },
+    {
+      label: "OpenClaw Root",
+      kind: "path",
+      value: toOptionalString(openClawWorkspace?.root, "Unavailable"),
+    },
+    {
+      label: "OpenClaw Root Source",
+      kind: "settings",
+      value: getPathSource(settingsSourceMap, "openClawWorkspaceRoot"),
+    },
+    {
+      label: "Local Readable",
+      kind: "runtime",
+      value: `${localWorkspace?.readableCount || 0}/${Array.isArray(localWorkspace?.files) ? localWorkspace.files.length : 0}`,
+    },
+    {
+      label: "OpenClaw Readable",
+      kind: "runtime",
+      value: openClawWorkspace?.configured
+        ? `${openClawWorkspace?.readableCount || 0}/${Array.isArray(openClawWorkspace?.files) ? openClawWorkspace.files.length : 0}`
+        : "not_configured",
+    },
+    { label: "Reason", kind: "runtime", value: normalizeReasonLabel(row?.reason) },
+  ];
+  const hasPath = provenance.some(
+    (entry) =>
+      entry.kind === "path" &&
+      toOptionalString(entry.value, null) &&
+      entry.value !== "Unavailable"
+  );
+  return {
+    subject: {
+      subjectId: OBSERVABILITY_SUBJECT_IDS.canonicalFiles,
+      subjectKind: "row",
+      rowId: OBSERVABILITY_SUBJECT_IDS.canonicalFiles,
+      workspaceId: null,
+      fileId: null,
+      label: "Canonical Files",
+      state,
+      reason: toOptionalString(row?.reason, "unknown"),
+    },
+    summary: {
+      headline: `Canonical file health is ${normalizeStateLabel(state)}.`,
+      impact: "Canonical files are the pet's local identity baseline and observed OpenClaw context.",
+      ownership: "manual_runtime",
+      repairability,
+    },
+    provenance,
+    suggestedSteps:
+      repairability === "guided"
+        ? ["Open Setup, preview, and save to restore local managed canonical files."]
+        : ["Press Refresh Status after repairing file/path issues."],
+    actions: buildDetailActions({ allowOpenSetup, hasPath }),
+  };
+}
+
+function buildCanonicalWorkspaceDetail({
+  workspaceId,
+  workspace,
+  rowReason,
+  settingsSourceMap,
+}) {
+  const state = mapCanonicalWorkspaceState(workspaceId, workspace);
+  const issue = findFirstUnreadableFile(workspace);
+  const repairability = buildCanonicalRepairability({
+    workspaceId,
+    workspace,
+    file: issue,
+  });
+  const allowOpenSetup = repairability === "guided";
+  const settingsPathKey = getWorkspacePathKey(workspaceId);
+  const roleLabel =
+    workspaceId === "local"
+      ? "Pet-local canonical source"
+      : "Observed OpenClaw workspace context";
+  const provenance = [
+    { label: "Workspace Role", kind: "role", value: roleLabel },
+    { label: "Root", kind: "path", value: toOptionalString(workspace?.root, "Unavailable") },
+    {
+      label: "Settings Source",
+      kind: "settings",
+      value: getPathSource(settingsSourceMap, settingsPathKey),
+    },
+    {
+      label: "Readable Files",
+      kind: "runtime",
+      value: `${workspace?.readableCount || 0}/${Array.isArray(workspace?.files) ? workspace.files.length : 0}`,
+    },
+    {
+      label: "Reason",
+      kind: "runtime",
+      value: issue ? normalizeReasonLabel(issue.status) : normalizeReasonLabel(rowReason),
+    },
+  ];
+  const hasPath = provenance.some(
+    (entry) =>
+      entry.kind === "path" &&
+      toOptionalString(entry.value, null) &&
+      entry.value !== "Unavailable"
+  );
+  return {
+    subject: {
+      subjectId: `canonicalFiles/${workspaceId}`,
+      subjectKind: "workspace",
+      rowId: OBSERVABILITY_SUBJECT_IDS.canonicalFiles,
+      workspaceId,
+      fileId: null,
+      label: workspaceId === "local" ? "Local Canonical Workspace" : "OpenClaw Workspace",
+      state,
+      reason: issue ? issue.status : toOptionalString(rowReason, "unknown"),
+    },
+    summary: {
+      headline:
+        workspaceId === "local"
+          ? `Local canonical workspace is ${normalizeStateLabel(state)}.`
+          : `OpenClaw observed workspace is ${normalizeStateLabel(state)}.`,
+      impact:
+        workspaceId === "local"
+          ? "Local files are the direct virtual-pet identity source."
+          : "OpenClaw workspace status is informational/observed-only for this app slice.",
+      ownership: workspaceId === "local" ? "local_managed" : "observed_only",
+      repairability,
+    },
+    provenance,
+    suggestedSteps:
+      repairability === "guided"
+        ? ["Open Setup and save to restore missing local canonical files."]
+        : workspaceId === "openClaw"
+          ? ["Repair this OpenClaw path outside the pet app, then press Refresh Status."]
+          : ["Repair local path or permissions, then press Refresh Status."],
+    actions: buildDetailActions({ allowOpenSetup, hasPath }),
+  };
+}
+
+function buildCanonicalFileDetail({
+  workspaceId,
+  workspace,
+  fileId,
+  settingsSourceMap,
+}) {
+  const file = Array.isArray(workspace?.files)
+    ? workspace.files.find((entry) => entry?.fileId === fileId) || null
+    : null;
+  const fallbackStatus = file ? file.status : "file_unavailable";
+  const state = file
+    ? file.readable
+      ? OBSERVABILITY_ROW_STATES.healthy
+      : workspaceId === "local" &&
+          (file.status === "root_not_configured" || file.status === "root_missing")
+        ? OBSERVABILITY_ROW_STATES.failed
+        : OBSERVABILITY_ROW_STATES.degraded
+    : OBSERVABILITY_ROW_STATES.unknown;
+  const managedBlockState =
+    workspaceId === "local" ? deriveManagedBlockState(file) : "not_checked";
+  const repairability = buildCanonicalRepairability({
+    workspaceId,
+    workspace,
+    file,
+    managedBlockState,
+  });
+  const allowOpenSetup = repairability === "guided";
+  const settingsPathKey = getWorkspacePathKey(workspaceId);
+  const provenance = [
+    {
+      label: "Observed Path",
+      kind: "path",
+      value: file?.path || toOptionalString(workspace?.root, "Unavailable"),
+    },
+    {
+      label: "Workspace Role",
+      kind: "role",
+      value:
+        workspaceId === "local"
+          ? "Pet-local canonical source"
+          : "Observed OpenClaw workspace context",
+    },
+    {
+      label: "Settings Source",
+      kind: "settings",
+      value: getPathSource(settingsSourceMap, settingsPathKey),
+    },
+    {
+      label: "File Status",
+      kind: "runtime",
+      value: normalizeReasonLabel(fallbackStatus),
+    },
+  ];
+  if (workspaceId === "local") {
+    provenance.push({
+      label: "Setup Block",
+      kind: "ownership",
+      value: normalizeReasonLabel(managedBlockState),
+    });
+  }
+  const hasPath = provenance.some(
+    (entry) =>
+      entry.kind === "path" &&
+      toOptionalString(entry.value, null) &&
+      entry.value !== "Unavailable"
+  );
+  return {
+    subject: {
+      subjectId: `canonicalFiles/${workspaceId}/${fileId}`,
+      subjectKind: "file",
+      rowId: OBSERVABILITY_SUBJECT_IDS.canonicalFiles,
+      workspaceId,
+      fileId,
+      label: `${workspaceId === "local" ? "Local" : "OpenClaw"} ${fileId}`,
+      state,
+      reason: fallbackStatus,
+    },
+    summary: {
+      headline: `${workspaceId === "local" ? "Local" : "OpenClaw"} ${fileId} is ${normalizeStateLabel(state)}.`,
+      impact:
+        workspaceId === "local"
+          ? "This file contributes to local pet identity and continuity."
+          : "This file is visible for OpenClaw context only (read-only observation).",
+      ownership: workspaceId === "local" ? "local_managed" : "observed_only",
+      repairability,
+    },
+    provenance,
+    suggestedSteps:
+      repairability === "guided"
+        ? ["Open Setup, preview, and save to restore this local managed file."]
+        : workspaceId === "openClaw"
+          ? ["Repair this file/path outside the pet app, then press Refresh Status."]
+          : ["Repair local path/permissions, then press Refresh Status."],
+    actions: buildDetailActions({ allowOpenSetup, hasPath }),
+  };
+}
+
+function buildObservabilityDetail({
+  snapshot = null,
+  subjectId = DEFAULT_OBSERVABILITY_SUBJECT_ID,
+  settingsSourceMap = {},
+  ts = Date.now(),
+} = {}) {
+  const rows = snapshot?.rows && typeof snapshot.rows === "object" ? snapshot.rows : {};
+  const resolvedSubject = resolveObservabilitySubjectId(subjectId, rows);
+  let detail;
+  if (resolvedSubject.subjectKind === "file") {
+    detail = buildCanonicalFileDetail({
+      workspaceId: resolvedSubject.workspaceId,
+      workspace: resolvedSubject.workspace,
+      fileId: resolvedSubject.fileId,
+      settingsSourceMap,
+    });
+  } else if (resolvedSubject.subjectKind === "workspace") {
+    detail = buildCanonicalWorkspaceDetail({
+      workspaceId: resolvedSubject.workspaceId,
+      workspace: resolvedSubject.workspace,
+      rowReason: rows?.canonicalFiles?.reason,
+      settingsSourceMap,
+    });
+  } else if (resolvedSubject.subjectId === OBSERVABILITY_SUBJECT_IDS.canonicalFiles) {
+    detail = buildCanonicalRowDetail({
+      row: rows?.canonicalFiles || {},
+      settingsSourceMap,
+    });
+  } else {
+    detail = buildRowDetail({
+      rowId: resolvedSubject.subjectId,
+      row: rows?.[resolvedSubject.subjectId] || {},
+      settingsSourceMap,
+    });
+  }
+
+  return {
+    kind: "observabilityDetail",
+    ts,
+    subject: detail.subject,
+    summary: detail.summary,
+    provenance: detail.provenance,
+    suggestedSteps: detail.suggestedSteps,
+    actions: detail.actions,
+  };
+}
+
 module.exports = {
   CANONICAL_FILE_IDS,
+  DEFAULT_OBSERVABILITY_SUBJECT_ID,
+  OBSERVABILITY_DETAIL_ACTION_IDS,
   OBSERVABILITY_ROW_STATES,
+  OBSERVABILITY_SUBJECT_IDS,
   SHELL_WINDOW_TABS,
+  buildObservabilityDetail,
   buildObservabilitySnapshot,
   normalizeShellWindowTab,
   resolveShellWindowTabForAction,

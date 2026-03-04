@@ -36,8 +36,9 @@ Historical v1 deliverables keep their original wording and remain archived histo
 - Current Deliverable: `none`
 - Workflow State: `idle`
 - Current Status: `accepted`
-- Last Completed Deliverable: `11b-guided-pet-setup-and-markdown-bootstrap`
-- Next Detailed Target: `11c-repair-actions-and-provenance-visibility`
+- Last Completed Deliverable: `11c-repair-actions-and-provenance-visibility`
+- Next Detailed Target: `11d-settings-editor-and-service-controls`
+- Next Queued Target: `11d-settings-editor-and-service-controls`
 - Current Gate State:
   - `Spec Gate`: `n/a`
   - `Build Gate`: `n/a`
@@ -54,6 +55,8 @@ Locked family order:
 Planning state:
 - `11` has an accepted baseline through `11a`.
 - `11b` is now accepted and closed.
+- `11c` is now accepted and closed.
+- `11d-settings-editor-and-service-controls` is staged as the immediate next slice after `11c`.
 - `12` through `15` remain rough placeholders and are not implementation-ready yet.
 - Full family notes live in [`11-15-post-v1-roadmap-rough-in.md`](./11-15-post-v1-roadmap-rough-in.md).
 
@@ -66,14 +69,63 @@ Planning state:
 6. Pass `Spec Gate` before implementation begins.
 
 ## Next 3 Actions
-1. Decide whether to start/spec `11c-repair-actions-and-provenance-visibility` next or reprioritize another post-v1 slice.
-2. If `11c` stays next, lock the visible repair/provenance surface for local canonical files, OpenClaw observation, and setup-related diagnostics.
-3. Keep the local bootstrap Markdown files repo-local unless you intentionally decide to version them later.
+1. Move `11d-settings-editor-and-service-controls` from `queued` to `specifying`.
+2. Lock the `11d` write-safety contract for GUI settings editing and persistence boundaries.
+3. Define `11d` demo and failure/recovery scripts before implementation starts.
 
 ## Blockers
-- None currently; there is no active post-v1 deliverable.
+- None currently; `11c` is closed and `11d` is ready to enter `specifying`.
 
 ## Last Session Summary
+- Iterated Setup UX from operator feedback:
+  - split setup questions into `User Profile` and `Pet Profile` so user/pet data is no longer mixed
+  - renamed labels to clearer child-friendly wording (for example `Pet Birthday`, `What type of creature is pet?`)
+  - replaced free-text user pronouns with `Are you a boy or girl?` and mapped pronouns automatically
+  - added pet gender selection (`boy/girl/thing`) and mapped pet pronouns into `IDENTITY.md`
+  - changed `Pet Avatar` to a browse picker instead of free text path entry
+- Iterated on operator feedback for the active `11c` slice:
+  - simplified `Status` detail wording to be easier to read (`Where This Info Came From`, friendlier ownership/repairability labels, less raw `unknown` wording)
+  - fixed Setup default recovery so `Profile` and `Advanced` fields repopulate from existing local managed files when data is available
+  - expanded setup contract coverage to assert recovered defaults in `scripts/check-setup-bootstrap.js`
+  - re-ran verification:
+    - `npm run check:syntax`
+    - `npm run check:contracts`
+    - `npm run check:acceptance` -> `16/16 automated checks passed`
+- Implemented the first `11c` runtime slice and passed Build Gate checks:
+  - `Status` cards and canonical file chips now select a detail subject
+  - shared-shell `Status` now renders a details panel with ownership/provenance and bounded repair actions
+  - local guided handoff uses existing `Open Setup`; OpenClaw subjects stay observed-only
+  - new IPC paths are live:
+    - `pet:getObservabilityDetail`
+    - `pet:runObservabilityAction`
+  - new deterministic contract check added:
+    - `scripts/check-shell-repair-actions.js`
+  - acceptance matrix now includes `D11c-repair-actions`
+  - verification run:
+    - `npm run check:syntax`
+    - `npm run check:contracts`
+    - `npm run check:acceptance` -> `16/16 automated checks passed`
+- `11c` is now accepted and closed:
+  - `Spec Gate`: `passed`
+  - `Build Gate`: `passed`
+  - `Acceptance Gate`: `passed`
+- Staging decision locked for next slice:
+  - start `11d-settings-editor-and-service-controls` next
+- Delivered a user-requested shared-shell UX polish pass:
+  - made Setup copy more child-friendly (`Companion` labels now read as `Your Name`/`Your Timezone` in the GUI)
+  - added a safe signature-emoji dropdown picker so users can choose from known options
+  - added a small bottom hint/status bar that shows hover help text for controls and fields
+  - kept setup writes local-only and OpenClaw observed/read-only
+- Created and spec-passed `11c-repair-actions-and-provenance-visibility`:
+  - locked the shared-shell `Status` detail contract for row-level and file-level provenance
+  - bounded the first repair-action lane to safe actions only:
+    - `Refresh Status`
+    - `Open Setup`
+    - `Copy Path`
+    - `Copy Details`
+  - kept local canonical-file repair routed through the accepted `11b` preview/apply flow instead of adding direct writes from `Status`
+  - kept the configured OpenClaw workspace explicitly observed/read-only for `11c`
+  - defined canonical-file detail requirements for path provenance, settings-source visibility, and setup-managed-block ownership
 - Created and spec-passed `11b-guided-pet-setup-and-markdown-bootstrap`:
   - locked the shared-shell `Setup` tab model with tray `Setup...` and `F11` fallback
   - defined the initial target-policy rules for setup bootstrap before operator iteration tightened the write boundary
@@ -111,4 +163,4 @@ Planning state:
   - D10 closed the v1 roadmap as a doc-only research deliverable
   - detailed v1 session history is preserved in [`archive/00-progress-tracker-v1-history.md`](./archive/00-progress-tracker-v1-history.md)
 - Shipped outcome note for this session:
-  - visible app/runtime change accepted; `11b` now ships a working shared-shell `Setup` flow with local-only bootstrap writes, read-only OpenClaw observation, and ignored local bootstrap Markdown files
+  - visible app/runtime change delivered and accepted; `11c` is closed with status detail/repair UX plus setup-form polish, and `11d` is now the next queued slice

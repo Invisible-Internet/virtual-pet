@@ -12,6 +12,20 @@ const TAB_IDS = Object.freeze({
   status: "status",
   setup: "setup",
 });
+const OBSERVABILITY_SUBJECT_IDS = Object.freeze({
+  bridge: "bridge",
+  provider: "provider",
+  memory: "memory",
+  canonicalFiles: "canonicalFiles",
+  paths: "paths",
+  validation: "validation",
+});
+const OBSERVABILITY_ACTION_IDS = Object.freeze({
+  refreshStatus: "refresh_status",
+  openSetup: "open_setup",
+  copyPath: "copy_path",
+  copyDetails: "copy_details",
+});
 
 const DEFAULT_SHELL_STATE = Object.freeze({
   wardrobe: Object.freeze({ activeAccessories: Object.freeze([]), hasHeadphones: false }),
@@ -42,6 +56,7 @@ const setupPanel = document.getElementById("tab-panel-setup");
 const overviewContainer = document.getElementById("observability-overview");
 const runtimeRowsContainer = document.getElementById("observability-runtime-rows");
 const configRowsContainer = document.getElementById("observability-config-rows");
+const observabilityDetailContainer = document.getElementById("observability-detail");
 const roamDesktopButton = document.getElementById("roam-desktop");
 const roamDesktopChip = document.getElementById("roam-desktop-chip");
 const roamZoneButton = document.getElementById("roam-zone");
@@ -60,10 +75,13 @@ const setupCompanionName = document.getElementById("setup-companion-name");
 const setupCompanionTimezone = document.getElementById("setup-companion-timezone");
 const setupStarterNote = document.getElementById("setup-starter-note");
 const setupCompanionCallName = document.getElementById("setup-companion-call-name");
-const setupCompanionPronouns = document.getElementById("setup-companion-pronouns");
+const setupUserGender = document.getElementById("setup-user-gender");
 const setupCreatureLabel = document.getElementById("setup-creature-label");
+const setupPetGender = document.getElementById("setup-pet-gender");
 const setupSignatureEmoji = document.getElementById("setup-signature-emoji");
 const setupAvatarPath = document.getElementById("setup-avatar-path");
+const setupAvatarBrowseButton = document.getElementById("setup-avatar-browse");
+const setupAvatarFileInput = document.getElementById("setup-avatar-file");
 const setupSeedHeartbeat = document.getElementById("setup-seed-heartbeat");
 const setupReloadTargetsButton = document.getElementById("setup-reload-targets");
 const setupPreviewButton = document.getElementById("setup-preview");
@@ -72,18 +90,59 @@ const setupPreviewTabs = document.getElementById("setup-preview-tabs");
 const setupPreviewCopy = document.getElementById("setup-preview-copy");
 const setupPreviewMarkdown = document.getElementById("setup-preview-markdown");
 const setupResult = document.getElementById("setup-result");
+const hoverHintText = document.getElementById("hover-hint-text");
+
+const SETUP_ERROR_MESSAGES = Object.freeze({
+  pet_name_required: "Please type a Pet Name.",
+  birthday_required: "Please type a Pet Birthday.",
+  companion_name_required: "Please type Your Name.",
+  companion_timezone_required: "Please type Your Timezone.",
+});
+
+const HOVER_HINTS_BY_ID = Object.freeze({
+  "tab-inventory": "Open the Inventory tools tab.",
+  "tab-status": "Open live status and health checks.",
+  "tab-setup": "Open setup to fill in pet details.",
+  "refresh-observability": "Refresh status now.",
+  "close-window": "Close this shell window.",
+  "roam-desktop": "Let the pet roam anywhere on your desktop.",
+  "roam-zone": "Keep the pet inside a selected zone.",
+  "draw-roam-zone": "Draw a custom roam zone on the desktop.",
+  "toggle-headphones": "Put headphones on or take them off.",
+  "drag-pool-ring": "Drag this to place the pool ring on your desktop.",
+  "remove-pool-ring": "Return the pool ring to inventory.",
+  "setup-pet-name": "Type your pet's name.",
+  "setup-birthday": "Type your pet's birthday.",
+  "setup-companion-name": "Type your real name.",
+  "setup-user-gender": "Choose boy or girl to set your pronouns.",
+  "setup-companion-timezone": "Type your timezone.",
+  "setup-starter-note": "Add a short note about yourself.",
+  "setup-companion-call-name": "How your pet should call you.",
+  "setup-creature-label": "Type what kind of creature your pet is.",
+  "setup-pet-gender": "Choose your pet's pronouns: boy, girl, or thing.",
+  "setup-signature-emoji": "Pick a safe emoji from the list.",
+  "setup-avatar-path": "Selected avatar file path.",
+  "setup-avatar-browse": "Browse for a pet avatar image.",
+  "setup-seed-heartbeat": "Create an empty HEARTBEAT file (advanced).",
+  "setup-reload-targets": "Reload target folders before preview or save.",
+  "setup-preview": "Build a preview. Nothing is saved yet.",
+  "setup-apply": "Save setup files to your local pet folder.",
+});
 
 let latestShellState = { ...DEFAULT_SHELL_STATE };
 let latestObservabilitySnapshot = null;
+let latestObservabilityDetail = null;
 let latestSetupSnapshot = null;
 let latestSetupPreview = null;
 let setupLoading = false;
 let setupApplying = false;
 let setupDirty = true;
 let activeSetupPreviewFileId = "SOUL.md";
+let activeObservabilitySubjectId = OBSERVABILITY_SUBJECT_IDS.bridge;
 let observabilityLoading = false;
 let statusTone = "muted";
 let statusMessage = "";
+let hoverHintMessage = "";
 let activePlacement = null;
 let placementTimer = null;
 
@@ -191,6 +250,210 @@ function escapeCode(value) {
   return escapeHtml(value).replace(/`/g, "&#96;");
 }
 
+function formatSettingsSource(value) {
+  const normalized = formatText(value, "").toLowerCase();
+  if (!normalized || normalized === "unknown") return "Not set in config or environment";
+  if (normalized === "baseconfig") return "Base settings file";
+  if (normalized === "localconfig") return "Local settings file";
+  if (normalized === "runtimeconfig") return "Runtime settings";
+  if (normalized === "env") return "Environment variable";
+  return formatReason(value);
+}
+
+function formatOwnershipLabel(value) {
+  const normalized = formatText(value, "").toLowerCase();
+  if (normalized === "local_managed") return "Local file managed by Setup";
+  if (normalized === "local_unmanaged") return "Local file managed outside Setup";
+  if (normalized === "observed_only") return "Read-only observed workspace";
+  if (normalized === "manual_runtime") return "Manual runtime/config fix";
+  return formatReason(value);
+}
+
+function formatRepairabilityLabel(value) {
+  const normalized = formatText(value, "").toLowerCase();
+  if (normalized === "guided") return "Guided fix in app";
+  if (normalized === "manual") return "Manual fix outside app";
+  if (normalized === "observed_only") return "Observed only (read-only)";
+  if (normalized === "refresh_only") return "Refresh only";
+  return formatReason(value);
+}
+
+function formatStatusDetailValue(value) {
+  const normalized = formatText(value, "").toLowerCase();
+  if (!normalized || normalized === "unknown") return "Not available yet";
+  if (normalized === "pet-local canonical source") return "Local pet files (managed here)";
+  if (normalized === "observed openclaw workspace context") return "OpenClaw files (read-only view)";
+  if (normalized === "present") return "Found and readable";
+  if (normalized === "file_missing") return "Missing file";
+  if (normalized === "file_unreadable") return "Found but unreadable";
+  if (normalized === "root_missing") return "Folder is missing";
+  if (normalized === "root_not_configured") return "Folder is not configured";
+  if (normalized === "root_not_directory") return "Path is not a folder";
+  if (normalized === "managed_block_present") return "Setup block found";
+  if (normalized === "managed_block_missing") return "Setup block missing";
+  if (normalized === "managed_block_unreadable") return "Could not read setup block";
+  if (normalized === "not_checked") return "Not checked yet";
+  return formatReason(value);
+}
+
+function formatProvenanceEntryValue(entry) {
+  if (entry?.kind === "settings") return formatSettingsSource(entry?.value);
+  return formatStatusDetailValue(entry?.value);
+}
+
+function getDefaultHoverHint() {
+  const activeTab = getActiveTab();
+  if (activeTab === TAB_IDS.status) {
+    return "Press Refresh to reload health rows.";
+  }
+  if (activeTab === TAB_IDS.setup) {
+    return "Fill details, press Preview, then press Save Setup.";
+  }
+  return "Open a card to control roaming, accessories, or props.";
+}
+
+function renderHoverHint() {
+  if (!hoverHintText) return;
+  const hint = hoverHintMessage || getDefaultHoverHint();
+  hoverHintText.textContent = `Hint: ${hint}`;
+}
+
+function setHoverHint(message) {
+  const normalized = typeof message === "string" ? message.trim() : "";
+  if (normalized === hoverHintMessage) return;
+  hoverHintMessage = normalized;
+  renderHoverHint();
+}
+
+function getSetupFieldHint(element) {
+  const field = element?.closest?.(".setup-field");
+  const label = field?.querySelector?.(".setup-label")?.textContent?.trim();
+  if (!label) return "";
+  return `${label}: enter a value for this field.`;
+}
+
+function resolveHoverHint(startElement) {
+  let element = startElement instanceof Element ? startElement : null;
+  while (element && element !== document.body) {
+    const explicitHint = element.dataset?.hint;
+    if (explicitHint && explicitHint.trim()) return explicitHint.trim();
+    if (element.id && HOVER_HINTS_BY_ID[element.id]) return HOVER_HINTS_BY_ID[element.id];
+    if (element.matches?.("input, select, textarea")) {
+      const setupHint = getSetupFieldHint(element);
+      if (setupHint) return setupHint;
+    }
+    const ariaLabel = element.getAttribute?.("aria-label");
+    if (ariaLabel && ariaLabel.trim()) return ariaLabel.trim();
+    const title = element.getAttribute?.("title");
+    if (title && title.trim()) return title.trim();
+    if (element.matches?.("button")) {
+      const buttonText = element.textContent?.trim();
+      if (buttonText) return `${buttonText}: click to use this control.`;
+    }
+    element = element.parentElement;
+  }
+  return "";
+}
+
+function wireHoverHints() {
+  document.addEventListener("pointermove", (event) => {
+    setHoverHint(resolveHoverHint(event.target));
+  });
+  document.addEventListener("focusin", (event) => {
+    setHoverHint(resolveHoverHint(event.target));
+  });
+  window.addEventListener("mouseout", (event) => {
+    if (!event.relatedTarget) setHoverHint("");
+  });
+  window.addEventListener("blur", () => {
+    setHoverHint("");
+  });
+}
+
+function formatSetupError(errorCode) {
+  return SETUP_ERROR_MESSAGES[errorCode] || formatReason(errorCode);
+}
+
+function isProblemState(state) {
+  return state === "failed" || state === "degraded" || state === "unknown";
+}
+
+function parseCanonicalSubjectId(subjectId) {
+  if (typeof subjectId !== "string" || !subjectId.startsWith("canonicalFiles/")) return null;
+  const tokens = subjectId.split("/");
+  const workspaceId = tokens[1] === "openClaw" ? "openClaw" : tokens[1] === "local" ? "local" : null;
+  if (!workspaceId) return null;
+  const fileId = tokens.length >= 3 ? tokens.slice(2).join("/") : null;
+  return {
+    workspaceId,
+    fileId,
+  };
+}
+
+function subjectExistsInSnapshot(snapshot, subjectId) {
+  const rows = snapshot?.rows || {};
+  if (subjectId === OBSERVABILITY_SUBJECT_IDS.bridge) return Boolean(rows.bridge);
+  if (subjectId === OBSERVABILITY_SUBJECT_IDS.provider) return Boolean(rows.provider);
+  if (subjectId === OBSERVABILITY_SUBJECT_IDS.memory) return Boolean(rows.memory);
+  if (subjectId === OBSERVABILITY_SUBJECT_IDS.paths) return Boolean(rows.paths);
+  if (subjectId === OBSERVABILITY_SUBJECT_IDS.validation) return Boolean(rows.validation);
+  if (subjectId === OBSERVABILITY_SUBJECT_IDS.canonicalFiles) return Boolean(rows.canonicalFiles);
+  const canonical = parseCanonicalSubjectId(subjectId);
+  if (!canonical) return false;
+  const workspace =
+    canonical.workspaceId === "local"
+      ? rows.canonicalFiles?.localWorkspace
+      : rows.canonicalFiles?.openClawWorkspace;
+  if (!workspace) return false;
+  if (!canonical.fileId) return true;
+  const files = Array.isArray(workspace.files) ? workspace.files : [];
+  return files.some((entry) => entry?.fileId === canonical.fileId);
+}
+
+function pickFirstCanonicalProblemSubject(snapshot) {
+  const rows = snapshot?.rows || {};
+  const localWorkspace = rows.canonicalFiles?.localWorkspace || {};
+  const localFiles = Array.isArray(localWorkspace.files) ? localWorkspace.files : [];
+  const localIssue = localFiles.find((entry) => !entry.readable);
+  if (localIssue?.fileId) return `canonicalFiles/local/${localIssue.fileId}`;
+
+  const openClawWorkspace = rows.canonicalFiles?.openClawWorkspace || {};
+  const openClawFiles = Array.isArray(openClawWorkspace.files) ? openClawWorkspace.files : [];
+  const openClawIssue = openClawFiles.find((entry) => !entry.readable);
+  if (openClawIssue?.fileId) return `canonicalFiles/openClaw/${openClawIssue.fileId}`;
+
+  if (isProblemState(rows.canonicalFiles?.state)) return OBSERVABILITY_SUBJECT_IDS.canonicalFiles;
+  return null;
+}
+
+function pickDefaultObservabilitySubject(snapshot) {
+  const canonicalSubject = pickFirstCanonicalProblemSubject(snapshot);
+  if (canonicalSubject) return canonicalSubject;
+  const rows = snapshot?.rows || {};
+  for (const rowId of [
+    OBSERVABILITY_SUBJECT_IDS.bridge,
+    OBSERVABILITY_SUBJECT_IDS.provider,
+    OBSERVABILITY_SUBJECT_IDS.memory,
+    OBSERVABILITY_SUBJECT_IDS.paths,
+    OBSERVABILITY_SUBJECT_IDS.validation,
+  ]) {
+    if (isProblemState(rows?.[rowId]?.state)) return rowId;
+  }
+  return OBSERVABILITY_SUBJECT_IDS.bridge;
+}
+
+function isSubjectSelected(subjectId) {
+  if (activeObservabilitySubjectId === subjectId) return true;
+  if (
+    subjectId === OBSERVABILITY_SUBJECT_IDS.canonicalFiles &&
+    typeof activeObservabilitySubjectId === "string" &&
+    activeObservabilitySubjectId.startsWith("canonicalFiles/")
+  ) {
+    return true;
+  }
+  return false;
+}
+
 function getSetupFormInput() {
   return {
     petName: setupPetName?.value || "",
@@ -199,8 +462,9 @@ function getSetupFormInput() {
     companionTimezone: setupCompanionTimezone?.value || "",
     starterNote: setupStarterNote?.value || "",
     companionCallName: setupCompanionCallName?.value || "",
-    companionPronouns: setupCompanionPronouns?.value || "",
+    userGender: setupUserGender?.value || "",
     creatureLabel: setupCreatureLabel?.value || "",
+    petGender: setupPetGender?.value || "",
     signatureEmoji: setupSignatureEmoji?.value || "",
     avatarPath: setupAvatarPath?.value || "",
     seedHeartbeatFile: Boolean(setupSeedHeartbeat?.checked),
@@ -237,7 +501,7 @@ function renderStatus() {
     if (getActiveTab() === TAB_IDS.status) {
       message = "Refresh re-reads bridge, memory, path, and canonical file health.";
     } else if (getActiveTab() === TAB_IDS.setup) {
-      message = "Preview setup first, then apply an explicit local workspace bootstrap.";
+      message = "Press Preview first, then press Save Setup.";
     } else if (latestShellState.roaming.mode === "zone" && !latestShellState.roaming.zoneRect) {
       message = "Draw a roam zone to keep the pet moving inside a marquee area.";
       tone = "warning";
@@ -263,7 +527,7 @@ function renderHeader() {
       activeTab === TAB_IDS.status
         ? "Bridge, memory, canonical files, and runtime path visibility."
         : activeTab === TAB_IDS.setup
-          ? "Bootstrap the pet's canonical Markdown files with an explicit preview/apply flow."
+          ? "Fill in pet details, preview files, then save."
           : "Wardrobe, roaming, and trusted prop controls.";
   }
   if (refreshButton) refreshButton.hidden = activeTab !== TAB_IDS.status;
@@ -292,13 +556,43 @@ function buildDetailRow(label, value) {
   return `<div class="settings-detail-row"><span class="settings-detail-label">${escapeHtml(label)}</span><span class="settings-detail-value">${escapeHtml(value)}</span></div>`;
 }
 
-function buildSettingsCard(label, row, details) {
+function buildSettingsCard(label, row, details, { subjectId = "", selected = false, extraMarkup = "" } = {}) {
   const detailMarkup = details.map((entry) => buildDetailRow(entry.label, entry.value)).join("");
-  return `<article class="settings-card"><div class="settings-card-header"><div><h3>${escapeHtml(label)}</h3><span class="settings-card-note">${escapeHtml(formatReason(row.reason))}</span></div><span class="state-pill" data-state="${escapeHtml(row.state)}">${escapeHtml(row.state)}</span></div><div class="settings-detail-list">${detailMarkup}</div></article>`;
+  const classes = ["settings-card"];
+  if (subjectId) classes.push("is-selectable");
+  if (selected) classes.push("is-selected");
+  const selectionAttrs = subjectId
+    ? ` data-subject-id="${escapeHtml(subjectId)}" tabindex="0" role="button"`
+    : "";
+  const actionsMarkup = subjectId
+    ? `<div class="settings-card-actions"><button class="minor-button" type="button" data-subject-id="${escapeHtml(subjectId)}">Details</button></div>`
+    : "";
+  return `<article class="${classes.join(" ")}"${selectionAttrs}><div class="settings-card-header"><div><h3>${escapeHtml(label)}</h3><span class="settings-card-note">${escapeHtml(formatReason(row.reason))}</span></div><span class="state-pill" data-state="${escapeHtml(row.state)}">${escapeHtml(row.state)}</span></div><div class="settings-detail-list">${detailMarkup}</div>${extraMarkup}${actionsMarkup}</article>`;
+}
+
+function buildCanonicalSubjectButtons(localFiles, openClawFiles) {
+  const buttons = [
+    `<button class="preview-tab-button ${activeObservabilitySubjectId === "canonicalFiles/local" ? "is-active" : ""}" type="button" data-subject-id="canonicalFiles/local">Local Details</button>`,
+    `<button class="preview-tab-button ${activeObservabilitySubjectId === "canonicalFiles/openClaw" ? "is-active" : ""}" type="button" data-subject-id="canonicalFiles/openClaw">OpenClaw Details</button>`,
+  ];
+  for (const file of localFiles) {
+    const subjectId = `canonicalFiles/local/${file.fileId}`;
+    buttons.push(
+      `<button class="preview-tab-button ${activeObservabilitySubjectId === subjectId ? "is-active" : ""}" type="button" data-subject-id="${escapeHtml(subjectId)}">Local ${escapeHtml(file.fileId)}</button>`
+    );
+  }
+  for (const file of openClawFiles) {
+    const subjectId = `canonicalFiles/openClaw/${file.fileId}`;
+    buttons.push(
+      `<button class="preview-tab-button ${activeObservabilitySubjectId === subjectId ? "is-active" : ""}" type="button" data-subject-id="${escapeHtml(subjectId)}">OpenClaw ${escapeHtml(file.fileId)}</button>`
+    );
+  }
+  return `<div class="status-chip-list">${buttons.join("")}</div>`;
 }
 
 function renderObservability() {
   if (!latestObservabilitySnapshot) {
+    latestObservabilityDetail = null;
     if (overviewContainer) overviewContainer.innerHTML = "";
     const placeholder = '<article class="settings-card"><h3>Waiting For Refresh</h3><span class="settings-card-note">Open the Status tab and press Refresh to load the first observability snapshot.</span></article>';
     if (runtimeRowsContainer) runtimeRowsContainer.innerHTML = placeholder;
@@ -315,49 +609,194 @@ function renderObservability() {
   }
   if (runtimeRowsContainer) {
     runtimeRowsContainer.innerHTML = [
-      buildSettingsCard("OpenClaw Bridge", rows.bridge || {}, [
-        { label: "Transport", value: formatText(rows.bridge?.transport, "unknown") },
-        { label: "Mode", value: formatText(rows.bridge?.mode, "unknown") },
-        { label: "Endpoint", value: formatText(rows.bridge?.endpoint, "Stub / None") },
-        { label: "Auth", value: rows.bridge?.authConfigured ? "Configured" : "Not configured" },
-      ]),
-      buildSettingsCard("Provider / Model", rows.provider || {}, [
-        { label: "Provider", value: formatText(rows.provider?.providerLabel, "Unavailable") },
-        { label: "Model", value: formatText(rows.provider?.modelLabel, "Unavailable") },
-        { label: "Source", value: formatText(rows.provider?.source, "unknown") },
-        { label: "Agent", value: formatText(rows.provider?.agentId, "Unavailable") },
-      ]),
-      buildSettingsCard("Memory Runtime", rows.memory || {}, [
-        { label: "Requested", value: formatText(rows.memory?.requestedAdapterMode, "unknown") },
-        { label: "Active", value: formatText(rows.memory?.activeAdapterMode, "unknown") },
-        { label: "Fallback", value: formatText(rows.memory?.fallbackReason, "none") },
-        { label: "Legacy JSONL", value: rows.memory?.writeLegacyJsonl ? "Enabled" : "Disabled" },
-      ]),
+      buildSettingsCard(
+        "OpenClaw Bridge",
+        rows.bridge || {},
+        [
+          { label: "Transport", value: formatText(rows.bridge?.transport, "unknown") },
+          { label: "Mode", value: formatText(rows.bridge?.mode, "unknown") },
+          { label: "Endpoint", value: formatText(rows.bridge?.endpoint, "Stub / None") },
+          { label: "Auth", value: rows.bridge?.authConfigured ? "Configured" : "Not configured" },
+        ],
+        {
+          subjectId: OBSERVABILITY_SUBJECT_IDS.bridge,
+          selected: isSubjectSelected(OBSERVABILITY_SUBJECT_IDS.bridge),
+        }
+      ),
+      buildSettingsCard(
+        "Provider / Model",
+        rows.provider || {},
+        [
+          { label: "Provider", value: formatText(rows.provider?.providerLabel, "Unavailable") },
+          { label: "Model", value: formatText(rows.provider?.modelLabel, "Unavailable") },
+          { label: "Source", value: formatText(rows.provider?.source, "unknown") },
+          { label: "Agent", value: formatText(rows.provider?.agentId, "Unavailable") },
+        ],
+        {
+          subjectId: OBSERVABILITY_SUBJECT_IDS.provider,
+          selected: isSubjectSelected(OBSERVABILITY_SUBJECT_IDS.provider),
+        }
+      ),
+      buildSettingsCard(
+        "Memory Runtime",
+        rows.memory || {},
+        [
+          { label: "Requested", value: formatText(rows.memory?.requestedAdapterMode, "unknown") },
+          { label: "Active", value: formatText(rows.memory?.activeAdapterMode, "unknown") },
+          { label: "Fallback", value: formatText(rows.memory?.fallbackReason, "none") },
+          { label: "Legacy JSONL", value: rows.memory?.writeLegacyJsonl ? "Enabled" : "Disabled" },
+        ],
+        {
+          subjectId: OBSERVABILITY_SUBJECT_IDS.memory,
+          selected: isSubjectSelected(OBSERVABILITY_SUBJECT_IDS.memory),
+        }
+      ),
     ].join("");
   }
   if (configRowsContainer) {
     const localFiles = rows.canonicalFiles?.localWorkspace?.files || [];
     const openClawFiles = rows.canonicalFiles?.openClawWorkspace?.files || [];
     configRowsContainer.innerHTML = [
-      buildSettingsCard("Canonical Files", rows.canonicalFiles || {}, [
-        { label: "Local Workspace", value: `${rows.canonicalFiles?.localWorkspace?.readableCount || 0}/${localFiles.length} readable` },
-        { label: "OpenClaw Workspace", value: rows.canonicalFiles?.openClawWorkspace?.configured ? `${rows.canonicalFiles?.openClawWorkspace?.readableCount || 0}/${openClawFiles.length} readable` : "Not configured" },
-        { label: "Local Root", value: formatText(rows.canonicalFiles?.localWorkspace?.root, "Unavailable") },
-        { label: "OpenClaw Root", value: formatText(rows.canonicalFiles?.openClawWorkspace?.root, "Unavailable") },
-      ]),
-      buildSettingsCard("Paths / Sources", rows.paths || {}, [
-        { label: "Local Root", value: formatText(rows.paths?.localWorkspaceRoot, "Unavailable") },
-        { label: "OpenClaw Root", value: formatText(rows.paths?.openClawWorkspaceRoot, "Unavailable") },
-        { label: "Obsidian Root", value: formatText(rows.paths?.obsidianVaultRoot, "Unavailable") },
-        { label: "Active Layers", value: (rows.paths?.activeLayers || []).join(", ") || "base" },
-      ]),
-      buildSettingsCard("Validation", rows.validation || {}, [
-        { label: "Warnings", value: String(rows.validation?.warningCount ?? 0) },
-        { label: "Errors", value: String(rows.validation?.errorCount ?? 0) },
-        { label: "First Warning", value: formatText(rows.validation?.warnings?.[0], "None") },
-        { label: "First Error", value: formatText(rows.validation?.errors?.[0], "None") },
-      ]),
+      buildSettingsCard(
+        "Canonical Files",
+        rows.canonicalFiles || {},
+        [
+          { label: "Local Workspace", value: `${rows.canonicalFiles?.localWorkspace?.readableCount || 0}/${localFiles.length} readable` },
+          { label: "OpenClaw Workspace", value: rows.canonicalFiles?.openClawWorkspace?.configured ? `${rows.canonicalFiles?.openClawWorkspace?.readableCount || 0}/${openClawFiles.length} readable` : "Not configured" },
+          { label: "Local Root", value: formatText(rows.canonicalFiles?.localWorkspace?.root, "Unavailable") },
+          { label: "OpenClaw Root", value: formatText(rows.canonicalFiles?.openClawWorkspace?.root, "Unavailable") },
+        ],
+        {
+          subjectId: OBSERVABILITY_SUBJECT_IDS.canonicalFiles,
+          selected: isSubjectSelected(OBSERVABILITY_SUBJECT_IDS.canonicalFiles),
+          extraMarkup: buildCanonicalSubjectButtons(localFiles, openClawFiles),
+        }
+      ),
+      buildSettingsCard(
+        "Paths / Sources",
+        rows.paths || {},
+        [
+          { label: "Local Root", value: formatText(rows.paths?.localWorkspaceRoot, "Unavailable") },
+          { label: "OpenClaw Root", value: formatText(rows.paths?.openClawWorkspaceRoot, "Unavailable") },
+          { label: "Obsidian Root", value: formatText(rows.paths?.obsidianVaultRoot, "Unavailable") },
+          { label: "Active Layers", value: (rows.paths?.activeLayers || []).join(", ") || "base" },
+        ],
+        {
+          subjectId: OBSERVABILITY_SUBJECT_IDS.paths,
+          selected: isSubjectSelected(OBSERVABILITY_SUBJECT_IDS.paths),
+        }
+      ),
+      buildSettingsCard(
+        "Validation",
+        rows.validation || {},
+        [
+          { label: "Warnings", value: String(rows.validation?.warningCount ?? 0) },
+          { label: "Errors", value: String(rows.validation?.errorCount ?? 0) },
+          { label: "First Warning", value: formatText(rows.validation?.warnings?.[0], "None") },
+          { label: "First Error", value: formatText(rows.validation?.errors?.[0], "None") },
+        ],
+        {
+          subjectId: OBSERVABILITY_SUBJECT_IDS.validation,
+          selected: isSubjectSelected(OBSERVABILITY_SUBJECT_IDS.validation),
+        }
+      ),
     ].join("");
+  }
+}
+
+function renderObservabilityDetail() {
+  if (!observabilityDetailContainer) return;
+  if (!latestObservabilityDetail) {
+    observabilityDetailContainer.innerHTML =
+      '<h3>Waiting For Selection</h3><span class="setup-card-copy">Choose a row or file to see detailed why/provenance data.</span>';
+    return;
+  }
+  const detail = latestObservabilityDetail;
+  const provenance = Array.isArray(detail.provenance) ? detail.provenance : [];
+  const steps = Array.isArray(detail.suggestedSteps) ? detail.suggestedSteps : [];
+  const actions = Array.isArray(detail.actions) ? detail.actions : [];
+  const provenanceMarkup = provenance
+    .map(
+      (entry) =>
+        `<li><strong>${escapeHtml(entry.label || "Detail")}:</strong> ${escapeHtml(
+          formatProvenanceEntryValue(entry)
+        )}</li>`
+    )
+    .join("");
+  const stepsMarkup = steps.map((entry) => `<li>${escapeHtml(entry)}</li>`).join("");
+  const actionsMarkup = actions
+    .map(
+      (action) =>
+        `<button class="setup-action-button" type="button" data-observability-action="${escapeHtml(action.actionId)}" ${action.enabled === false ? "disabled" : ""}>${escapeHtml(action.label || action.actionId)}</button>`
+    )
+    .join("");
+  observabilityDetailContainer.innerHTML = [
+    `<div class="settings-card-header"><div><h3>${escapeHtml(detail.subject?.label || "Status Detail")}</h3><span class="settings-card-note">${escapeHtml(formatReason(detail.subject?.reason || "unknown"))}</span></div><span class="state-pill" data-state="${escapeHtml(detail.subject?.state || "unknown")}">${escapeHtml(detail.subject?.state || "unknown")}</span></div>`,
+    `<p class="setup-card-copy">${escapeHtml(detail.summary?.headline || "No headline available.")}</p>`,
+    `<p class="setup-card-copy">${escapeHtml(detail.summary?.impact || "No impact information available.")}</p>`,
+    `<div class="settings-detail-list">${buildDetailRow("Who Owns This", formatOwnershipLabel(detail.summary?.ownership))}${buildDetailRow("How To Fix", formatRepairabilityLabel(detail.summary?.repairability))}</div>`,
+    `<h4>Where This Info Came From</h4>`,
+    provenanceMarkup ? `<ul class="detail-list">${provenanceMarkup}</ul>` : '<span class="setup-card-copy">No source details yet.</span>',
+    `<h4>Suggested Steps</h4>`,
+    stepsMarkup ? `<ul class="detail-list detail-list--steps">${stepsMarkup}</ul>` : '<span class="setup-card-copy">No suggested steps available.</span>',
+    `<div class="setup-actions">${actionsMarkup}</div>`,
+  ].join("");
+}
+
+async function loadObservabilityDetail(subjectId) {
+  const nextSubjectId = typeof subjectId === "string" && subjectId.trim() ? subjectId.trim() : OBSERVABILITY_SUBJECT_IDS.bridge;
+  activeObservabilitySubjectId = nextSubjectId;
+  if (typeof window.inventoryAPI?.getObservabilityDetail !== "function") {
+    latestObservabilityDetail = null;
+    render();
+    return;
+  }
+  try {
+    latestObservabilityDetail = await window.inventoryAPI.getObservabilityDetail(nextSubjectId);
+    activeObservabilitySubjectId = latestObservabilityDetail?.subject?.subjectId || nextSubjectId;
+  } catch (error) {
+    latestObservabilityDetail = null;
+    setStatus(error?.message || "Status detail failed to load.", "warning");
+  }
+  render();
+}
+
+async function runObservabilityDetailAction(actionId) {
+  if (!actionId || typeof window.inventoryAPI?.runObservabilityAction !== "function") return;
+  try {
+    const result = await window.inventoryAPI.runObservabilityAction(
+      actionId,
+      activeObservabilitySubjectId || OBSERVABILITY_SUBJECT_IDS.bridge
+    );
+    if (!result?.ok) {
+      setStatus(result?.error || "Status action failed.", "warning");
+      if (result?.snapshot) latestObservabilitySnapshot = result.snapshot;
+      if (result?.detail) {
+        latestObservabilityDetail = result.detail;
+        activeObservabilitySubjectId = result.detail.subject?.subjectId || activeObservabilitySubjectId;
+      }
+      render();
+      return;
+    }
+    if (result.shellState) syncShellState(result.shellState);
+    if (result.snapshot) latestObservabilitySnapshot = result.snapshot;
+    if (result.detail) {
+      latestObservabilityDetail = result.detail;
+      activeObservabilitySubjectId = result.detail.subject?.subjectId || activeObservabilitySubjectId;
+    }
+    if (result.actionId === OBSERVABILITY_ACTION_IDS.copyPath) {
+      setStatus("Path copied to clipboard.", "ok");
+    } else if (result.actionId === OBSERVABILITY_ACTION_IDS.copyDetails) {
+      setStatus("Details copied to clipboard.", "ok");
+    } else if (result.actionId === OBSERVABILITY_ACTION_IDS.openSetup) {
+      setStatus("Setup opened from status details.", "ok");
+    } else {
+      setStatus("Status refreshed.", "ok");
+    }
+    render();
+  } catch (error) {
+    setStatus(error?.message || "Status action failed.", "warning");
+    render();
   }
 }
 
@@ -376,14 +815,14 @@ function renderSetupTargets() {
   if (!setupTargets) return;
   if (!latestSetupSnapshot) {
     setupTargets.innerHTML =
-      '<article class="setup-card"><h3>Waiting For Targets</h3><span class="setup-card-copy">Open the Setup tab and press Reload Targets if the target summary does not appear.</span></article>';
+      '<article class="setup-card"><h3>Waiting For Targets</h3><span class="setup-card-copy">Press Reload Targets if your folders are not showing.</span></article>';
     return;
   }
-  const applyModeLabel = latestSetupSnapshot.applyMode === "local_only" ? "Local Writes Only" : "Blocked";
+  const applyModeLabel = latestSetupSnapshot.applyMode === "local_only" ? "Local Saves Only" : "Blocked";
   setupTargets.innerHTML = [
-    buildSetupTargetCard("Local Workspace", latestSetupSnapshot.targets.local, "Offline-mode read source and required bootstrap target."),
-    buildSetupTargetCard("OpenClaw Workspace", latestSetupSnapshot.targets.openClaw, "Agent-facing observed workspace. Setup does not write here."),
-    `<article class="setup-card"><div class="settings-card-header"><div><h3>Write Policy</h3><span class="settings-card-note">Preview and apply stay explicit; setup writes only to the pet-local workspace.</span></div><span class="state-pill" data-state="${escapeHtml(latestSetupSnapshot.applyMode === "blocked" ? "failed" : "healthy")}">${escapeHtml(applyModeLabel)}</span></div><div class="settings-detail-list">${buildDetailRow("Presets", String(latestSetupSnapshot.presets?.length || 0))}${buildDetailRow("Heartbeat Seed", "Optional, empty/comment-only")}${buildDetailRow("OpenClaw", latestSetupSnapshot.targets.openClaw?.configured ? "Observed only" : "Not configured")}</div></article>`,
+    buildSetupTargetCard("Local Workspace", latestSetupSnapshot.targets.local, "Main folder for your pet files."),
+    buildSetupTargetCard("OpenClaw Workspace", latestSetupSnapshot.targets.openClaw, "Read-only view for OpenClaw context."),
+    `<article class="setup-card"><div class="settings-card-header"><div><h3>Write Policy</h3><span class="settings-card-note">Save Setup is always explicit and local-only.</span></div><span class="state-pill" data-state="${escapeHtml(latestSetupSnapshot.applyMode === "blocked" ? "failed" : "healthy")}">${escapeHtml(applyModeLabel)}</span></div><div class="settings-detail-list">${buildDetailRow("Presets", String(latestSetupSnapshot.presets?.length || 0))}${buildDetailRow("Heartbeat File", "Optional, empty file")}${buildDetailRow("OpenClaw", latestSetupSnapshot.targets.openClaw?.configured ? "Read-only" : "Not configured")}</div></article>`,
   ].join("");
 }
 
@@ -392,10 +831,25 @@ function applySetupDefaultsIfEmpty() {
   if (setupPetName && !setupPetName.value) setupPetName.value = defaults.petName || "";
   if (setupBirthday && !setupBirthday.value) setupBirthday.value = defaults.birthday || "";
   if (setupCompanionName && !setupCompanionName.value) setupCompanionName.value = defaults.companionName || "";
+  if (setupCompanionCallName && !setupCompanionCallName.value) {
+    setupCompanionCallName.value = defaults.companionCallName || "";
+  }
+  if (setupUserGender && !setupUserGender.value) setupUserGender.value = defaults.userGender || "";
   if (setupCompanionTimezone && !setupCompanionTimezone.value) {
     setupCompanionTimezone.value = defaults.companionTimezone || "";
   }
   if (setupStarterNote && !setupStarterNote.value) setupStarterNote.value = defaults.starterNote || "";
+  if (setupCreatureLabel && !setupCreatureLabel.value) {
+    setupCreatureLabel.value = defaults.creatureLabel || "";
+  }
+  if (setupPetGender && !setupPetGender.value) setupPetGender.value = defaults.petGender || "";
+  if (setupSignatureEmoji && !setupSignatureEmoji.value) {
+    setupSignatureEmoji.value = defaults.signatureEmoji || "";
+  }
+  if (setupAvatarPath && !setupAvatarPath.value) setupAvatarPath.value = defaults.avatarPath || "";
+  if (setupSeedHeartbeat && !setupSeedHeartbeat.checked && defaults.seedHeartbeatFile) {
+    setupSeedHeartbeat.checked = true;
+  }
 }
 
 function renderSetupPresets() {
@@ -408,7 +862,7 @@ function renderSetupPresets() {
   setupPresets.innerHTML = latestSetupSnapshot.presets
     .map(
       (preset) =>
-        `<button class="setup-card-button ${selectedPresetId === preset.id ? "is-active" : ""}" type="button" data-preset-id="${escapeHtml(preset.id)}"><strong>${escapeHtml(preset.label)}</strong><span class="setup-card-button-copy">${escapeHtml(preset.summary)}</span><span class="setup-card-button-copy">${escapeHtml(preset.quickPicker || "")}</span></button>`
+        `<button class="setup-card-button ${selectedPresetId === preset.id ? "is-active" : ""}" type="button" data-preset-id="${escapeHtml(preset.id)}" data-hint="${escapeHtml(`Choose ${preset.label}. ${preset.quickPicker || preset.summary}`)}"><strong>${escapeHtml(preset.label)}</strong><span class="setup-card-button-copy">${escapeHtml(preset.summary)}</span><span class="setup-card-button-copy">${escapeHtml(preset.quickPicker || "")}</span></button>`
     )
     .join("");
   for (const button of setupPresets.querySelectorAll("[data-preset-id]")) {
@@ -432,7 +886,7 @@ function renderSetupPreview() {
   if (!latestSetupPreview) {
     setupPreviewTabs.innerHTML = "";
     setupPreviewCopy.textContent =
-      "Choose a preset and press Preview to generate the managed Markdown output.";
+      "Pick a personality, then press Preview to see your pet files.";
     setupPreviewMarkdown.textContent = "";
     return;
   }
@@ -443,7 +897,7 @@ function renderSetupPreview() {
   setupPreviewTabs.innerHTML = files
     .map(
       (file) =>
-        `<button class="preview-tab-button ${file.fileId === activeSetupPreviewFileId ? "is-active" : ""}" type="button" data-file-id="${escapeHtml(file.fileId)}">${escapeHtml(file.fileId)}</button>`
+        `<button class="preview-tab-button ${file.fileId === activeSetupPreviewFileId ? "is-active" : ""}" type="button" data-file-id="${escapeHtml(file.fileId)}" data-hint="${escapeHtml(`Show preview for ${file.fileId}.`)}">${escapeHtml(file.fileId)}</button>`
     )
     .join("");
   for (const button of setupPreviewTabs.querySelectorAll("[data-file-id]")) {
@@ -456,8 +910,8 @@ function renderSetupPreview() {
   const writeTargets = (latestSetupPreview.writePlan || []).map((plan) => `${plan.targetId}: ${plan.root}`);
   setupPreviewCopy.textContent =
     latestSetupPreview.applyMode === "local_only"
-      ? `Local-write preview. Planned root: ${writeTargets.join(" | ") || "Unavailable"}. OpenClaw stays observed/read-only.`
-      : "Preview blocked until the local target and required fields are valid.";
+      ? `Preview only. Save Setup writes to: ${writeTargets.join(" | ") || "Unavailable"}. OpenClaw stays read-only.`
+      : "Preview is blocked until your local folder and required fields are valid.";
   setupPreviewMarkdown.textContent = selectedFile?.previewMarkdown || "";
 }
 
@@ -484,9 +938,11 @@ function render() {
   if (refreshButton) refreshButton.disabled = observabilityLoading;
   renderStatus();
   renderObservability();
+  renderObservabilityDetail();
   renderSetupTargets();
   renderSetupPresets();
   renderSetupPreview();
+  renderHoverHint();
 }
 
 async function refreshObservability(successMessage = "Status refreshed.") {
@@ -495,6 +951,11 @@ async function refreshObservability(successMessage = "Status refreshed.") {
   render();
   try {
     latestObservabilitySnapshot = await window.inventoryAPI.getObservabilitySnapshot();
+    const preferredSubject =
+      activeObservabilitySubjectId && subjectExistsInSnapshot(latestObservabilitySnapshot, activeObservabilitySubjectId)
+        ? activeObservabilitySubjectId
+        : pickDefaultObservabilitySubject(latestObservabilitySnapshot);
+    await loadObservabilityDetail(preferredSubject);
     setStatus(successMessage, "ok");
   } catch (error) {
     setStatus(error?.message || "Status refresh failed.", "warning");
@@ -504,7 +965,7 @@ async function refreshObservability(successMessage = "Status refreshed.") {
   }
 }
 
-async function refreshSetupSnapshot(successMessage = "Setup targets refreshed.") {
+async function refreshSetupSnapshot(successMessage = "Setup targets loaded.") {
   if (typeof window.inventoryAPI?.getSetupBootstrapSnapshot !== "function") return;
   setupLoading = true;
   render();
@@ -531,14 +992,14 @@ async function previewSetup() {
     activeSetupPreviewFileId = preview?.files?.[0]?.fileId || activeSetupPreviewFileId;
     if (preview?.ok) {
       setSetupResult(
-        "Preview ready. Apply will write to the local workspace only; OpenClaw stays observed/read-only.",
+        "Preview ready. Save Setup writes to your local pet folder only. OpenClaw stays read-only.",
         "ok"
       );
-      setStatus("Setup preview generated.", "ok");
+      setStatus("Preview ready.", "ok");
     } else {
       const errorText =
         Array.isArray(preview?.errors) && preview.errors.length > 0
-          ? preview.errors.map((entry) => formatReason(entry)).join(", ")
+          ? preview.errors.map((entry) => formatSetupError(entry)).join(" ")
           : "Setup preview is blocked.";
       setSetupResult(errorText, "warning");
       setStatus(errorText, "warning");
@@ -563,7 +1024,7 @@ async function applySetup() {
   try {
     const result = await window.inventoryAPI.applySetupBootstrap(getSetupFormInput());
     if (!result?.ok) {
-      const errorText = result?.error || "Setup apply failed.";
+      const errorText = formatSetupError(result?.error || "setup_apply_failed");
       setSetupResult(errorText, "warning");
       setStatus(errorText, "warning");
       return;
@@ -573,10 +1034,10 @@ async function applySetup() {
       .join(" | ");
     latestSetupPreview = null;
     setupDirty = true;
-    const successMessage = `Setup applied. Local workspace written: ${targetSummary || "none"}. OpenClaw remained read-only.`;
+    const successMessage = `Setup saved. Local files written: ${targetSummary || "none"}. OpenClaw stayed read-only.`;
     setSetupResult(successMessage, "ok");
-    setStatus("Setup applied. Open Status and press Refresh to verify local canonical file health.", "ok");
-    await refreshSetupSnapshot("Setup targets refreshed after apply.");
+    setStatus("Setup saved. Open Status and press Refresh to check file health.", "ok");
+    await refreshSetupSnapshot("Setup targets refreshed after save.");
     setSetupResult(successMessage, "ok");
   } catch (error) {
     setSetupResult(error?.message || "Setup apply failed.", "warning");
@@ -678,6 +1139,7 @@ function syncShellState(payload) {
 }
 
 async function initialize() {
+  wireHoverHints();
   try {
     if (typeof window.inventoryAPI?.getShellState === "function") {
       syncShellState(await window.inventoryAPI.getShellState());
@@ -733,16 +1195,59 @@ poolRingDragHandle?.addEventListener("lostpointercapture", (event) => {
 poolRingRemoveButton?.addEventListener("click", () => {
   void runShellAction(SHELL_ACTIONS.togglePoolRing, "Pool ring removed from the desktop.", "Pool ring removal failed.");
 });
+runtimeRowsContainer?.addEventListener("click", (event) => {
+  const button = event.target?.closest?.("[data-subject-id]");
+  if (!button) return;
+  const subjectId = button.dataset?.subjectId;
+  if (!subjectId) return;
+  event.preventDefault();
+  void loadObservabilityDetail(subjectId);
+});
+runtimeRowsContainer?.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter" && event.key !== " ") return;
+  const button = event.target?.closest?.("[data-subject-id]");
+  if (!button) return;
+  const subjectId = button.dataset?.subjectId;
+  if (!subjectId) return;
+  event.preventDefault();
+  void loadObservabilityDetail(subjectId);
+});
+configRowsContainer?.addEventListener("click", (event) => {
+  const button = event.target?.closest?.("[data-subject-id]");
+  if (!button) return;
+  const subjectId = button.dataset?.subjectId;
+  if (!subjectId) return;
+  event.preventDefault();
+  void loadObservabilityDetail(subjectId);
+});
+configRowsContainer?.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter" && event.key !== " ") return;
+  const button = event.target?.closest?.("[data-subject-id]");
+  if (!button) return;
+  const subjectId = button.dataset?.subjectId;
+  if (!subjectId) return;
+  event.preventDefault();
+  void loadObservabilityDetail(subjectId);
+});
+observabilityDetailContainer?.addEventListener("click", (event) => {
+  const button = event.target?.closest?.("[data-observability-action]");
+  if (!button) return;
+  const actionId = button.dataset?.observabilityAction;
+  if (!actionId) return;
+  event.preventDefault();
+  void runObservabilityDetailAction(actionId);
+});
 
 for (const field of [
   setupPetName,
   setupBirthday,
   setupCompanionName,
+  setupCompanionCallName,
+  setupUserGender,
   setupCompanionTimezone,
   setupStarterNote,
-  setupCompanionCallName,
-  setupCompanionPronouns,
   setupCreatureLabel,
+  setupPetGender,
   setupSignatureEmoji,
   setupAvatarPath,
   setupSeedHeartbeat,
@@ -756,6 +1261,22 @@ for (const field of [
     renderSetupPreview();
   });
 }
+
+setupAvatarBrowseButton?.addEventListener("click", () => {
+  setupAvatarFileInput?.click();
+});
+
+setupAvatarFileInput?.addEventListener("change", () => {
+  const selectedFile = setupAvatarFileInput.files?.[0] || null;
+  const selectedPath =
+    (selectedFile && typeof selectedFile.path === "string" && selectedFile.path.trim()) ||
+    (typeof setupAvatarFileInput.value === "string" ? setupAvatarFileInput.value.trim() : "");
+  if (setupAvatarPath) {
+    setupAvatarPath.value = selectedPath;
+  }
+  markSetupDirty();
+  renderSetupPreview();
+});
 
 setupReloadTargetsButton?.addEventListener("click", () => {
   void refreshSetupSnapshot("Setup targets refreshed.");

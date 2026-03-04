@@ -3,6 +3,10 @@ const { contextBridge, ipcRenderer } = require("electron");
 contextBridge.exposeInMainWorld("inventoryAPI", {
   getShellState: () => ipcRenderer.invoke("pet:getShellState"),
   getObservabilitySnapshot: () => ipcRenderer.invoke("pet:getObservabilitySnapshot"),
+  getObservabilityDetail: (subjectId) =>
+    ipcRenderer.invoke("pet:getObservabilityDetail", { subjectId }),
+  runObservabilityAction: (actionId, subjectId) =>
+    ipcRenderer.invoke("pet:runObservabilityAction", { actionId, subjectId }),
   getSetupBootstrapSnapshot: () => ipcRenderer.invoke("pet:getSetupBootstrapSnapshot"),
   previewSetupBootstrap: (input) => ipcRenderer.invoke("pet:previewSetupBootstrap", { input }),
   applySetupBootstrap: (input) => ipcRenderer.invoke("pet:applySetupBootstrap", { input }),

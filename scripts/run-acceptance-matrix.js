@@ -88,6 +88,12 @@ const CASES = Object.freeze([
     script: "scripts/check-setup-bootstrap.js",
   },
   {
+    id: "D11c-repair-actions",
+    deliverable: "11c-repair-actions-and-provenance-visibility",
+    scenario: "Status detail subjects keep guided-vs-observed-only repair actions and path/provenance visibility bounded.",
+    script: "scripts/check-shell-repair-actions.js",
+  },
+  {
     id: "Layout-assets",
     deliverable: "core-renderer-assets",
     scenario: "Layout bounds and required sprite assets remain internally consistent.",

@@ -43,7 +43,7 @@
 
       .inventory-shell {
         display: grid;
-        grid-template-rows: auto auto auto 1fr;
+        grid-template-rows: auto auto auto 1fr auto;
         gap: 10px;
         width: 100%;
         height: 100%;
@@ -168,6 +168,24 @@
 
       .status-line[data-tone="live"] {
         color: var(--live);
+      }
+
+      .hint-strip {
+        display: flex;
+        align-items: center;
+        min-height: 30px;
+        padding: 0 12px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: rgba(6, 10, 16, 0.42);
+      }
+
+      .hint-text {
+        margin: 0;
+        color: var(--muted);
+        font-size: 11px;
+        line-height: 1.4;
+        letter-spacing: 0.02em;
       }
 
       .inventory-scroll {
@@ -324,6 +342,15 @@
         background: linear-gradient(180deg, rgba(17, 26, 37, 0.88), rgba(9, 14, 20, 0.96));
       }
 
+      .settings-card.is-selectable {
+        cursor: pointer;
+      }
+
+      .settings-card.is-selected {
+        border-color: rgba(125, 214, 255, 0.5);
+        box-shadow: inset 0 0 0 1px rgba(125, 214, 255, 0.18);
+      }
+
       .inventory-card.is-active,
       .card-surface.is-active,
       .card-button.is-active {
@@ -462,6 +489,32 @@
         word-break: break-word;
       }
 
+      .settings-card-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .status-chip-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .detail-list {
+        margin: 0;
+        padding-left: 18px;
+        display: grid;
+        gap: 6px;
+        color: var(--text);
+        font-size: 13px;
+        line-height: 1.45;
+      }
+
+      .detail-list--steps {
+        color: var(--muted);
+      }
+
       .minor-button {
         margin-top: auto;
         min-height: 38px;
@@ -558,6 +611,35 @@
         min-height: 108px;
         padding: 10px 12px;
         resize: vertical;
+      }
+
+      .setup-inline {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .setup-inline .setup-input {
+        flex: 1;
+      }
+
+      .setup-browse-button {
+        min-height: 42px;
+        padding: 0 12px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.08);
+        color: var(--text);
+        font: inherit;
+        cursor: pointer;
+      }
+
+      .setup-browse-button:hover {
+        filter: brightness(1.08);
+      }
+
+      .setup-file-input {
+        display: none;
       }
 
       .setup-checkbox {
@@ -875,6 +957,17 @@
             </div>
             <div id="observability-config-rows" class="settings-grid"></div>
           </section>
+
+          <section class="section">
+            <div class="section-header">
+              <h2>Details</h2>
+              <p>Click a status card or file button to see why it is healthy or degraded.</p>
+            </div>
+            <div id="observability-detail" class="setup-card">
+              <h3>Waiting For Selection</h3>
+              <span class="setup-card-copy">Open Status and press Refresh to load details.</span>
+            </div>
+          </section>
         </section>
 
         <section id="tab-panel-setup" class="tab-panel" aria-live="polite">
@@ -882,37 +975,41 @@
             <section class="section">
               <div class="section-header">
                 <h2>Targets</h2>
-                <p>See where setup will write and whether local-only or dual-target apply is available.</p>
+                <p>See where setup saves files. Setup writes only to your local pet folder.</p>
               </div>
               <div id="setup-targets" class="setup-target-grid"></div>
             </section>
 
             <section class="section">
               <div class="section-header">
-                <h2>Profile</h2>
-                <p>Enter the minimum facts needed to bootstrap the pet's canonical Markdown files.</p>
+                <h2>User Profile</h2>
+                <p>Tell us about yourself so your pet can use the right names and style.</p>
               </div>
               <div class="setup-card">
                 <div id="setup-required-fields" class="setup-form-grid">
                   <label class="setup-field">
-                    <span class="setup-label">Pet Name</span>
-                    <input id="setup-pet-name" class="setup-input" type="text" autocomplete="off" />
-                  </label>
-                  <label class="setup-field">
-                    <span class="setup-label">Birthday</span>
-                    <input id="setup-birthday" class="setup-input" type="text" autocomplete="off" />
-                  </label>
-                  <label class="setup-field">
-                    <span class="setup-label">Companion Name</span>
+                    <span class="setup-label">Your Name (real name)</span>
                     <input id="setup-companion-name" class="setup-input" type="text" autocomplete="off" />
                   </label>
                   <label class="setup-field">
-                    <span class="setup-label">Companion Timezone</span>
+                    <span class="setup-label">What Pet Calls You (nickname)</span>
+                    <input id="setup-companion-call-name" class="setup-input" type="text" autocomplete="off" />
+                  </label>
+                  <label class="setup-field">
+                    <span class="setup-label">Are you a boy or girl?</span>
+                    <select id="setup-user-gender" class="setup-select">
+                      <option value="">Pick one</option>
+                      <option value="boy">Boy</option>
+                      <option value="girl">Girl</option>
+                    </select>
+                  </label>
+                  <label class="setup-field">
+                    <span class="setup-label">Your Timezone</span>
                     <input id="setup-companion-timezone" class="setup-input" type="text" autocomplete="off" />
                   </label>
                 </div>
                 <label class="setup-field">
-                  <span class="setup-label">Starter Note</span>
+                  <span class="setup-label">A Note About You</span>
                   <textarea id="setup-starter-note" class="setup-textarea"></textarea>
                 </label>
               </div>
@@ -920,43 +1017,66 @@
 
             <section class="section">
               <div class="section-header">
-                <h2>Preset</h2>
-                <p>Select one frozen starter personality bundle for the first bootstrap pass.</p>
+                <h2>Pet Personality</h2>
+                <p>Pick one starter style for how your pet talks.</p>
               </div>
               <div id="setup-presets" class="setup-preset-grid"></div>
             </section>
 
             <section class="section">
               <div class="section-header">
-                <h2>Advanced</h2>
-                <p>Optional identity and relationship fields. Leave blank to use preset defaults where allowed.</p>
+                <h2>Pet Profile</h2>
+                <p>Tell us about your pet.</p>
               </div>
               <div class="setup-card">
                 <div class="setup-form-grid">
                   <label class="setup-field">
-                    <span class="setup-label">Companion Call Name</span>
-                    <input id="setup-companion-call-name" class="setup-input" type="text" autocomplete="off" />
+                    <span class="setup-label">Pet Name</span>
+                    <input id="setup-pet-name" class="setup-input" type="text" autocomplete="off" />
                   </label>
                   <label class="setup-field">
-                    <span class="setup-label">Companion Pronouns</span>
-                    <input id="setup-companion-pronouns" class="setup-input" type="text" autocomplete="off" />
+                    <span class="setup-label">Pet Birthday</span>
+                    <input id="setup-birthday" class="setup-input" type="text" autocomplete="off" />
                   </label>
                   <label class="setup-field">
-                    <span class="setup-label">Creature Label</span>
+                    <span class="setup-label">What type of creature is pet?</span>
                     <input id="setup-creature-label" class="setup-input" type="text" autocomplete="off" />
                   </label>
                   <label class="setup-field">
-                    <span class="setup-label">Signature Emoji</span>
-                    <input id="setup-signature-emoji" class="setup-input" type="text" autocomplete="off" />
+                    <span class="setup-label">Is your pet a boy, girl, or thing?</span>
+                    <select id="setup-pet-gender" class="setup-select">
+                      <option value="">Pick one</option>
+                      <option value="boy">Boy</option>
+                      <option value="girl">Girl</option>
+                      <option value="thing">Thing</option>
+                    </select>
                   </label>
                   <label class="setup-field">
-                    <span class="setup-label">Avatar Path</span>
-                    <input id="setup-avatar-path" class="setup-input" type="text" autocomplete="off" />
+                    <span class="setup-label">Pet Signature</span>
+                    <select id="setup-signature-emoji" class="setup-select">
+                      <option value="">Pick one</option>
+                      <option value="seedling">&#x1F331; Seedling</option>
+                      <option value="sparkles">&#x2728; Sparkles</option>
+                      <option value="books">&#x1F4DA; Books</option>
+                      <option value="sun">&#x2600;&#xFE0F; Sun</option>
+                      <option value="calm-smile">&#x1F642; Calm Smile</option>
+                      <option value="paw">&#x1F43E; Paw</option>
+                      <option value="star">&#x2B50; Star</option>
+                      <option value="moon">&#x1F319; Moon</option>
+                    </select>
+                  </label>
+                  <label class="setup-field">
+                    <span class="setup-label">Pet Avatar</span>
+                    <div class="setup-inline">
+                      <input id="setup-avatar-path" class="setup-input" type="text" autocomplete="off" readonly />
+                      <button id="setup-avatar-browse" class="setup-browse-button" type="button">Browse...</button>
+                    </div>
+                    <input id="setup-avatar-file" class="setup-file-input" type="file" accept="image/*" />
                   </label>
                 </div>
                 <label class="setup-checkbox">
                   <input id="setup-seed-heartbeat" type="checkbox" />
-                  <span>Seed an intentionally empty `HEARTBEAT.md` placeholder.</span>
+                  <span>Create an empty `HEARTBEAT.md` file (advanced).</span>
                 </label>
               </div>
             </section>
@@ -964,26 +1084,30 @@
             <section class="section">
               <div class="section-header">
                 <h2>Preview</h2>
-                <p>Preview the exact managed Markdown block for each file before any write happens.</p>
+                <p>Check what will be saved before you press Save Setup.</p>
               </div>
               <div class="setup-card">
                 <div class="setup-actions">
                   <button id="setup-reload-targets" class="setup-action-button" type="button">Reload Targets</button>
                   <button id="setup-preview" class="setup-action-button" type="button">Preview</button>
-                  <button id="setup-apply" class="setup-action-button" type="button" disabled>Apply Setup</button>
+                  <button id="setup-apply" class="setup-action-button" type="button" disabled>Save Setup</button>
                 </div>
                 <div id="setup-preview-tabs" class="preview-tab-strip"></div>
                 <div class="preview-pane">
                   <p id="setup-preview-copy" class="preview-copy">
-                    Choose a preset and press Preview to generate the managed Markdown output.
+                    Pick a personality, then press Preview to see your pet files.
                   </p>
                   <pre id="setup-preview-markdown" class="preview-code"></pre>
                 </div>
-                <div id="setup-result" class="result-banner">Setup preview has not been generated yet.</div>
+                <div id="setup-result" class="result-banner">No preview yet. Press Preview to start.</div>
               </div>
             </section>
           </section>
         </section>
+      </section>
+
+      <section class="hint-strip" aria-live="polite">
+        <p id="hover-hint-text" class="hint-text">Hint: Hover over a button or field to see help here.</p>
       </section>
     </main>
     <script src="inventory-shell-renderer.js"></script>

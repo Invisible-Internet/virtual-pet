@@ -40,12 +40,24 @@ const DEFAULT_FORM_VALUES = Object.freeze({
   companionTimezone: "",
   personaPresetId: DEFAULT_PRESET_ID,
   starterNote: "",
+  userGender: "",
   companionPronouns: "",
   companionCallName: "",
   creatureLabel: "",
+  petGender: "",
+  petPronouns: "",
   signatureEmoji: "",
   avatarPath: "",
   seedHeartbeatFile: false,
+});
+const USER_GENDER_PRONOUNS = Object.freeze({
+  boy: "he/him",
+  girl: "she/her",
+});
+const PET_GENDER_PRONOUNS = Object.freeze({
+  boy: "he/him",
+  girl: "she/her",
+  thing: "they/them/it",
 });
 const PRESETS = Object.freeze({
   gentle_companion: Object.freeze({
@@ -265,6 +277,145 @@ function ensureTrailingNewline(value) {
   return text.endsWith("\n") ? text : `${text}\n`;
 }
 
+function isTemplatePlaceholder(value) {
+  return /^\{\{[^}]+\}\}$/.test(value.trim());
+}
+
+function sanitizeRecoveredValue(value, { allowNone = false } = {}) {
+  const text = toOptionalString(value, "");
+  if (!text) return "";
+  if (isTemplatePlaceholder(text)) return "";
+  const lower = text.toLowerCase();
+  if (!allowNone) {
+    if (
+      lower === "none" ||
+      lower === "none." ||
+      lower === "none yet" ||
+      lower === "none yet." ||
+      lower === "not set"
+    ) {
+      return "";
+    }
+  }
+  return text;
+}
+
+function normalizeGender(value, allowedValues = []) {
+  const normalized = toOptionalString(value, "").toLowerCase();
+  return allowedValues.includes(normalized) ? normalized : "";
+}
+
+function inferUserGenderFromPronouns(pronounsValue) {
+  const normalized = toOptionalString(pronounsValue, "").toLowerCase().replace(/\s+/g, "");
+  if (!normalized) return "";
+  if (normalized.includes("he/him")) return "boy";
+  if (normalized.includes("she/her")) return "girl";
+  return "";
+}
+
+function inferPetGenderFromPronouns(pronounsValue) {
+  const normalized = toOptionalString(pronounsValue, "").toLowerCase().replace(/\s+/g, "");
+  if (!normalized) return "";
+  if (normalized.includes("they/them/it")) return "thing";
+  if (normalized.includes("he/him")) return "boy";
+  if (normalized.includes("she/her")) return "girl";
+  if (normalized.includes("they/them") || normalized === "it") return "thing";
+  return "";
+}
+
+function pronounsFromUserGender(gender) {
+  return USER_GENDER_PRONOUNS[gender] || "";
+}
+
+function pronounsFromPetGender(gender) {
+  return PET_GENDER_PRONOUNS[gender] || "";
+}
+
+function readFileIfReadable(filePath) {
+  try {
+    fs.accessSync(filePath, fs.constants.R_OK);
+    return fs.readFileSync(filePath, "utf8");
+  } catch {
+    return "";
+  }
+}
+
+function extractManagedBlock(content) {
+  if (typeof content !== "string" || !content) return "";
+  const startIndex = content.indexOf(MANAGED_BLOCK_START);
+  const endIndex = content.indexOf(MANAGED_BLOCK_END);
+  if (startIndex >= 0 && endIndex > startIndex) {
+    const startOffset = startIndex + MANAGED_BLOCK_START.length;
+    return content.slice(startOffset, endIndex).trim();
+  }
+  return content.trim();
+}
+
+function parseMarkdownKeyValueLines(content) {
+  const map = new Map();
+  for (const line of String(content || "").split(/\r?\n/)) {
+    const match = line.match(/^\s*-\s*([^:]+):\s*(.*)$/);
+    if (!match) continue;
+    const key = toOptionalString(match[1], "").toLowerCase();
+    if (!key) continue;
+    map.set(key, toOptionalString(match[2], ""));
+  }
+  return map;
+}
+
+function inferPresetIdFromRecoveredDefaults(defaults) {
+  const signatureEmoji = toOptionalString(defaults?.signatureEmoji, "");
+  if (signatureEmoji) {
+    const byEmoji = Object.values(PRESETS).find((preset) => preset.signatureEmoji === signatureEmoji);
+    if (byEmoji) return byEmoji.id;
+  }
+  const creatureLabel = toOptionalString(defaults?.creatureLabel, "");
+  if (creatureLabel) {
+    const byCreature = Object.values(PRESETS).find((preset) => preset.creatureLabel === creatureLabel);
+    if (byCreature) return byCreature.id;
+  }
+  return DEFAULT_PRESET_ID;
+}
+
+function readSetupDefaultsFromWorkspace(localRoot) {
+  const root = toOptionalString(localRoot, null);
+  if (!root) return {};
+  const defaults = {};
+
+  const identityBody = extractManagedBlock(readFileIfReadable(path.join(root, "IDENTITY.md")));
+  if (identityBody) {
+    const identityMap = parseMarkdownKeyValueLines(identityBody);
+    defaults.petName = sanitizeRecoveredValue(identityMap.get("name"));
+    defaults.creatureLabel = sanitizeRecoveredValue(identityMap.get("creature"));
+    defaults.petPronouns = sanitizeRecoveredValue(identityMap.get("pronouns"));
+    defaults.signatureEmoji = sanitizeRecoveredValue(identityMap.get("emoji"));
+    defaults.avatarPath = sanitizeRecoveredValue(identityMap.get("avatar"));
+    defaults.birthday = sanitizeRecoveredValue(identityMap.get("birthday"));
+  }
+
+  const userBody = extractManagedBlock(readFileIfReadable(path.join(root, "USER.md")));
+  if (userBody) {
+    const userMap = parseMarkdownKeyValueLines(userBody);
+    defaults.companionName = sanitizeRecoveredValue(userMap.get("name"));
+    defaults.companionCallName = sanitizeRecoveredValue(userMap.get("what to call you"));
+    defaults.companionPronouns = sanitizeRecoveredValue(userMap.get("pronouns"));
+    defaults.companionTimezone = sanitizeRecoveredValue(userMap.get("timezone"));
+  }
+
+  const memoryBody = extractManagedBlock(readFileIfReadable(path.join(root, "MEMORY.md")));
+  if (memoryBody) {
+    const starterNoteMatch = memoryBody.match(/^\s*-\s*Initial setup note:\s*(.*)$/im);
+    defaults.starterNote = sanitizeRecoveredValue(starterNoteMatch?.[1] || "");
+  }
+
+  defaults.userGender = inferUserGenderFromPronouns(defaults.companionPronouns);
+  defaults.petGender = inferPetGenderFromPronouns(defaults.petPronouns);
+
+  defaults.seedHeartbeatFile = fs.existsSync(path.join(root, "HEARTBEAT.md"));
+  defaults.personaPresetId = inferPresetIdFromRecoveredDefaults(defaults);
+  return defaults;
+}
+
 function getPreset(presetId) {
   return PRESETS[presetId] || PRESETS[DEFAULT_PRESET_ID];
 }
@@ -281,6 +432,18 @@ function buildPresetList() {
 function normalizeInput(rawInput = {}) {
   const preset = getPreset(rawInput.personaPresetId);
   const companionName = toOptionalString(rawInput.companionName, "");
+  const explicitUserGender = normalizeGender(rawInput.userGender, ["boy", "girl"]);
+  const explicitPetGender = normalizeGender(rawInput.petGender, ["boy", "girl", "thing"]);
+  const rawCompanionPronouns = toOptionalString(rawInput.companionPronouns, "");
+  const rawPetPronouns = toOptionalString(rawInput.petPronouns, "");
+  const userGender = explicitUserGender || inferUserGenderFromPronouns(rawCompanionPronouns);
+  const petGender = explicitPetGender || inferPetGenderFromPronouns(rawPetPronouns);
+  const companionPronouns = userGender
+    ? pronounsFromUserGender(userGender)
+    : rawCompanionPronouns;
+  const petPronouns = petGender
+    ? pronounsFromPetGender(petGender)
+    : rawPetPronouns;
   return {
     petName: toOptionalString(rawInput.petName, ""),
     birthday: toOptionalString(rawInput.birthday, ""),
@@ -288,9 +451,12 @@ function normalizeInput(rawInput = {}) {
     companionTimezone: toOptionalString(rawInput.companionTimezone, ""),
     personaPresetId: preset.id,
     starterNote: toOptionalString(rawInput.starterNote, ""),
-    companionPronouns: toOptionalString(rawInput.companionPronouns, ""),
+    userGender,
+    companionPronouns,
     companionCallName: toOptionalString(rawInput.companionCallName, companionName),
     creatureLabel: toOptionalString(rawInput.creatureLabel, preset.creatureLabel),
+    petGender,
+    petPronouns,
     signatureEmoji: toOptionalString(rawInput.signatureEmoji, preset.signatureEmoji),
     avatarPath: toOptionalString(rawInput.avatarPath, ""),
     seedHeartbeatFile: Boolean(rawInput.seedHeartbeatFile),
@@ -388,12 +554,13 @@ function buildSetupBootstrapSnapshot({ settingsSummary = {}, resolvedPaths = {},
           reason: openClawInfo.reason,
         };
   const applyMode = local.state === TARGET_STATES.ready ? APPLY_MODES.localOnly : APPLY_MODES.blocked;
+  const recoveredDefaults = readSetupDefaultsFromWorkspace(local.root);
   return {
     kind: "setupBootstrapSnapshot",
     ts,
     targets: { local, openClaw },
     applyMode,
-    formDefaults: { ...DEFAULT_FORM_VALUES },
+    formDefaults: { ...DEFAULT_FORM_VALUES, ...recoveredDefaults },
     presets: buildPresetList(),
   };
 }
@@ -497,6 +664,7 @@ function renderFiles(input) {
       body: [
         `- Name: ${normalized.petName || "{{pet_name}}"}`,
         `- Creature: ${normalized.creatureLabel}`,
+        `- Pronouns: ${normalized.petPronouns || "{{pet_pronouns}}"}`,
         `- Vibe: ${preset.vibe}`,
         `- Emoji: ${normalized.signatureEmoji}`,
         `- Avatar: ${normalized.avatarPath || "none"}`,
@@ -508,10 +676,10 @@ function renderFiles(input) {
     {
       fileId: "USER.md",
       body: [
-        `- Name: ${normalized.companionName || "{{companion_name}}"}`,
-        `- What to call them: ${normalized.companionCallName || normalized.companionName || "{{companion_call_name}}"}`,
-        `- Pronouns: ${normalized.companionPronouns || "{{companion_pronouns}}"}`,
-        `- Timezone: ${normalized.companionTimezone || "{{companion_timezone}}"}`,
+        `- Name: ${normalized.companionName || "{{your_name}}"}`,
+        `- What to call you: ${normalized.companionCallName || normalized.companionName || "{{your_call_name}}"}`,
+        `- Pronouns: ${normalized.companionPronouns || "{{your_pronouns}}"}`,
+        `- Timezone: ${normalized.companionTimezone || "{{your_timezone}}"}`,
         "- Notes:",
         "",
         "## Context",
@@ -524,8 +692,8 @@ function renderFiles(input) {
         "## Durable Facts",
         `- My name is \`${normalized.petName || "{{pet_name}}"}\`.`,
         `- My birthday is \`${normalized.birthday || "{{pet_birthday}}"}\`.`,
-        `- I usually call my human \`${normalized.companionCallName || normalized.companionName || "{{companion_call_name}}"}\`.`,
-        `- Their timezone is \`${normalized.companionTimezone || "{{companion_timezone}}"}\`.`,
+        `- I usually call my human \`${normalized.companionCallName || normalized.companionName || "{{your_call_name}}"}\`.`,
+        `- Their timezone is \`${normalized.companionTimezone || "{{your_timezone}}"}\`.`,
         "",
         renderListSection("Relationship Baseline", preset.relationshipBaseline),
         "",

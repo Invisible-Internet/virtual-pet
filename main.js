@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, Tray, ipcMain, nativeImage, screen } = require("electron");
+const { app, BrowserWindow, Menu, Tray, ipcMain, nativeImage, screen, clipboard } = require("electron");
 const fs = require("fs");
 const path = require("path");
 const { CAPABILITY_STATES, createCapabilityRegistry } = require("./capability-registry");
@@ -63,7 +63,10 @@ const {
   applyDragClampHysteresis,
 } = require("./main-clamp");
 const {
+  DEFAULT_OBSERVABILITY_SUBJECT_ID,
+  OBSERVABILITY_DETAIL_ACTION_IDS,
   SHELL_WINDOW_TABS,
+  buildObservabilityDetail,
   buildObservabilitySnapshot,
   normalizeShellWindowTab,
   resolveShellWindowTabForAction,
@@ -1757,6 +1760,167 @@ function buildCurrentSetupBootstrapSnapshot() {
     resolvedPaths: runtimeSettingsResolvedPaths,
     ts: Date.now(),
   });
+}
+
+function buildCurrentObservabilityDetail(
+  subjectId = DEFAULT_OBSERVABILITY_SUBJECT_ID,
+  snapshot = buildCurrentObservabilitySnapshot()
+) {
+  return buildObservabilityDetail({
+    snapshot,
+    subjectId,
+    settingsSourceMap: runtimeSettingsSourceMap,
+    ts: Date.now(),
+  });
+}
+
+function buildObservabilityDetailClipboardText(detail) {
+  const subject = detail?.subject || {};
+  const summary = detail?.summary || {};
+  const provenance = Array.isArray(detail?.provenance) ? detail.provenance : [];
+  const suggestedSteps = Array.isArray(detail?.suggestedSteps) ? detail.suggestedSteps : [];
+  const lines = [
+    `${subject.label || "Observability Detail"}`,
+    `State: ${subject.state || "unknown"}`,
+    `Reason: ${subject.reason || "unknown"}`,
+    "",
+    `${summary.headline || "No headline available."}`,
+    `${summary.impact || "No impact text available."}`,
+    `Ownership: ${summary.ownership || "unknown"}`,
+    `Repairability: ${summary.repairability || "unknown"}`,
+  ];
+  if (provenance.length > 0) {
+    lines.push("", "Provenance:");
+    for (const entry of provenance) {
+      lines.push(`- ${entry.label || "Detail"}: ${entry.value || "unknown"}`);
+    }
+  }
+  if (suggestedSteps.length > 0) {
+    lines.push("", "Suggested Steps:");
+    for (const step of suggestedSteps) {
+      lines.push(`- ${step}`);
+    }
+  }
+  return `${lines.join("\n")}\n`;
+}
+
+function getObservabilityDetailPath(detail) {
+  const provenance = Array.isArray(detail?.provenance) ? detail.provenance : [];
+  const pathEntry = provenance.find(
+    (entry) =>
+      entry?.kind === "path" &&
+      typeof entry.value === "string" &&
+      entry.value.trim().length > 0 &&
+      entry.value !== "Unavailable"
+  );
+  return pathEntry ? pathEntry.value.trim() : null;
+}
+
+async function runObservabilityAction(actionId, subjectId) {
+  const snapshot = buildCurrentObservabilitySnapshot();
+  const detail = buildCurrentObservabilityDetail(subjectId, snapshot);
+  const normalizedActionId = typeof actionId === "string" ? actionId.trim() : "";
+  const enabledActions = Array.isArray(detail?.actions) ? detail.actions : [];
+  const selectedAction = enabledActions.find(
+    (entry) => entry.actionId === normalizedActionId && entry.enabled !== false
+  );
+  if (!selectedAction) {
+    return {
+      ok: false,
+      error: "observability_action_unavailable",
+      actionId: normalizedActionId,
+      subjectId: detail?.subject?.subjectId || DEFAULT_OBSERVABILITY_SUBJECT_ID,
+      snapshot,
+      detail,
+    };
+  }
+
+  if (normalizedActionId === OBSERVABILITY_DETAIL_ACTION_IDS.refreshStatus) {
+    const refreshedSnapshot = buildCurrentObservabilitySnapshot();
+    const refreshedDetail = buildCurrentObservabilityDetail(
+      detail?.subject?.subjectId || DEFAULT_OBSERVABILITY_SUBJECT_ID,
+      refreshedSnapshot
+    );
+    return {
+      ok: true,
+      actionId: normalizedActionId,
+      subjectId: refreshedDetail?.subject?.subjectId || DEFAULT_OBSERVABILITY_SUBJECT_ID,
+      snapshot: refreshedSnapshot,
+      detail: refreshedDetail,
+      shellState: latestShellState || buildShellStateSnapshot(),
+    };
+  }
+
+  if (normalizedActionId === OBSERVABILITY_DETAIL_ACTION_IDS.openSetup) {
+    const shellResult = await runShellAction(SHELL_ACTIONS.openSetup);
+    if (!shellResult?.ok) {
+      return {
+        ...shellResult,
+        actionId: normalizedActionId,
+        subjectId: detail?.subject?.subjectId || DEFAULT_OBSERVABILITY_SUBJECT_ID,
+        snapshot,
+        detail,
+      };
+    }
+    const refreshedSnapshot = buildCurrentObservabilitySnapshot();
+    const refreshedDetail = buildCurrentObservabilityDetail(
+      detail?.subject?.subjectId || DEFAULT_OBSERVABILITY_SUBJECT_ID,
+      refreshedSnapshot
+    );
+    return {
+      ok: true,
+      actionId: normalizedActionId,
+      subjectId: refreshedDetail?.subject?.subjectId || DEFAULT_OBSERVABILITY_SUBJECT_ID,
+      snapshot: refreshedSnapshot,
+      detail: refreshedDetail,
+      shellState: shellResult?.shellState || latestShellState || buildShellStateSnapshot(),
+    };
+  }
+
+  if (normalizedActionId === OBSERVABILITY_DETAIL_ACTION_IDS.copyPath) {
+    const pathValue = getObservabilityDetailPath(detail);
+    if (!pathValue) {
+      return {
+        ok: false,
+        error: "observability_path_unavailable",
+        actionId: normalizedActionId,
+        subjectId: detail?.subject?.subjectId || DEFAULT_OBSERVABILITY_SUBJECT_ID,
+        snapshot,
+        detail,
+      };
+    }
+    clipboard.writeText(pathValue);
+    return {
+      ok: true,
+      actionId: normalizedActionId,
+      subjectId: detail?.subject?.subjectId || DEFAULT_OBSERVABILITY_SUBJECT_ID,
+      copiedText: pathValue,
+      snapshot,
+      detail,
+    };
+  }
+
+  if (normalizedActionId === OBSERVABILITY_DETAIL_ACTION_IDS.copyDetails) {
+    const copiedText = buildObservabilityDetailClipboardText(detail);
+    clipboard.writeText(copiedText);
+    return {
+      ok: true,
+      actionId: normalizedActionId,
+      subjectId: detail?.subject?.subjectId || DEFAULT_OBSERVABILITY_SUBJECT_ID,
+      copiedText,
+      snapshot,
+      detail,
+    };
+  }
+
+  return {
+    ok: false,
+    error: "unknown_observability_action",
+    actionId: normalizedActionId,
+    subjectId: detail?.subject?.subjectId || DEFAULT_OBSERVABILITY_SUBJECT_ID,
+    snapshot,
+    detail,
+  };
 }
 
 function setDiagnosticsEnabled(nextEnabled, reason = "settings_update") {
@@ -5283,6 +5447,27 @@ ipcMain.handle("pet:getShellState", () => {
 
 ipcMain.handle("pet:getObservabilitySnapshot", () => {
   return buildCurrentObservabilitySnapshot();
+});
+
+ipcMain.handle("pet:getObservabilityDetail", (_event, payload) => {
+  const subjectId =
+    typeof payload?.subjectId === "string" && payload.subjectId.trim().length > 0
+      ? payload.subjectId.trim()
+      : DEFAULT_OBSERVABILITY_SUBJECT_ID;
+  const snapshot = buildCurrentObservabilitySnapshot();
+  return buildCurrentObservabilityDetail(subjectId, snapshot);
+});
+
+ipcMain.handle("pet:runObservabilityAction", (_event, payload) => {
+  const actionId =
+    typeof payload?.actionId === "string" && payload.actionId.trim().length > 0
+      ? payload.actionId.trim()
+      : "";
+  const subjectId =
+    typeof payload?.subjectId === "string" && payload.subjectId.trim().length > 0
+      ? payload.subjectId.trim()
+      : DEFAULT_OBSERVABILITY_SUBJECT_ID;
+  return runObservabilityAction(actionId, subjectId);
 });
 
 ipcMain.handle("pet:getSetupBootstrapSnapshot", () => {

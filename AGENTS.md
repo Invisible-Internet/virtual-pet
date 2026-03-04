@@ -127,8 +127,9 @@ Historical v1 deliverables keep their original status wording and are not retrof
 - Current Deliverable: `none`
 - Workflow State: `idle`
 - Current Status: `accepted`
-- Last Completed Deliverable: `11b-guided-pet-setup-and-markdown-bootstrap`
-- Next Detailed Target: `11c-repair-actions-and-provenance-visibility`
+- Last Completed Deliverable: `11c-repair-actions-and-provenance-visibility`
+- Next Detailed Target: `11d-settings-editor-and-service-controls`
+- Next Queued Target: `11d-settings-editor-and-service-controls`
 - Current Gate State:
   - `Spec Gate`: `n/a`
   - `Build Gate`: `n/a`
@@ -142,35 +143,45 @@ Historical v1 deliverables keep their original status wording and are not retrof
   - Dev fallback `F10` routes to the shared shell popup on the `Status` tab.
   - The slice is closed as accepted after operator-confirmed shared-shell routing and degraded/recovery verification.
   - Shipped outcome (previous accepted slice): visible app/runtime change accepted via shared shell tabs, `Status...` tray routing, `F10` fallback, and a refreshable `11a` observability surface.
-- Current `11b` setup contract:
-  - Tray `Setup...` and dev fallback `F11` must open the same shared shell popup on the `Setup` tab.
-  - `Setup` must collect the minimum pet profile fields, preview Markdown before any write, and apply only through an explicit operator action.
-  - Managed setup blocks must update `SOUL.md`, `STYLE.md`, `IDENTITY.md`, `USER.md`, and `MEMORY.md` without rewriting unrelated Markdown.
-  - `STYLE.md` is a first-class project-managed file but not a documented default OpenClaw bootstrap file; keep it single-sourced and do not duplicate its contents into `SOUL.md`.
-  - Pet-local workspace is the offline-mode read source and the only direct `11b` write target.
-  - OpenClaw workspace is an observed/read-only agent-facing context target in `11b`; do not write to it from the pet app.
-  - `HEARTBEAT.md` may be seeded only as an effectively empty/comment-only file in `11b`; proactive automation content belongs to a later slice.
-  - Starter content bundles now live in `docs/plan/11b-preset-content-drafts.md` and are the current source for `11b` preset copy.
-  - The preset-content draft now locks deterministic file skeletons plus ASCII-safe symbolic emoji defaults so implementation does not have to invent Markdown structure or fight encoding issues.
-  - The four starter voices have been tuned for clearer separation: `gentle` is soothing, `playful` is impish, `bookish` is reflective, and `bright` is action-forward.
-  - The four starter bundles are now frozen for first implementation; use the quick-picker guidance in `docs/plan/11b-preset-content-drafts.md` and do not add more starter bundles before shipping `11b`.
-  - First implementation slice is now present:
-    - shared shell window supports `Inventory`, `Status`, and `Setup`
-    - tray `Setup...` and fallback `F11` route to the shared shell window on the `Setup` tab
-    - preview/apply uses `setup-bootstrap.js` for target-policy resolution, preset generation, and managed-block writes
-    - shell canonical file health now includes `STYLE.md`
-    - automated smoke row `D11b-setup-bootstrap` is passing
-  - Operator feedback changed the active `11b` contract:
-    - the initial build attempted to write into the configured OpenClaw workspace and hit `EPERM`
-    - `11b` now iterates on a local-only write policy while leaving the OpenClaw workspace observed/read-only
-  - Post-iteration verification:
-    - `npm run check:syntax`
-    - `npm run check:contracts`
-    - `npm run check:acceptance` -> `15/15 automated checks passed`
-  - Operator acceptance:
-    - shared-shell `Setup` routing, preview/apply, and post-apply `Status` verification all passed in-app
-    - no direct OpenClaw workspace write attempt was observed during the accepted run
-  - Shipped outcome (this session): visible app/runtime change accepted; `11b` now has a working shared-shell `Setup` tab, explicit bootstrap preview/apply flow, a local-only write boundary, and repo-local bootstrap Markdown ignored by default.
+- Last completed `11b` outcome:
+  - Tray `Setup...` and dev fallback `F11` open the same shared shell popup on the `Setup` tab.
+  - `Setup` preview/apply writes managed Markdown only to the pet-local workspace.
+  - The configured OpenClaw workspace remains observed/read-only from the pet app's perspective.
+  - `STYLE.md` now participates in canonical file health, and the accepted `11b` smoke coverage is green.
+  - The slice is closed as accepted after operator-confirmed shared-shell routing, local-only bootstrap apply, and post-apply `Status` verification.
+- Last completed `11c` outcome:
+  - `Status` remains the owner surface in the shared shell window; do not add a second diagnostics popup.
+  - Every existing `11a` status row must open a detail view that explains state, reason, provenance, and repairability.
+  - `Canonical Files` must drill down to local/OpenClaw workspace detail and per-file detail for `SOUL.md`, `STYLE.md`, `IDENTITY.md`, `USER.md`, and `MEMORY.md`.
+  - Guided repair actions stay bounded to:
+    - `Refresh Status`
+    - `Open Setup`
+    - `Copy Path`
+    - `Copy Details`
+  - Local canonical-file repair must hand off to the accepted `11b` `Setup` preview/apply flow; do not add direct write-from-`Status` behavior.
+  - OpenClaw workspace details remain observed/read-only; do not create, write, or "repair" that workspace from the pet app.
+  - Settings/config mutation UI, bridge restart controls, and full persona-field provenance remain out of scope for `11c`.
+  - Latest shared-shell UX polish:
+    - setup labels are now child-friendlier in the GUI (`Your Name`, `Your Timezone`, etc.)
+    - `Signature Emoji` now provides a safe chooser list
+    - a bottom hover-hint status bar now shows inline help/tooltips
+  - First implementation slice shipped:
+    - status cards + canonical file selectors now drive a details panel in `Status`
+    - details expose provenance, ownership, repairability, and bounded repair actions
+    - new IPC handlers exist for detail reads and detail actions
+    - deterministic coverage includes `scripts/check-shell-repair-actions.js`
+  - Iteration updates from operator feedback:
+    - details copy uses simpler language and avoids raw `unknown` wording where possible
+    - Setup Profile/Advanced defaults recover from existing local managed files when present
+    - setup bootstrap checks now assert recovered defaults
+    - Setup UI now separates user and pet questions (`User Profile` / `Pet Profile`)
+    - user and pet pronouns map from simple gender choices
+    - pet avatar now uses a browse picker instead of free-text path input
+  - Gate outcome:
+    - `Spec Gate` passed on `2026-03-04`
+    - `Build Gate` passed on `2026-03-04` (`npm run check:syntax`, `npm run check:contracts`, `npm run check:acceptance` -> `16/16`)
+    - `Acceptance Gate` passed on `2026-03-04` (operator-accepted closure)
+  - Shipped outcome: visible app/runtime change delivered and accepted; `Status` has clearer repair/provenance details with bounded repair actions, and Setup now has clearer user/pet grouping, pronoun mapping, avatar browse picker, and default recovery from local managed data.
 
 ### Post-v1 Roadmap Snapshot
 - Rough-in doc: `docs/plan/11-15-post-v1-roadmap-rough-in.md`
@@ -181,9 +192,9 @@ Historical v1 deliverables keep their original status wording and are not retrof
   - `14` Embodiment / Autonomy
   - `15` Extension Showcase
 - Planning rule:
-  - `11` now has an accepted baseline through `11a`.
-  - `11b-guided-pet-setup-and-markdown-bootstrap` is accepted and closed.
-  - `11c-repair-actions-and-provenance-visibility` is the next likely slice unless the user explicitly reprioritizes.
+  - `11` now has accepted baselines through `11a` and `11b`.
+  - `11c-repair-actions-and-provenance-visibility` is accepted and closed.
+  - `11d-settings-editor-and-service-controls` is staged as the next slice and should move to `specifying` next unless reprioritized.
   - `12` through `15` remain rough placeholders and must not be treated as spec-passed deliverables yet.
 
 ### Session-End Sync Rule
