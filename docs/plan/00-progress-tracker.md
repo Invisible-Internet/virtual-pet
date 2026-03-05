@@ -33,16 +33,16 @@ Historical v1 deliverables keep their original wording and remain archived histo
   - operator-visible demo passes and evidence is logged
 
 ## Current Deliverable
-- Current Deliverable: `none`
-- Workflow State: `idle`
-- Current Status: `accepted`
+- Current Deliverable: `12c-guarded-openclaw-pet-command-lane`
+- Workflow State: `specifying`
+- Current Status: `specifying`
 - Last Completed Deliverable: `12b-chat-shell-and-conversation-presence`
 - Next Detailed Target: `12c-guarded-openclaw-pet-command-lane`
 - Next Queued Target: `13c-persona-aware-offline-dialog-and-proactive-behavior` (proactive robustness follow-up fit)
 - Current Gate State:
-  - `Spec Gate`: `n/a`
-  - `Build Gate`: `n/a`
-  - `Acceptance Gate`: `n/a`
+  - `Spec Gate`: `passed` (`2026-03-05`)
+  - `Build Gate`: `not_started`
+  - `Acceptance Gate`: `not_started`
 
 ## Post-v1 Family Rough-In
 Locked family order:
@@ -59,9 +59,9 @@ Planning state:
 - `11d-settings-editor-and-service-controls` is now accepted and closed.
 - `12a-real-openclaw-dialog-parity` is now accepted and closed (`Spec/Build/Acceptance Gates passed`).
 - `12b-chat-shell-and-conversation-presence` is now accepted and closed (`Spec/Build/Acceptance Gates passed`).
-- `12c-guarded-openclaw-pet-command-lane` remains queued after `12b` with explicit quick-pickup notes captured in both `12b` and `12c` docs.
+- `12c-guarded-openclaw-pet-command-lane` is now active in `specifying` with `Spec Gate=passed`.
 - `13c-persona-aware-offline-dialog-and-proactive-behavior` is the best-fit family placeholder for deeper proactive timing/style robustness after command-lane work.
-- `12` through `15` remain rough placeholders and are not implementation-ready yet.
+- Families `13` through `15` now have tighter intent notes but remain pre-spec placeholders until slice files pass `Spec Gate`.
 - Full family notes live in [`11-15-post-v1-roadmap-rough-in.md`](./11-15-post-v1-roadmap-rough-in.md).
 
 ## How To Start A New Deliverable
@@ -73,14 +73,29 @@ Planning state:
 6. Pass `Spec Gate` before implementation begins.
 
 ## Next 3 Actions
-1. Promote `12c-guarded-openclaw-pet-command-lane` to active and pass `Spec Gate`.
-2. Implement first `12c` allowlist slice (`dialog.injectAnnouncement`, `shell.openStatus`) with deterministic checks.
-3. Keep proactive robustness scoped for the `13c-persona-aware-offline-dialog-and-proactive-behavior` deliverable (timing windows, context triggers, quiet-hours policy, and anti-spam pacing).
+1. Implement first `12c` allowlist slice (`dialog.injectAnnouncement`, `shell.openStatus`) with auth verification + replay/expiry enforcement.
+2. Add deterministic coverage for `12c` (`scripts/check-openclaw-pet-command-lane.js`, acceptance row `D12c-guarded-pet-command-lane`) and run check suite.
+3. Draft spec scaffolds for `13a`/`13b` so canonical-file continuity and bounded OpenClaw context export are ready after `12c`.
 
 ## Blockers
 - None currently.
 
 ## Last Session Summary
+- Tightened planning for active `12c` and downstream roadmap families:
+  - set `12c-guarded-openclaw-pet-command-lane` as current active deliverable (`specifying`)
+  - passed `12c` `Spec Gate` with clarified purpose:
+    - command lane covers `OpenClaw -> app` signed action requests
+    - chat transport remains in `12a`
+    - canonical-file continuity remains in family `13`
+  - locked `12c` first-slice contracts:
+    - normalized skill/API ingress payload shape
+    - canonical `vp-hmac-v1` signing input format
+    - replay/expiry defaults and reject-reason taxonomy
+    - explicit args contract for `dialog.injectAnnouncement` and `shell.openStatus`
+  - tightened rough roadmap notes for families `13`-`15`:
+    - `13` now explicitly sequences `13a -> 13b -> 13c`
+    - `13b` includes bounded online context export from canonical files with provenance
+    - added tighter first-slice focus notes for `14a` and `15a`
 - Closed `12b-chat-shell-and-conversation-presence` as accepted after operator demo/failure run:
   - operator-confirmed tray `Open Chat...` routing, chat-open locomotion hold, and bounded proactive suppression behavior
   - log evidence confirms proactive cooldown policy fired on ~90-second cadence:

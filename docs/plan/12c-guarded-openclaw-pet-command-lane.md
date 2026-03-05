@@ -4,15 +4,27 @@
 **Status:** `specifying`  
 **Owner:** `Mic + Codex`  
 **Last Updated:** `2026-03-05`  
-**Depends On:** `04-openclaw-bridge-spec`, `11a-openclaw-memory-observability-surface`, `11d-settings-editor-and-service-controls`, `12a-real-openclaw-dialog-parity`  
+**Depends On:** `04-openclaw-bridge-spec`, `11a-openclaw-memory-observability-surface`, `11d-settings-editor-and-service-controls`, `12a-real-openclaw-dialog-parity`, `12b-chat-shell-and-conversation-presence`  
 **Blocks:** `14b-event-driven-watch-behavior`, `15c-extension-context-and-bridge-polish`  
 
 ## Objective
 Define a secure, app-authoritative command lane so OpenClaw can request bounded pet actions through explicit authorization, replay protection, and strict allowlisting, without giving OpenClaw direct authority over pet state, movement, rendering, or identity writes.
 
+## Why 12c Exists (Concrete Use Cases)
+- `12a` solved user-chat parity (`user -> OpenClaw -> chat reply`), but there is still no trusted lane for `OpenClaw -> app` action requests.
+- OpenClaw needs a bounded way to ask the pet to do visible shell actions when useful, for example:
+  - post a short announcement to the pet dialog bubble after an agent-side result is ready,
+  - open/focus `Status` when OpenClaw detects degraded runtime conditions and wants the operator to inspect details.
+- Without `12c`, the only practical path is unstructured text in chat, which cannot safely trigger deterministic UI actions.
+
+## Boundary: Chat vs Command vs Canonical Files
+- `12a` handles freeform conversation transport and online/offline reply metadata.
+- `12c` handles signed OpenClaw-to-pet action requests for bounded visible actions only.
+- Canonical file and memory continuity (`SOUL.md`, `IDENTITY.md`, `USER.md`, `MEMORY.md`) stays in family `13` read-model/context work; `12c` does not grant OpenClaw direct file-write authority.
+
 ## Quick Resume Checklist
 1. Confirm `12b` is accepted/closed and set `12c` as active deliverable.
-2. Pass `Spec Gate` for this file using current auth envelope + reject-reason taxonomy.
+2. Confirm `Spec Gate` remains passed; reopen spec only if scope/contracts change.
 3. Implement first allowlist-only slice:
    - `dialog.injectAnnouncement`
    - `shell.openStatus`
@@ -28,6 +40,7 @@ Define a secure, app-authoritative command lane so OpenClaw can request bounded 
   - request signature verification
   - nonce replay protection
   - timestamp/expiry checks
+- Define the OpenClaw-side caller contract for a skill/tool/API lane that emits `pet_command_request` envelopes.
 - Define first-slice allowed command allowlist for safe, visible actions.
 - Define explicit reject reasons and operator-visible provenance for accepted/rejected requests.
 - Define deterministic checks for request validation, replay rejection, and bounded allowlist behavior.
@@ -38,15 +51,17 @@ Define a secure, app-authoritative command lane so OpenClaw can request bounded 
 - Raw movement/fling/clamp control from OpenClaw.
 - Skill marketplace/distribution UX.
 - Full policy engine for arbitrary third-party skills.
+- Direct OpenClaw write authority over canonical files (`SOUL.md`, `IDENTITY.md`, `USER.md`, `MEMORY.md`).
 
 ## Environment / Prerequisites
 - `12a` dialog/bridge parity lane is in place and still keeps app authority local.
 - OpenClaw gateway transport is reachable (WebSocket lane for runtime bridge path).
+- OpenClaw-side caller exists (skill, CLI relay, or automation hook) and can send signed `pet_command_request` payloads.
 - Shared-shell `Status` surface exists for operator-visible diagnostics and reason text.
 - Runtime settings and source-map plumbing from `11d` are available for provenance display.
 
 ## Showcase Promise (Mandatory)
-An OpenClaw skill can submit a signed pet command request, and the app will either execute a safe allowlisted action with visible result or reject it with a clear reason, while preserving local authority over movement/state/render/identity paths.
+An OpenClaw skill/API caller can submit a signed pet command request, and the app will either execute a safe allowlisted action with visible result or reject it with a clear reason, while preserving local authority over movement/state/render/identity paths.
 
 ## Operator Demo Script (Mandatory)
 1. Start the app with the command lane enabled and a configured shared-secret reference.
@@ -86,6 +101,24 @@ An OpenClaw skill can submit a signed pet command request, and the app will eith
   - `scripts/check-openclaw-pet-command-lane.js`
   - `scripts/run-acceptance-matrix.js` row `D12c-guarded-pet-command-lane`
 
+## Skill/API Caller Contract (First Slice)
+`12c` is transport-agnostic, but requires one normalized ingress payload shape:
+
+```js
+{
+  route: "pet_command_request",
+  correlationId: "corr_...",
+  payload: {
+    // signed envelope from Command Auth Contract
+  }
+}
+```
+
+Rules:
+- Caller can be an OpenClaw skill, CLI relay, or automation hook.
+- Transport may be direct bridge response, gateway call relay, or equivalent adapter path, as long as the payload shape is preserved.
+- App trust is based on envelope verification (signature + nonce + expiry), not on caller process identity alone.
+
 ## Command Auth Contract
 `12c` introduces a bounded signed request envelope for OpenClaw-origin actions:
 
@@ -122,6 +155,34 @@ Validation rules:
   - `expiresAtMs` not exceeded
 - Any shape/auth failure is rejected with explicit reason code.
 
+Canonical signature input (`vp-hmac-v1`) for first slice:
+
+```js
+const signingInput = [
+  "vp-hmac-v1",
+  requestId,
+  actionId,
+  String(issuedAtMs),
+  String(expiresAtMs),
+  auth.nonce,
+  canonicalJson(source),
+  canonicalJson(args)
+].join("\n");
+
+signature = base64(hmacSha256(sharedSecret, signingInput));
+```
+
+`canonicalJson(value)` requirements:
+- UTF-8 JSON with recursively sorted object keys.
+- Arrays keep original order.
+- No extra whitespace.
+
+## Replay + Expiry Policy (First Slice Defaults)
+- `maxClockSkewMs=30000`
+- `maxRequestLifetimeMs=120000`
+- `nonceReplayWindowMs=600000`
+- nonce uniqueness scope is `(keyId, nonce)` within replay window.
+
 ## Shared Secret + Provenance Contract
 - App reads shared-secret value from env-ref key:
   - `openclaw.petCommandSharedSecretRef` (default `PET_OPENCLAW_PET_COMMAND_SECRET`)
@@ -145,15 +206,34 @@ Rules:
 - Unknown action => `blocked_action`.
 - Known but invalid args => `invalid_args`.
 - Allowlist execution reuses existing local app action paths (no duplicate authority path).
+- First-slice args contract:
+  - `dialog.injectAnnouncement`
+    - args: `{ text: string }`
+    - `text` must be trimmed length `1..160`.
+  - `shell.openStatus`
+    - args: `{}` only (empty object).
 - Explicitly blocked categories remain blocked even when signed:
   - `set_state`
   - `render_control`
   - `identity_mutation`
   - direct drag/fling/motion control
 
+## Reject Reason Taxonomy (First Slice)
+- `malformed_request`
+- `auth_scheme_unsupported`
+- `auth_secret_missing`
+- `auth_invalid_signature`
+- `auth_replay_nonce`
+- `auth_request_too_old`
+- `auth_request_expired`
+- `blocked_action`
+- `invalid_args`
+- `execution_failed`
+
 ## Acceptance Bar
 - Accepted for `Spec Gate` only when:
-  - auth envelope, nonce policy, expiry policy, and allowlist boundaries are explicit,
+  - use cases for why command lane exists are explicit and operator-visible,
+  - auth envelope, canonical signing input, nonce policy, expiry policy, and allowlist boundaries are explicit,
   - demo/failure scripts are concrete and operator-runnable,
   - reject-reason taxonomy is operator-readable.
 - Accepted for final operator closure only when:
@@ -181,12 +261,14 @@ Rules:
 ## Acceptance Notes
 - `2026-03-05`: File created from the post-v1 deliverable template as a concrete auth/authorization spec for future OpenClaw skill integration.
 - `2026-03-05`: Spec sections drafted; implementation intentionally not started.
+- `2026-03-05`: Spec tightened with concrete use-case framing, skill/API ingress contract, canonical signing input, replay/expiry defaults, and explicit first-slice arg + reject-reason contracts.
 
 ## Iteration Log
 - `2026-03-05`: Initial `12c` auth-lane draft created with signed request envelope, replay protection, expiry validation, and first-slice allowlist.
+- `2026-03-05`: Clarified lane boundaries vs `12a` chat and family `13` canonical-file continuity work to avoid scope overlap.
 
 ## Gate Status
-- `Spec Gate`: `not_started`
+- `Spec Gate`: `passed` (`2026-03-05`)
 - `Build Gate`: `not_started`
 - `Acceptance Gate`: `not_started`
 - `Overall`: `specifying`
@@ -194,3 +276,4 @@ Rules:
 ## Change Log
 - `2026-03-05`: File created from the post-v1 deliverable template.
 - `2026-03-05`: Added concrete signed-command auth model and bounded first-slice allowlist contract.
+- `2026-03-05`: Added concrete command-lane use cases, skill/API ingress contract, canonical signature format, replay/expiry defaults, and explicit reject taxonomy.

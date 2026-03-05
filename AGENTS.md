@@ -124,16 +124,16 @@ Historical v1 deliverables keep their original status wording and are not retrof
 - `accepted` is the only terminal state for future post-v1 deliverables.
 
 ### Current Workflow Snapshot
-- Current Deliverable: `none`
-- Workflow State: `idle`
-- Current Status: `accepted`
+- Current Deliverable: `12c-guarded-openclaw-pet-command-lane`
+- Workflow State: `specifying`
+- Current Status: `specifying`
 - Last Completed Deliverable: `12b-chat-shell-and-conversation-presence`
 - Next Detailed Target: `12c-guarded-openclaw-pet-command-lane`
 - Next Queued Target: `13c-persona-aware-offline-dialog-and-proactive-behavior` (proactive robustness follow-up fit)
 - Current Gate State:
-  - `Spec Gate`: `n/a`
-  - `Build Gate`: `n/a`
-  - `Acceptance Gate`: `n/a`
+  - `Spec Gate`: `passed` (`2026-03-05`)
+  - `Build Gate`: `not_started`
+  - `Acceptance Gate`: `not_started`
 - Historical Note:
   - D01-D10 are complete historical v1 records.
   - Detailed v1 session history lives in `docs/plan/archive/00-progress-tracker-v1-history.md`.
@@ -179,9 +179,13 @@ Historical v1 deliverables keep their original status wording and are not retrof
     - proactive cadence is currently policy-compliant but still feels frequent to operator; deeper timing/context robustness should be handled in `13c-persona-aware-offline-dialog-and-proactive-behavior`.
 - Next `12c` spec outcome:
   - Draft deliverable file `docs/plan/12c-guarded-openclaw-pet-command-lane.md` now exists.
-  - Auth model defines signed command envelope (`vp-hmac-v1`) with nonce replay protection and expiry checks.
-  - First-slice allowlist is bounded to safe visible actions (`dialog.injectAnnouncement`, `shell.openStatus`).
-  - Slice is queued after `12b` and should resume from the documented quick-pickup checklist.
+  - `Spec Gate` is now passed with a concrete command-lane use case (`OpenClaw -> app` bounded visible actions).
+  - Auth model defines signed command envelope (`vp-hmac-v1`) with canonical signing input, nonce replay protection, and expiry/skew defaults.
+  - First-slice allowlist is bounded to safe visible actions (`dialog.injectAnnouncement`, `shell.openStatus`) with explicit args and reject-reason taxonomy.
+  - Lane boundary is explicit:
+    - chat transport remains in `12a`
+    - canonical file/memory continuity stays in family `13`
+  - Implementation is not started yet; next step is first runtime slice + deterministic `D12c` coverage.
 - Last completed `11d` outcome:
   - Shared-shell `Advanced Settings` now lives on a dedicated `Settings` tab (separate from `Setup`).
   - Tray now includes `Advanced Settings...` routing into the shared shell `Settings` tab.
@@ -257,9 +261,9 @@ Historical v1 deliverables keep their original status wording and are not retrof
   - `11d-settings-editor-and-service-controls` is accepted and closed.
   - `12a-real-openclaw-dialog-parity` is accepted and closed (`Spec/Build/Acceptance Gates passed`).
   - `12b-chat-shell-and-conversation-presence` is accepted and closed (`Spec/Build/Acceptance Gates passed`).
-  - `12c-guarded-openclaw-pet-command-lane` remains the next detailed target.
+  - `12c-guarded-openclaw-pet-command-lane` is the current active deliverable (`specifying`, `Spec Gate=passed`).
   - `13c-persona-aware-offline-dialog-and-proactive-behavior` is the best-fit follow-up placeholder for proactive timing/style robustness.
-  - `12` through `15` remain rough placeholders and must not be treated as spec-passed deliverables yet.
+  - Families `13` through `15` now have tighter intent/sequencing notes, but remain rough placeholders and must not be treated as spec-passed deliverables yet.
 
 ### Session-End Sync Rule
 - At the end of every working session, update:

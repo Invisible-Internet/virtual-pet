@@ -21,8 +21,11 @@ Planning status:
 - `11a` is accepted and now serves as the observability baseline for the family.
 - `11b` is accepted and now serves as the setup/bootstrap baseline for family `11`.
 - `11c` is accepted and closed.
-- `11d-settings-editor-and-service-controls` is staged as the immediate next slice and should move to `specifying` next.
-- `12` through `15` are intentionally rough placeholders and are not implementation-ready yet.
+- `11d-settings-editor-and-service-controls` is accepted and closed.
+- `12a-real-openclaw-dialog-parity` is accepted and closed.
+- `12b-chat-shell-and-conversation-presence` is accepted and closed.
+- `12c-guarded-openclaw-pet-command-lane` is the next detailed target and should be promoted to active next.
+- Families `13` through `15` now include tightened intent notes, but remain pre-spec placeholders until slice files pass `Spec Gate`.
 - All future work follows the post-v1 workflow in [`00-development-workflow.md`](./00-development-workflow.md).
 
 ## Locked Assumptions
@@ -35,9 +38,9 @@ Planning status:
 ## Family Index
 | Family | Theme | Why It Exists | Current Planning State |
 | --- | --- | --- | --- |
-| `11` | Observability / Setup / Provenance | Make the current OpenClaw, model, memory, and fallback setup visible and understandable inside the app. | `11a`/`11b`/`11c` accepted; `11d` staged next |
-| `12` | Conversation / Bridge | Make pet chat feel like real OpenClaw conversation, not narrow status/introspection. | Rough only |
-| `13` | Memory / Persona Continuity | Make online and offline feel like the same pet with recall and stable personality. | Rough only |
+| `11` | Observability / Setup / Provenance | Make the current OpenClaw, model, memory, and fallback setup visible and understandable inside the app. | `11a`/`11b`/`11c`/`11d` accepted and closed |
+| `12` | Conversation / Bridge | Make pet chat feel like real OpenClaw conversation, not narrow status/introspection. | `12a`/`12b` accepted; `12c` next detailed target |
+| `13` | Memory / Persona Continuity | Make online and offline feel like the same pet with recall and stable personality. | Rough with tightened sequencing notes (`13a` -> `13b` -> `13c`) |
 | `14` | Embodiment / Autonomy | Make the pet move and react more deliberately, unobtrusively, and believably. | Rough only |
 | `15` | Extension Showcase | Prove the extension system with a real add-on and a polished end-to-end flow. | Rough only |
 
@@ -126,13 +129,11 @@ Add an explicit GUI settings editor (likely under an Advanced Settings section) 
 Make talking to the pet feel like talking to the OpenClaw agent, while preserving local authority and graceful fallback.
 
 ### Problem Statement
-The current dialog surface exists, but the shipped behavior was primarily validated around:
-- visible input/output
-- state-aware fallback
-- online/offline labels
-- non-blocking bubble/talk feedback
+`12a` and `12b` are accepted, so freeform chat parity and chat-shell presence are in place.
 
-It was not yet validated as full OpenClaw conversation parity.
+The remaining gap is a trusted action ingress for `OpenClaw -> app` requests:
+- OpenClaw can answer in chat, but cannot safely request bounded visible pet actions.
+- Without a guarded lane, "do something in the app" degrades into plain chat text with no deterministic action result.
 
 ### Proposed Slices
 - `12a-real-openclaw-dialog-parity`
@@ -150,6 +151,16 @@ Improve the chat shell experience:
 
 ### `12c` Rough Intent
 Add an OpenClaw skill or bridge command lane that lets OpenClaw request pet behaviors, while the app validates and arbitrates them.
+
+### `12c` Tightened Use Cases
+- OpenClaw (through a skill/API caller) asks the pet to post a short announcement after a meaningful agent-side result.
+- OpenClaw asks the app to open/focus `Status` when degraded/repair context should be surfaced to the operator.
+- App returns deterministic accepted/rejected outcomes with explicit reasons, not silent failure.
+
+### `12c` Tightened Boundary
+- Signed allowlisted commands only; app remains authority.
+- No direct OpenClaw control over movement/state/render/identity.
+- No direct OpenClaw file-write lane for canonical files; file continuity belongs to family `13`.
 
 ### Likely Public Interfaces / Touchpoints
 - Dialog route handling in `main.js`
@@ -174,10 +185,11 @@ Add an OpenClaw skill or bridge command lane that lets OpenClaw request pet beha
 Make the pet remember basic identity and recent interaction highlights offline, and make online/offline personality feel like one coherent character.
 
 ### Problem Statement
-The memory pipeline exists, but what is missing is runtime retrieval and visible continuity:
+The memory pipeline exists, but what is missing is runtime retrieval and visible continuity across both local offline behavior and OpenClaw online context:
 - offline recall of pet identity
 - offline recall of a few recent highlights
 - personality-aware local replies and behavior
+- bounded canonical-file context export so OpenClaw sees the same persona facts without direct file-write authority
 
 ### Proposed Slices
 - `13a-offline-identity-and-recent-recall`
@@ -189,6 +201,7 @@ Make the pet able to answer basic offline questions such as:
 - what is your name
 - when is your birthday
 - what happened recently between us
+- with deterministic responses derived from canonical files plus bounded recent highlights
 
 ### `13b` Rough Intent
 Create a derived, read-only persona snapshot from canonical Markdown:
@@ -196,12 +209,23 @@ Create a derived, read-only persona snapshot from canonical Markdown:
 - `IDENTITY.md`
 - `USER.md`
 - accepted memory promotions where applicable
+- and produce a bounded bridge context export package so online OpenClaw dialog sees consistent persona facts/provenance
 
 ### `13c` Rough Intent
 Use the derived persona snapshot in deterministic local behavior:
 - offline dialog tone
 - proactive conversation style
 - bounded personality-influenced reactions
+
+### Family 13 Tightened Sequencing
+1. `13a`: local recall answers are correct and bounded.
+2. `13b`: persona snapshot + provenance + bounded online context export are deterministic.
+3. `13c`: proactive/offline behavior style uses the same snapshot with anti-spam pacing and suppression visibility.
+
+### Family 13 File/Authority Boundary
+- App owns canonical file reads and guarded memory writes.
+- OpenClaw receives bounded derived context, not raw file-write authority.
+- Any future sync lane must preserve "pet applies writes" governance from earlier memory deliverables.
 
 ### `13c` Addendum (Proactive Robustness, Brief)
 - Add context gating before proactive prompts:
@@ -244,6 +268,11 @@ The roam runtime works, but behavior policy still feels too repetitive and insuf
 - `14b-event-driven-watch-behavior`
 - `14c-touch-and-gaze-reactions`
 - `14d-mouse-tag-game`
+
+### `14a` Tightened First-Slice Focus
+- Keep main-process movement authority unchanged.
+- Add deterministic roam pacing + bounded monitor-avoidance memory with explicit cooldown/expiry.
+- Expose enough status signals to debug why the pet is avoiding or re-entering a monitor zone.
 
 ### `14a` Rough Intent
 Improve roam behavior so the pet:
@@ -300,6 +329,11 @@ The extension framework exists and was validated, but it still needs a strong vi
 - `15b-extension-authoring-and-debug-visibility`
 - `15c-extension-context-and-bridge-polish`
 
+### `15a` Tightened First-Slice Focus
+- Ship one opinionated "hero" pack with visible value on day one.
+- Validate trust warning/enable/disable lifecycle in one operator demo script.
+- Treat extension failures as degradable and observable, never crash paths.
+
 ### `15a` Rough Intent
 Add one "hero" extension that clearly demonstrates:
 - discovery
@@ -343,11 +377,13 @@ These are roadmap placeholders, not final contracts.
 - Shell action for opening chat.
 - Explicit "dialog open" locomotion policy.
 - Guarded bridge/skill command envelope for pet-action requests.
+- OpenClaw skill/API caller ingress contract for signed `pet_command_request` payloads.
 
 ### Planned for Family 13
 - Read-model over canonical Markdown identity/persona files.
 - Derived persona snapshot format with provenance fields.
 - Recent-highlight retrieval contract for offline recall.
+- Bounded online bridge context export derived from canonical files + recent highlights.
 
 ### Planned for Family 14
 - Roam-policy memory for short-term aversion.
@@ -364,8 +400,8 @@ These are roadmap placeholders, not final contracts.
 2. Read [`00-progress-tracker.md`](./00-progress-tracker.md).
 3. Read [`10-local-brain-and-personality-feasibility.md`](./10-local-brain-and-personality-feasibility.md).
 4. Use this roadmap rough-in to confirm the locked family order and assumptions.
-5. Start detailed planning with `11d-settings-editor-and-service-controls` unless the user reprioritizes.
-6. Do not start coding until `11d` passes `Spec Gate`.
+5. Start detailed planning with `12c-guarded-openclaw-pet-command-lane` unless the user reprioritizes.
+6. Do not start coding on any slice until that slice passes `Spec Gate`.
 
 ## Test And Demo Anchors To Preserve
 These are the minimum user-visible anchors we should remember when detailed planning resumes.
@@ -407,5 +443,9 @@ These are the minimum user-visible anchors we should remember when detailed plan
 - `11a` is the accepted first post-v1 implementation target and baseline for family `11`.
 - `11b` is the accepted setup/bootstrap baseline for family `11`.
 - `11c` is accepted and closed.
-- `11d-settings-editor-and-service-controls` is queued immediately after `11c`.
-- `12` through `15` are roadmap placeholders only until future detailed planning sessions lock their slice-level specs.
+- `11d-settings-editor-and-service-controls` is accepted and closed.
+- `12a-real-openclaw-dialog-parity` is accepted and closed.
+- `12b-chat-shell-and-conversation-presence` is accepted and closed.
+- `12c-guarded-openclaw-pet-command-lane` is the next detailed target.
+- `13a` and `13b` should be specified before implementing `13c` so proactive style sits on a stable persona/read-model base.
+- `12` through `15` remain roadmap placeholders until slice-level deliverable files pass `Spec Gate`.
