@@ -159,6 +159,9 @@ async function testLayeredPrecedenceAndEnvOverrides() {
       PET_OPENCLAW_ALLOW_NON_LOOPBACK: "1",
       PET_OPENCLAW_AUTH_TOKEN: "test-token",
       PET_OPENCLAW_RETRY_COUNT: "2",
+      PET_OPENCLAW_PET_COMMAND_SECRET_REF: "PET_ALT_OPENCLAW_COMMAND_SECRET",
+      PET_ALT_OPENCLAW_COMMAND_SECRET: "pet-command-secret-ref",
+      PET_OPENCLAW_PET_COMMAND_KEY_ID: "ops-default",
       PET_SPOTIFY_AVAILABLE: "1",
       PET_SPOTIFY_BACKGROUND_ENRICHMENT: "0",
       PET_LOCAL_MEDIA_ENABLED: "0",
@@ -221,6 +224,18 @@ async function testLayeredPrecedenceAndEnvOverrides() {
   assert(loaded.settings.openclaw.agentTimeoutMs === 75000, "env agentTimeoutMs should parse");
   assert(loaded.settings.openclaw.retryCount === 2, "env retry count should parse");
   assert(loaded.settings.openclaw.authToken === "test-token", "auth token should resolve from env");
+  assert(
+    loaded.settings.openclaw.petCommandSharedSecretRef === "PET_ALT_OPENCLAW_COMMAND_SECRET",
+    "pet command secret ref should resolve from env"
+  );
+  assert(
+    loaded.settings.openclaw.petCommandSharedSecret === "pet-command-secret-ref",
+    "pet command secret should resolve from configured env ref"
+  );
+  assert(
+    loaded.settings.openclaw.petCommandKeyId === "ops-default",
+    "pet command key id should resolve from env"
+  );
   assert(loaded.sourceMap.baseConfig.endsWith(path.join("config", "settings.json")), "base config source map missing");
   assert(loaded.sourceMap.localConfig.endsWith(path.join("config", "settings.local.json")), "local config source map missing");
   assert(loaded.sourceMap["memory.adapterMode"] === "env", "env source map should mark memory.adapterMode");
@@ -245,6 +260,14 @@ async function testLayeredPrecedenceAndEnvOverrides() {
   );
   assert(loaded.sourceMap["openclaw.agentId"] === "env", "env source map should mark openclaw.agentId");
   assert(loaded.sourceMap["openclaw.baseUrl"] === "env", "env source map should mark openclaw.baseUrl");
+  assert(
+    loaded.sourceMap["openclaw.petCommandSharedSecretRef"] === "env",
+    "env source map should mark openclaw.petCommandSharedSecretRef"
+  );
+  assert(
+    loaded.sourceMap["openclaw.petCommandKeyId"] === "env",
+    "env source map should mark openclaw.petCommandKeyId"
+  );
 }
 
 async function testInvalidLocalJsonHandled() {

@@ -11,6 +11,12 @@ const {
   requestWithTimeout,
 } = require("./openclaw-bridge");
 const {
+  DEFAULT_KEY_ID: DEFAULT_OPENCLAW_PET_COMMAND_KEY_ID,
+  DEFAULT_SHARED_SECRET_REF: DEFAULT_OPENCLAW_PET_COMMAND_SECRET_REF,
+  REJECT_REASONS: PET_COMMAND_REJECT_REASONS,
+  createOpenClawPetCommandLane,
+} = require("./openclaw-pet-command-lane");
+const {
   DEFAULT_DIALOG_TEMPLATES_PATH,
   buildOfflineDialogResponse,
   classifyOfflineDialogTrigger,
@@ -215,6 +221,7 @@ const PROACTIVE_CONVERSATION_SUPPRESSED_RETRY_MS = 6000;
 const BRIDGE_RECENT_DIALOG_TURNS_LIMIT = 6;
 const BRIDGE_RECENT_DIALOG_TEXT_LIMIT = 140;
 const BRIDGE_RECENT_DIALOG_SUMMARY_LIMIT = 360;
+const OPENCLAW_PET_COMMAND_AUDIT_LIMIT = 50;
 const STATE_CATALOG_PATH = DEFAULT_STATE_CATALOG_PATH;
 const CAPABILITY_IDS = Object.freeze({
   renderer: "renderer",
@@ -283,6 +290,8 @@ let latestContractTrace = null;
 let dialogTemplateCatalog = createDefaultDialogTemplateCatalog();
 let dialogHistory = [];
 let openclawBridge = null;
+let openclawPetCommandLane = null;
+let openclawPetCommandAuditHistory = [];
 let memoryPipeline = null;
 let latestMemorySnapshot = null;
 let latestIntegrationEvent = null;
@@ -1644,6 +1653,90 @@ function initializeExtensionPackRuntime() {
   logExtensionSummary("all-disabled-by-flag", disabledSnapshot);
 }
 
+function resolvePetCommandSecretSource(openclaw = {}) {
+  const secret = typeof openclaw.petCommandSharedSecret === "string" ? openclaw.petCommandSharedSecret.trim() : "";
+  if (!secret) return "none";
+  if (runtimeSettingsSourceMap?.["openclaw.petCommandSharedSecret"] === "env") {
+    return "env";
+  }
+  const secretRef =
+    typeof openclaw.petCommandSharedSecretRef === "string"
+      ? openclaw.petCommandSharedSecretRef.trim()
+      : DEFAULT_OPENCLAW_PET_COMMAND_SECRET_REF;
+  if (
+    secretRef &&
+    process.env &&
+    Object.prototype.hasOwnProperty.call(process.env, secretRef) &&
+    typeof process.env[secretRef] === "string" &&
+    process.env[secretRef].trim().length > 0
+  ) {
+    return "env";
+  }
+  return app?.isPackaged ? "runtime" : "local";
+}
+
+function appendOpenClawPetCommandAudit(entry) {
+  if (!entry || typeof entry !== "object") return;
+  openclawPetCommandAuditHistory = [...openclawPetCommandAuditHistory, entry].slice(
+    -OPENCLAW_PET_COMMAND_AUDIT_LIMIT
+  );
+  const logReason = typeof entry.reason === "string" && entry.reason.length > 0 ? entry.reason : "unknown";
+  const logAction = typeof entry.actionId === "string" && entry.actionId.length > 0 ? entry.actionId : "unknown";
+  const decision = entry.decision === "accepted" ? "accepted" : "rejected";
+  const correlationId = entry.correlationId || "n/a";
+  console.log(
+    `[pet-openclaw-command] ${decision} correlationId=${correlationId} action=${logAction} reason=${logReason}`
+  );
+  if (DIAGNOSTICS_ENABLED) {
+    emitDiagnostics({
+      kind: "openclawPetCommandLane",
+      ...entry,
+    });
+  }
+}
+
+function recordCommandInjectedAnnouncement({ correlationId, requestId, text, source, keyId }) {
+  const normalizedText = typeof text === "string" ? text.trim() : "";
+  if (!normalizedText) {
+    return {
+      ok: false,
+      error: "invalid_args",
+    };
+  }
+  const normalizedSource =
+    typeof source?.skillId === "string" && source.skillId.trim().length > 0
+      ? source.skillId.trim()
+      : "openclaw_command_lane";
+  const entry = appendDialogHistoryEntry({
+    messageId: createDialogMessageId(),
+    correlationId:
+      typeof correlationId === "string" && correlationId.length > 0
+        ? correlationId
+        : createContractCorrelationId(),
+    role: "pet",
+    kind: "announcement",
+    channel: "dialog",
+    source: normalizedSource,
+    text: normalizedText,
+    fallbackMode: "none",
+    talkFeedbackMode: DIALOG_TALK_FEEDBACK_MODE,
+    stateContextSummary: summarizeDialogStateContext(),
+    currentState: latestStateSnapshot?.currentState || "Idle",
+    phase: latestStateSnapshot?.phase || null,
+    ts: Date.now(),
+    commandMeta: {
+      requestId: typeof requestId === "string" ? requestId : null,
+      keyId: typeof keyId === "string" ? keyId : null,
+      lane: "openclaw",
+    },
+  });
+  emitDialogMessage(entry);
+  return {
+    ok: true,
+    entry,
+  };
+}
+
 function buildRuntimeSettingsSummary() {
   const settings = runtimeSettings && typeof runtimeSettings === "object" ? runtimeSettings : {};
   const integrations =
@@ -1651,6 +1744,16 @@ function buildRuntimeSettingsSummary() {
   const sensors = settings.sensors && typeof settings.sensors === "object" ? settings.sensors : {};
   const memory = settings.memory && typeof settings.memory === "object" ? settings.memory : {};
   const openclaw = settings.openclaw && typeof settings.openclaw === "object" ? settings.openclaw : {};
+  const openclawPetCommandKeyId =
+    typeof openclaw.petCommandKeyId === "string" && openclaw.petCommandKeyId.trim().length > 0
+      ? openclaw.petCommandKeyId.trim()
+      : DEFAULT_OPENCLAW_PET_COMMAND_KEY_ID;
+  const openclawPetCommandReadiness =
+    openclawPetCommandLane && typeof openclawPetCommandLane.getReadiness === "function"
+      ? openclawPetCommandLane.getReadiness({
+          keyId: openclawPetCommandKeyId,
+        })
+      : null;
   const paths = settings.paths && typeof settings.paths === "object" ? settings.paths : {};
   const roaming = settings.roaming && typeof settings.roaming === "object" ? settings.roaming : {};
   const ui = settings.ui && typeof settings.ui === "object" ? settings.ui : {};
@@ -1727,6 +1830,20 @@ function buildRuntimeSettingsSummary() {
       nonLoopbackAuthSatisfied: Boolean(openclaw.nonLoopbackAuthSatisfied),
       authTokenConfigured: Boolean(openclaw.authToken),
       authTokenRef: openclaw.authTokenRef || null,
+      petCommandKeyId: openclawPetCommandKeyId,
+      petCommandSharedSecretRef:
+        typeof openclaw.petCommandSharedSecretRef === "string" && openclaw.petCommandSharedSecretRef.trim().length > 0
+          ? openclaw.petCommandSharedSecretRef.trim()
+          : DEFAULT_OPENCLAW_PET_COMMAND_SECRET_REF,
+      petCommandSharedSecretConfigured: Boolean(openclaw.petCommandSharedSecret),
+      petCommandSharedSecretSource: resolvePetCommandSecretSource(openclaw),
+      petCommandNonceCacheSize: Number.isFinite(Number(openclawPetCommandReadiness?.nonceCacheSize))
+        ? Math.max(0, Math.round(Number(openclawPetCommandReadiness.nonceCacheSize)))
+        : 0,
+      petCommandPolicy:
+        openclawPetCommandReadiness && typeof openclawPetCommandReadiness.policy === "object"
+          ? { ...openclawPetCommandReadiness.policy }
+          : null,
     },
     paths: {
       localWorkspaceRoot: paths.localWorkspaceRoot || __dirname,
@@ -2188,6 +2305,7 @@ function initializeRuntimeSettings(reason = "startup") {
   }
   setDiagnosticsEnabled(Boolean(runtimeSettings?.ui?.diagnosticsEnabled), reason);
   applyRuntimePetLayout(reason);
+  initializeOpenClawPetCommandLaneRuntime();
 }
 
 function createShellTrayIcon() {
@@ -3955,6 +4073,63 @@ function getBridgeRequestTimeoutMs() {
   return Math.round(configured);
 }
 
+function initializeOpenClawPetCommandLaneRuntime() {
+  const openclaw = runtimeSettings?.openclaw && typeof runtimeSettings.openclaw === "object"
+    ? runtimeSettings.openclaw
+    : {};
+  const keyId =
+    typeof openclaw.petCommandKeyId === "string" && openclaw.petCommandKeyId.trim().length > 0
+      ? openclaw.petCommandKeyId.trim()
+      : DEFAULT_OPENCLAW_PET_COMMAND_KEY_ID;
+  const secretRef =
+    typeof openclaw.petCommandSharedSecretRef === "string" && openclaw.petCommandSharedSecretRef.trim().length > 0
+      ? openclaw.petCommandSharedSecretRef.trim()
+      : DEFAULT_OPENCLAW_PET_COMMAND_SECRET_REF;
+  const secretValue =
+    typeof openclaw.petCommandSharedSecret === "string" && openclaw.petCommandSharedSecret.trim().length > 0
+      ? openclaw.petCommandSharedSecret.trim()
+      : null;
+  const secretSource = resolvePetCommandSecretSource(openclaw);
+
+  openclawPetCommandLane = createOpenClawPetCommandLane({
+    resolveSharedSecret: ({ keyId: candidateKeyId }) => {
+      if (candidateKeyId && candidateKeyId !== keyId) {
+        return {
+          secret: null,
+          source: "none",
+          ref: secretRef,
+        };
+      }
+      return {
+        secret: secretValue,
+        source: secretSource,
+        ref: secretRef,
+      };
+    },
+    executeAction: async ({ actionId, args, envelope, correlationId, keyId: resolvedKeyId }) => {
+      if (actionId === "dialog.injectAnnouncement") {
+        return recordCommandInjectedAnnouncement({
+          correlationId,
+          requestId: envelope?.requestId,
+          text: args?.text,
+          source: envelope?.source,
+          keyId: resolvedKeyId,
+        });
+      }
+      if (actionId === "shell.openStatus") {
+        openStatusWindow();
+        const shellState = emitShellState(buildShellStateSnapshot());
+        return {
+          ok: true,
+          shellState,
+        };
+      }
+      throw new Error(`unsupported_action:${actionId || "unknown"}`);
+    },
+    onAudit: appendOpenClawPetCommandAudit,
+  });
+}
+
 function initializeOpenClawBridgeRuntime() {
   const settings = runtimeSettings?.openclaw || {};
   const configuredMode = typeof settings.mode === "string" ? settings.mode : BRIDGE_MODES.online;
@@ -4691,6 +4866,76 @@ function blockBridgeActions(actions, correlationId) {
   return blocked;
 }
 
+function extractPetCommandRequestPayloads(actions) {
+  if (!Array.isArray(actions) || actions.length <= 0) return [];
+  const requests = [];
+  for (const action of actions) {
+    if (!action || typeof action !== "object") continue;
+    const actionType =
+      typeof action.type === "string" ? action.type.trim().toLowerCase() : "";
+    const route = typeof action.route === "string" ? action.route.trim().toLowerCase() : "";
+    if (actionType !== "pet_command_request" && route !== "pet_command_request") continue;
+    if (action.payload && typeof action.payload === "object") {
+      requests.push(action.payload);
+      continue;
+    }
+    requests.push(action);
+  }
+  return requests;
+}
+
+async function executeOpenClawPetCommandRequest(rawPayload, correlationId) {
+  if (!openclawPetCommandLane || typeof openclawPetCommandLane.processEnvelope !== "function") {
+    return {
+      ok: false,
+      accepted: false,
+      reason: PET_COMMAND_REJECT_REASONS.authSecretMissing,
+      correlationId,
+    };
+  }
+  return openclawPetCommandLane.processEnvelope(rawPayload, {
+    correlationId,
+  });
+}
+
+async function processBridgePetCommandRequests(actions, correlationId) {
+  const requests = extractPetCommandRequestPayloads(actions);
+  if (requests.length <= 0) return [];
+  const outcomes = [];
+  for (const requestPayload of requests) {
+    const outcome = await executeOpenClawPetCommandRequest(requestPayload, correlationId);
+    outcomes.push(outcome);
+  }
+  return outcomes;
+}
+
+function buildBridgeActionFeedbackSuffix(blockedActions, commandOutcomes) {
+  const blocked =
+    Array.isArray(blockedActions) && blockedActions.length > 0
+      ? `Blocked actions: ${blockedActions.join(", ")}.`
+      : "";
+  if (!Array.isArray(commandOutcomes) || commandOutcomes.length <= 0) {
+    return blocked;
+  }
+  const accepted = commandOutcomes
+    .filter((entry) => entry?.accepted)
+    .map((entry) => entry.actionId)
+    .filter((value) => typeof value === "string" && value.length > 0);
+  const rejected = commandOutcomes
+    .filter((entry) => !entry?.accepted)
+    .map((entry) => entry.reason)
+    .filter((value) => typeof value === "string" && value.length > 0);
+  const segments = [];
+  if (blocked) segments.push(blocked);
+  if (accepted.length > 0) {
+    segments.push(`Command lane accepted: ${accepted.join(", ")}.`);
+  }
+  if (rejected.length > 0) {
+    segments.push(`Command lane rejected: ${rejected.join(", ")}.`);
+  }
+  return segments.join(" ").trim();
+}
+
 async function requestBridgeDialog({ correlationId, route, promptText }) {
   if (!runtimeSettings?.openclaw?.enabled) {
     return {
@@ -4719,9 +4964,12 @@ async function requestBridgeDialog({ correlationId, route, promptText }) {
       getBridgeRequestTimeoutMs()
     );
 
-    const blockedActions = blockBridgeActions(outcome?.response?.proposedActions, correlationId);
-    const blockedSuffix =
-      blockedActions.length > 0 ? ` Blocked actions: ${blockedActions.join(", ")}.` : "";
+    const proposedActions = Array.isArray(outcome?.response?.proposedActions)
+      ? outcome.response.proposedActions
+      : [];
+    const blockedActions = blockBridgeActions(proposedActions, correlationId);
+    const commandOutcomes = await processBridgePetCommandRequests(proposedActions, correlationId);
+    const actionFeedbackSuffix = buildBridgeActionFeedbackSuffix(blockedActions, commandOutcomes);
     updateCapabilityState(
       CAPABILITY_IDS.openclawBridge,
       CAPABILITY_STATES.healthy,
@@ -4735,7 +4983,9 @@ async function requestBridgeDialog({ correlationId, route, promptText }) {
 
     return {
       source: outcome?.response?.source || "online",
-      text: `${outcome?.response?.text || "OpenClaw response unavailable."}${blockedSuffix}`.trim(),
+      text: `${outcome?.response?.text || "OpenClaw response unavailable."}${
+        actionFeedbackSuffix ? ` ${actionFeedbackSuffix}` : ""
+      }`.trim(),
       fallbackMode: "none",
     };
   } catch (error) {

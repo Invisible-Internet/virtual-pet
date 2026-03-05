@@ -15,6 +15,8 @@
 ## Security
 - Keep API tokens in environment variables or local override files only.
 - Do not commit auth tokens to tracked settings files.
+- `openclaw.petCommandSharedSecretRef` defaults to `PET_OPENCLAW_PET_COMMAND_SECRET` for signed pet-command envelopes.
+- Keep `PET_OPENCLAW_PET_COMMAND_SECRET` in environment variables and never commit the raw secret value.
 
 ## Shell Settings
 - `roaming.mode`: `desktop` or `zone`

@@ -112,6 +112,13 @@ const CASES = Object.freeze([
     script: "scripts/check-chat-shell-presence.js",
   },
   {
+    id: "D12c-guarded-pet-command-lane",
+    deliverable: "12c-guarded-openclaw-pet-command-lane",
+    scenario:
+      "Signed pet command envelopes enforce auth/replay/expiry guards and execute only bounded allowlist actions.",
+    script: "scripts/check-openclaw-pet-command-lane.js",
+  },
+  {
     id: "Layout-assets",
     deliverable: "core-renderer-assets",
     scenario: "Layout bounds and required sprite assets remain internally consistent.",

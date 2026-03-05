@@ -33,7 +33,10 @@
     "retryCount": 1,
     "authTokenRef": "PET_OPENCLAW_AUTH_TOKEN",
     "authToken": null,
-    "allowNonLoopback": false
+    "allowNonLoopback": false,
+    "petCommandSharedSecretRef": "PET_OPENCLAW_PET_COMMAND_SECRET",
+    "petCommandSharedSecret": null,
+    "petCommandKeyId": "local-default"
   },
   "paths": {
     "localWorkspaceRoot": ".",

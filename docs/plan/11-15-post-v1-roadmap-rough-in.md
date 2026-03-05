@@ -24,8 +24,8 @@ Planning status:
 - `11d-settings-editor-and-service-controls` is accepted and closed.
 - `12a-real-openclaw-dialog-parity` is accepted and closed.
 - `12b-chat-shell-and-conversation-presence` is accepted and closed.
-- `12c-guarded-openclaw-pet-command-lane` is the next detailed target and should be promoted to active next.
-- Families `13` through `15` now include tightened intent notes, but remain pre-spec placeholders until slice files pass `Spec Gate`.
+- `12c-guarded-openclaw-pet-command-lane` is accepted and closed (`Spec/Build/Acceptance Gates passed`).
+- Families `13` through `15` now use one cohesive execution sequence (`12c` through `15c`) with locked control-model decisions for family `14`.
 - All future work follows the post-v1 workflow in [`00-development-workflow.md`](./00-development-workflow.md).
 
 ## Locked Assumptions
@@ -39,10 +39,33 @@ Planning status:
 | Family | Theme | Why It Exists | Current Planning State |
 | --- | --- | --- | --- |
 | `11` | Observability / Setup / Provenance | Make the current OpenClaw, model, memory, and fallback setup visible and understandable inside the app. | `11a`/`11b`/`11c`/`11d` accepted and closed |
-| `12` | Conversation / Bridge | Make pet chat feel like real OpenClaw conversation, not narrow status/introspection. | `12a`/`12b` accepted; `12c` next detailed target |
+| `12` | Conversation / Bridge | Make pet chat feel like real OpenClaw conversation, not narrow status/introspection. | `12a`/`12b`/`12c` accepted; `12d` next detailed target |
 | `13` | Memory / Persona Continuity | Make online and offline feel like the same pet with recall and stable personality. | Rough with tightened sequencing notes (`13a` -> `13b` -> `13c`) |
 | `14` | Embodiment / Autonomy | Make the pet move and react more deliberately, unobtrusively, and believably. | Rough only |
 | `15` | Extension Showcase | Prove the extension system with a real add-on and a polished end-to-end flow. | Rough only |
+
+## Cohesive Post-12b Execution Sequence (`12c`-`15c`)
+1. `12c-guarded-openclaw-pet-command-lane`
+2. `12d-openclaw-plugin-and-skill-virtual-pet-lane`
+3. `12e-guided-openclaw-connectivity-and-pairing`
+4. `13a-runtime-memory-retrieval-and-evidence-tags`
+5. `13b-persona-snapshot-synthesis-and-provenance`
+6. `13c-persona-aware-offline-dialog-and-proactive-behavior`
+7. `13d-online-reflection-and-runtime-sync`
+8. `14a-deliberate-roam-policy-and-monitor-avoidance`
+9. `14b-event-driven-watch-behavior`
+10. `14c-touch-and-gaze-reactions`
+11. `14d-mouse-tag-game`
+12. `15a-hero-extension-showcase-pack`
+13. `15b-extension-authoring-and-debug-visibility`
+14. `15c-extension-context-and-bridge-polish`
+
+### Cross-Family Contracts (Locked)
+- Offline mode must remain fully usable without OpenClaw connectivity.
+- OpenClaw integration is plugin + skill, local-first transport priority.
+- Existing daily memory logs remain canonical write sink (`log-first`, no single-file `log.md` migration).
+- Online conflict policy for live runtime/persona sync: OpenClaw result wins, local marks superseded context.
+- OpenClaw workspace remains observed/read-only from pet app write perspective unless a future slice explicitly changes governance.
 
 ## Family 11: Observability / Setup / Provenance
 ### Family Goal
@@ -139,6 +162,8 @@ The remaining gap is a trusted action ingress for `OpenClaw -> app` requests:
 - `12a-real-openclaw-dialog-parity`
 - `12b-chat-shell-and-conversation-presence`
 - `12c-guarded-openclaw-pet-command-lane`
+- `12d-openclaw-plugin-and-skill-virtual-pet-lane`
+- `12e-guided-openclaw-connectivity-and-pairing`
 
 ### `12a` Rough Intent
 Route true freeform user messages through the bridge as real dialog, with visible source/fallback metadata and continuity similar to webchat or WhatsApp usage.
@@ -161,6 +186,19 @@ Add an OpenClaw skill or bridge command lane that lets OpenClaw request pet beha
 - Signed allowlisted commands only; app remains authority.
 - No direct OpenClaw control over movement/state/render/identity.
 - No direct OpenClaw file-write lane for canonical files; file continuity belongs to family `13`.
+
+### `12d` Rough Intent
+Ship a separable OpenClaw integration package (plugin + skill) in-project that exposes stable, versioned calls for:
+- signed pet command requests
+- bounded status/context reads
+- bounded memory-sync intents through the guarded app lane
+
+### `12e` Rough Intent
+Add guided local-first pairing/connectivity UX so non-technical operators can complete:
+- shared secret setup
+- handshake verification
+- degraded/recovery troubleshooting
+- reconnect flow visibility
 
 ### Likely Public Interfaces / Touchpoints
 - Dialog route handling in `main.js`
@@ -195,6 +233,7 @@ The memory pipeline exists, but what is missing is runtime retrieval and visible
 - `13a-offline-identity-and-recent-recall`
 - `13b-derived-persona-snapshot-from-markdown`
 - `13c-persona-aware-offline-dialog-and-proactive-behavior`
+- `13d-online-reflection-and-runtime-sync`
 
 ### `13a` Rough Intent
 Make the pet able to answer basic offline questions such as:
@@ -217,10 +256,18 @@ Use the derived persona snapshot in deterministic local behavior:
 - proactive conversation style
 - bounded personality-influenced reactions
 
+### `13d` Rough Intent
+Add online reflection/runtime sync with bounded cadence and governance:
+- hourly heartbeat + nightly digest
+- log-first persistence to existing daily markdown logs
+- policy-lane application for online suggestions
+- explicit conflict precedence when online context disagrees with local runtime
+
 ### Family 13 Tightened Sequencing
 1. `13a`: local recall answers are correct and bounded.
 2. `13b`: persona snapshot + provenance + bounded online context export are deterministic.
 3. `13c`: proactive/offline behavior style uses the same snapshot with anti-spam pacing and suppression visibility.
+4. `13d`: online sync/reflection applies via the same policy/governance lane with cadence + conflict handling.
 
 ### Family 13 File/Authority Boundary
 - App owns canonical file reads and guarded memory writes.
@@ -262,6 +309,18 @@ Make the pet feel physically believable, unobtrusive, and more context-aware in 
 
 ### Problem Statement
 The roam runtime works, but behavior policy still feels too repetitive and insufficiently intentional.
+
+### Family 14 Control Model (Locked)
+- Top-level state selection: `Utility scoring`.
+- State authority and transition legality: `FSM arbitration` (cooldowns, min-hold, lockouts, recovery).
+- In-state sequencing only: `Per-state micro behavior trees`.
+- Core stat authority: deterministic `events + time` only.
+- Online AI influence: `intent suggestions only` (mapped into normal events), no direct stat writes.
+
+### Family 14 Animation Contract (Locked)
+- Every new family-14 runtime state must ship bespoke directional sprite-sheet coverage before enablement.
+- Missing required state art fails validation and keeps that state degraded/disabled with explicit diagnostics.
+- Existing movement invariants and main-process movement authority remain unchanged.
 
 ### Proposed Slices
 - `14a-deliberate-roam-policy-and-monitor-avoidance`
@@ -378,17 +437,21 @@ These are roadmap placeholders, not final contracts.
 - Explicit "dialog open" locomotion policy.
 - Guarded bridge/skill command envelope for pet-action requests.
 - OpenClaw skill/API caller ingress contract for signed `pet_command_request` payloads.
+- Separable plugin+skill integration package boundary for future extraction.
+- Guided local-first pairing and command-lane diagnostics.
 
 ### Planned for Family 13
 - Read-model over canonical Markdown identity/persona files.
 - Derived persona snapshot format with provenance fields.
 - Recent-highlight retrieval contract for offline recall.
 - Bounded online bridge context export derived from canonical files + recent highlights.
+- Hourly heartbeat + nightly digest runtime sync lanes with explicit conflict handling.
 
 ### Planned for Family 14
-- Roam-policy memory for short-term aversion.
-- Event-driven watch-state trigger contract.
-- Pointer/touch reaction event contract.
+- Behavior stat snapshot contract (`events + time` deterministic updates).
+- Behavior decision trace contract (winner + suppressed candidates + gate reasons).
+- Utility->FSM state selection contract plus per-state micro-BT sequencing.
+- Required bespoke sprite-sheet validation policy for every new family-14 state.
 
 ### Planned for Family 15
 - One showcase extension contract and success criteria.
@@ -400,7 +463,7 @@ These are roadmap placeholders, not final contracts.
 2. Read [`00-progress-tracker.md`](./00-progress-tracker.md).
 3. Read [`10-local-brain-and-personality-feasibility.md`](./10-local-brain-and-personality-feasibility.md).
 4. Use this roadmap rough-in to confirm the locked family order and assumptions.
-5. Start detailed planning with `12c-guarded-openclaw-pet-command-lane` unless the user reprioritizes.
+5. Resume from tracker/AGENTS (`12d` -> `12e` unless user reprioritizes).
 6. Do not start coding on any slice until that slice passes `Spec Gate`.
 
 ## Test And Demo Anchors To Preserve
@@ -446,6 +509,10 @@ These are the minimum user-visible anchors we should remember when detailed plan
 - `11d-settings-editor-and-service-controls` is accepted and closed.
 - `12a-real-openclaw-dialog-parity` is accepted and closed.
 - `12b-chat-shell-and-conversation-presence` is accepted and closed.
-- `12c-guarded-openclaw-pet-command-lane` is the next detailed target.
+- `12c-guarded-openclaw-pet-command-lane` is accepted and closed.
+- `12d` and `12e` are the next conversation/bridge slices after `12c` acceptance.
 - `13a` and `13b` should be specified before implementing `13c` so proactive style sits on a stable persona/read-model base.
+- `13d` follows `13c` and uses heartbeat + digest sync with log-first governance.
+- Family `14` driver model is locked: utility scoring + FSM + per-state micro BT.
+- Family `14` art policy is locked: all new family-14 states require bespoke directional sheets.
 - `12` through `15` remain roadmap placeholders until slice-level deliverable files pass `Spec Gate`.

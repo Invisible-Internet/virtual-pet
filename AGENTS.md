@@ -124,16 +124,16 @@ Historical v1 deliverables keep their original status wording and are not retrof
 - `accepted` is the only terminal state for future post-v1 deliverables.
 
 ### Current Workflow Snapshot
-- Current Deliverable: `12c-guarded-openclaw-pet-command-lane`
-- Workflow State: `specifying`
-- Current Status: `specifying`
-- Last Completed Deliverable: `12b-chat-shell-and-conversation-presence`
-- Next Detailed Target: `12c-guarded-openclaw-pet-command-lane`
-- Next Queued Target: `13c-persona-aware-offline-dialog-and-proactive-behavior` (proactive robustness follow-up fit)
+- Current Deliverable: `none`
+- Workflow State: `idle`
+- Current Status: `accepted`
+- Last Completed Deliverable: `12c-guarded-openclaw-pet-command-lane`
+- Next Detailed Target: `12d-openclaw-plugin-and-skill-virtual-pet-lane`
+- Next Queued Target: `12e-guided-openclaw-connectivity-and-pairing` (pairing UX follow-up)
 - Current Gate State:
-  - `Spec Gate`: `passed` (`2026-03-05`)
-  - `Build Gate`: `not_started`
-  - `Acceptance Gate`: `not_started`
+  - `Spec Gate`: `n/a`
+  - `Build Gate`: `n/a`
+  - `Acceptance Gate`: `n/a`
 - Historical Note:
   - D01-D10 are complete historical v1 records.
   - Detailed v1 session history lives in `docs/plan/archive/00-progress-tracker-v1-history.md`.
@@ -177,15 +177,29 @@ Historical v1 deliverables keep their original status wording and are not retrof
     - `Acceptance Gate` passed on `2026-03-05` (operator-accepted closure)
   - follow-up note:
     - proactive cadence is currently policy-compliant but still feels frequent to operator; deeper timing/context robustness should be handled in `13c-persona-aware-offline-dialog-and-proactive-behavior`.
-- Next `12c` spec outcome:
-  - Draft deliverable file `docs/plan/12c-guarded-openclaw-pet-command-lane.md` now exists.
-  - `Spec Gate` is now passed with a concrete command-lane use case (`OpenClaw -> app` bounded visible actions).
-  - Auth model defines signed command envelope (`vp-hmac-v1`) with canonical signing input, nonce replay protection, and expiry/skew defaults.
-  - First-slice allowlist is bounded to safe visible actions (`dialog.injectAnnouncement`, `shell.openStatus`) with explicit args and reject-reason taxonomy.
-  - Lane boundary is explicit:
-    - chat transport remains in `12a`
-    - canonical file/memory continuity stays in family `13`
-  - Implementation is not started yet; next step is first runtime slice + deterministic `D12c` coverage.
+- Last completed `12c` outcome:
+  - Runtime lane now verifies signed envelope (`vp-hmac-v1`) with canonical signing input.
+  - Nonce replay, expiry/lifetime/skew checks, and reject taxonomy are enforced in runtime.
+  - First-slice allowlist is active for safe visible actions:
+    - `dialog.injectAnnouncement`
+    - `shell.openStatus`
+  - Bridge proposed-action handling now processes signed `pet_command_request` requests and returns deterministic accepted/rejected outcomes.
+  - Observability bridge detail now includes command-auth readiness metadata:
+    - secret configured yes/no
+    - key id
+    - secret source label
+    - nonce cache size
+  - deterministic coverage added:
+    - `scripts/check-openclaw-pet-command-lane.js`
+    - acceptance row `D12c-guarded-pet-command-lane`
+  - gate outcome:
+    - `Spec Gate` passed on `2026-03-05`
+    - `Build Gate` passed on `2026-03-05` with checks green:
+      - `npm run check:syntax`
+      - `npm run check:contracts`
+      - `npm run check:acceptance` -> `20/20`
+    - `Acceptance Gate` passed on `2026-03-05` (operator-accepted closure)
+  - Shipped outcome: visible app/runtime change delivered and accepted; signed bounded OpenClaw command requests now execute via guarded allowlist with deterministic reject reasons and status readiness visibility.
 - Last completed `11d` outcome:
   - Shared-shell `Advanced Settings` now lives on a dedicated `Settings` tab (separate from `Setup`).
   - Tray now includes `Advanced Settings...` routing into the shared shell `Settings` tab.
@@ -261,9 +275,14 @@ Historical v1 deliverables keep their original status wording and are not retrof
   - `11d-settings-editor-and-service-controls` is accepted and closed.
   - `12a-real-openclaw-dialog-parity` is accepted and closed (`Spec/Build/Acceptance Gates passed`).
   - `12b-chat-shell-and-conversation-presence` is accepted and closed (`Spec/Build/Acceptance Gates passed`).
-  - `12c-guarded-openclaw-pet-command-lane` is the current active deliverable (`specifying`, `Spec Gate=passed`).
-  - `13c-persona-aware-offline-dialog-and-proactive-behavior` is the best-fit follow-up placeholder for proactive timing/style robustness.
-  - Families `13` through `15` now have tighter intent/sequencing notes, but remain rough placeholders and must not be treated as spec-passed deliverables yet.
+  - `12c-guarded-openclaw-pet-command-lane` is accepted and closed (`Spec/Build/Acceptance Gates passed`).
+  - `12d-openclaw-plugin-and-skill-virtual-pet-lane` is the next detailed target.
+  - Families `13` through `15` now use the cohesive `12c` through `15c` sequence in rough-in.
+  - Family `14` decisions are locked for downstream slices:
+    - `Utility scoring -> FSM arbitration -> per-state micro BT`
+    - deterministic stat authority from `events + time`
+    - AI influence via intent suggestions only
+    - all family-14 new states require bespoke directional sprite-sheet coverage
 
 ### Session-End Sync Rule
 - At the end of every working session, update:

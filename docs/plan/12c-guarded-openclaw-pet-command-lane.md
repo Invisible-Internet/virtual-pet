@@ -1,7 +1,7 @@
 # Deliverable 12c: Guarded OpenClaw Pet Command Lane
 
 **Deliverable ID:** `12c-guarded-openclaw-pet-command-lane`  
-**Status:** `specifying`  
+**Status:** `accepted`  
 **Owner:** `Mic + Codex`  
 **Last Updated:** `2026-03-05`  
 **Depends On:** `04-openclaw-bridge-spec`, `11a-openclaw-memory-observability-surface`, `11d-settings-editor-and-service-controls`, `12a-real-openclaw-dialog-parity`, `12b-chat-shell-and-conversation-presence`  
@@ -87,17 +87,17 @@ An OpenClaw skill/API caller can submit a signed pet command request, and the ap
 ## Public Interfaces / Touchpoints
 - Deliverable doc:
   - `docs/plan/12c-guarded-openclaw-pet-command-lane.md`
-- Bridge/runtime files (planned):
+- Bridge/runtime files:
   - `openclaw-bridge.js`
   - `main.js`
   - `settings-runtime.js`
   - `shell-observability.js`
-- Renderer/shared-shell surfaces (planned):
+- Renderer/shared-shell surfaces:
   - `renderer.js`
   - `inventory-shell-renderer.js`
-- New helper module (planned):
-  - `pet-command-auth.js`
-- Deterministic checks (planned):
+- New helper module:
+  - `openclaw-pet-command-lane.js`
+- Deterministic checks:
   - `scripts/check-openclaw-pet-command-lane.js`
   - `scripts/run-acceptance-matrix.js` row `D12c-guarded-pet-command-lane`
 
@@ -247,33 +247,50 @@ Rules:
   - replay/expiry protections are missing or non-deterministic.
 
 ## Implementation Slice (Mandatory)
-- Not started in this session; this file is spec-only for the next secure command-lane slice.
-- Planned first implementation slice:
-  - request envelope parsing + auth verification
-  - nonce cache + expiry checks
-  - allowlisted command executor
-  - deterministic check `check-openclaw-pet-command-lane.js`
+- First implementation slice shipped:
+  - new runtime command lane module:
+    - `openclaw-pet-command-lane.js`
+  - canonical `vp-hmac-v1` signing-input verification with explicit reject taxonomy
+  - nonce replay cache + expiry/lifetime/skew checks
+  - bounded allowlist execution:
+    - `dialog.injectAnnouncement`
+    - `shell.openStatus`
+  - `main.js` now processes signed `pet_command_request` actions from bridge proposed-actions lane
+  - shared-shell observability bridge detail now includes pet-command auth readiness/source/key and nonce cache size
+  - deterministic checks:
+    - `scripts/check-openclaw-pet-command-lane.js` (new)
+    - acceptance row `D12c-guarded-pet-command-lane` (new)
 
 ## Visible App Outcome
-- No visible app/runtime change in this session (specification only).
-- After implementation, operators can observe accepted/rejected OpenClaw command requests with explicit authorization reasons and bounded action outcomes.
+- Visible app/runtime change delivered:
+  - signed allowlisted OpenClaw command requests can now execute bounded visible actions in runtime.
+  - accepted/rejected command outcomes are surfaced with explicit reasons (`accepted`/taxonomy reject reason).
+  - bridge diagnostics/status now expose command-auth readiness metadata without exposing secret values.
 
 ## Acceptance Notes
 - `2026-03-05`: File created from the post-v1 deliverable template as a concrete auth/authorization spec for future OpenClaw skill integration.
 - `2026-03-05`: Spec sections drafted; implementation intentionally not started.
 - `2026-03-05`: Spec tightened with concrete use-case framing, skill/API ingress contract, canonical signing input, replay/expiry defaults, and explicit first-slice arg + reject-reason contracts.
+- `2026-03-05`: Build verification run completed with first-slice implementation:
+  - `npm run check:syntax`
+  - `npm run check:contracts`
+  - `npm run check:acceptance` -> `20/20`
+- `2026-03-05`: Operator runtime smoke reviewed (live app run with no command-lane regressions observed) and accepted for closeout so roadmap can advance to `12d`.
 
 ## Iteration Log
 - `2026-03-05`: Initial `12c` auth-lane draft created with signed request envelope, replay protection, expiry validation, and first-slice allowlist.
 - `2026-03-05`: Clarified lane boundaries vs `12a` chat and family `13` canonical-file continuity work to avoid scope overlap.
+- `2026-03-05`: Implemented guarded runtime lane + deterministic coverage (`D12c-guarded-pet-command-lane`).
 
 ## Gate Status
 - `Spec Gate`: `passed` (`2026-03-05`)
-- `Build Gate`: `not_started`
-- `Acceptance Gate`: `not_started`
-- `Overall`: `specifying`
+- `Build Gate`: `passed` (`2026-03-05`)
+- `Acceptance Gate`: `passed` (`2026-03-05`)
+- `Overall`: `accepted`
 
 ## Change Log
 - `2026-03-05`: File created from the post-v1 deliverable template.
 - `2026-03-05`: Added concrete signed-command auth model and bounded first-slice allowlist contract.
 - `2026-03-05`: Added concrete command-lane use cases, skill/API ingress contract, canonical signature format, replay/expiry defaults, and explicit reject taxonomy.
+- `2026-03-05`: Shipped first runtime/auth slice with nonce replay protection, allowlist executor, and deterministic coverage (`D12c`).
+- `2026-03-05`: Operator accepted `12c` closeout; deliverable marked `accepted`.

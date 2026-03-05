@@ -33,16 +33,16 @@ Historical v1 deliverables keep their original wording and remain archived histo
   - operator-visible demo passes and evidence is logged
 
 ## Current Deliverable
-- Current Deliverable: `12c-guarded-openclaw-pet-command-lane`
-- Workflow State: `specifying`
-- Current Status: `specifying`
-- Last Completed Deliverable: `12b-chat-shell-and-conversation-presence`
-- Next Detailed Target: `12c-guarded-openclaw-pet-command-lane`
-- Next Queued Target: `13c-persona-aware-offline-dialog-and-proactive-behavior` (proactive robustness follow-up fit)
+- Current Deliverable: `none`
+- Workflow State: `idle`
+- Current Status: `accepted`
+- Last Completed Deliverable: `12c-guarded-openclaw-pet-command-lane`
+- Next Detailed Target: `12d-openclaw-plugin-and-skill-virtual-pet-lane`
+- Next Queued Target: `12e-guided-openclaw-connectivity-and-pairing` (pairing UX follow-up)
 - Current Gate State:
-  - `Spec Gate`: `passed` (`2026-03-05`)
-  - `Build Gate`: `not_started`
-  - `Acceptance Gate`: `not_started`
+  - `Spec Gate`: `n/a`
+  - `Build Gate`: `n/a`
+  - `Acceptance Gate`: `n/a`
 
 ## Post-v1 Family Rough-In
 Locked family order:
@@ -59,9 +59,9 @@ Planning state:
 - `11d-settings-editor-and-service-controls` is now accepted and closed.
 - `12a-real-openclaw-dialog-parity` is now accepted and closed (`Spec/Build/Acceptance Gates passed`).
 - `12b-chat-shell-and-conversation-presence` is now accepted and closed (`Spec/Build/Acceptance Gates passed`).
-- `12c-guarded-openclaw-pet-command-lane` is now active in `specifying` with `Spec Gate=passed`.
-- `13c-persona-aware-offline-dialog-and-proactive-behavior` is the best-fit family placeholder for deeper proactive timing/style robustness after command-lane work.
-- Families `13` through `15` now have tighter intent notes but remain pre-spec placeholders until slice files pass `Spec Gate`.
+- `12c-guarded-openclaw-pet-command-lane` is accepted and closed (`Spec/Build/Acceptance Gates passed`).
+- `12d-openclaw-plugin-and-skill-virtual-pet-lane` is now the next detailed target.
+- Families `13` through `15` now follow the cohesive `12c`-`15c` sequence in rough-in, with family-14 control/animation policy decisions locked.
 - Full family notes live in [`11-15-post-v1-roadmap-rough-in.md`](./11-15-post-v1-roadmap-rough-in.md).
 
 ## How To Start A New Deliverable
@@ -73,14 +73,45 @@ Planning state:
 6. Pass `Spec Gate` before implementation begins.
 
 ## Next 3 Actions
-1. Implement first `12c` allowlist slice (`dialog.injectAnnouncement`, `shell.openStatus`) with auth verification + replay/expiry enforcement.
-2. Add deterministic coverage for `12c` (`scripts/check-openclaw-pet-command-lane.js`, acceptance row `D12c-guarded-pet-command-lane`) and run check suite.
-3. Draft spec scaffolds for `13a`/`13b` so canonical-file continuity and bounded OpenClaw context export are ready after `12c`.
+1. Create/spec `12d-openclaw-plugin-and-skill-virtual-pet-lane` deliverable file and pass `Spec Gate`.
+2. Start `12d` first implementation slice for separable plugin+skill command/status lane.
+3. Draft `12e-guided-openclaw-connectivity-and-pairing` spec so pairing UX can follow `12d` without rework.
 
 ## Blockers
 - None currently.
 
 ## Last Session Summary
+- Closed `12c-guarded-openclaw-pet-command-lane` as accepted:
+  - operator reviewed live runtime output and reported no blockers; requested closure to move forward
+  - gate outcome:
+    - `Spec Gate` passed on `2026-03-05`
+    - `Build Gate` passed on `2026-03-05` (`npm run check:syntax`, `npm run check:contracts`, `npm run check:acceptance` -> `20/20`)
+    - `Acceptance Gate` passed on `2026-03-05` (operator-accepted closure)
+  - workflow moved to `idle` with `Current Deliverable: none`
+  - visible app/runtime change delivered and accepted: guarded signed OpenClaw command lane is active with deterministic allowlist/reject behavior and observability readiness metadata.
+- Implemented first `12c-guarded-openclaw-pet-command-lane` runtime slice and passed `Build Gate`:
+  - added `openclaw-pet-command-lane.js` with:
+    - signed `vp-hmac-v1` verification
+    - nonce replay cache
+    - expiry/lifetime/skew checks
+    - strict allowlist validation (`dialog.injectAnnouncement`, `shell.openStatus`)
+  - wired `main.js` to process signed `pet_command_request` actions from bridge proposed-actions lane
+  - wired settings/observability for command-auth readiness metadata:
+    - `openclaw.petCommandSharedSecretRef`
+    - `openclaw.petCommandKeyId`
+    - `openclaw.petCommandSharedSecretConfigured` + source visibility (no secret exposure)
+  - added deterministic coverage:
+    - `scripts/check-openclaw-pet-command-lane.js` (new)
+    - acceptance row `D12c-guarded-pet-command-lane` (new)
+  - verification run:
+    - `npm run check:syntax`
+    - `npm run check:contracts`
+    - `npm run check:acceptance` -> `20/20 automated checks passed`
+  - visible app/runtime change delivered: signed bounded OpenClaw command requests now execute or reject deterministically with explicit reasons.
+- Synced roadmap rough-in to cohesive sequence (`12c` through `15c`) and locked family-14 control/animation policy:
+  - `Utility scoring -> FSM arbitration -> per-state micro BT`
+  - `events + time` stat authority with AI intent suggestions only
+  - all new family-14 states require bespoke directional sprite-sheet coverage
 - Tightened planning for active `12c` and downstream roadmap families:
   - set `12c-guarded-openclaw-pet-command-lane` as current active deliverable (`specifying`)
   - passed `12c` `Spec Gate` with clarified purpose:

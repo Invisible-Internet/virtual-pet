@@ -251,6 +251,9 @@ function buildDefaultSettings(projectRoot) {
       authTokenRef: "PET_OPENCLAW_AUTH_TOKEN",
       authToken: null,
       allowNonLoopback: false,
+      petCommandSharedSecretRef: "PET_OPENCLAW_PET_COMMAND_SECRET",
+      petCommandSharedSecret: null,
+      petCommandKeyId: "local-default",
     },
     paths: {
       localWorkspaceRoot: projectRoot,
@@ -392,6 +395,15 @@ function normalizeSettings(rawSettings, { projectRoot, env, warnings, errors }) 
     openclawRaw.allowNonLoopback,
     normalized.openclaw.allowNonLoopback
   );
+  normalized.openclaw.petCommandSharedSecretRef = toOptionalString(
+    openclawRaw.petCommandSharedSecretRef,
+    normalized.openclaw.petCommandSharedSecretRef
+  );
+  normalized.openclaw.petCommandSharedSecret = toOptionalString(openclawRaw.petCommandSharedSecret, null);
+  normalized.openclaw.petCommandKeyId = toOptionalString(
+    openclawRaw.petCommandKeyId,
+    normalized.openclaw.petCommandKeyId
+  );
 
   if (normalized.openclaw.authTokenRef && env && typeof env === "object") {
     const tokenFromRef = toOptionalString(env[normalized.openclaw.authTokenRef], null);
@@ -403,6 +415,18 @@ function normalizeSettings(rawSettings, { projectRoot, env, warnings, errors }) 
     const tokenFromDefaultEnv = toOptionalString(env.PET_OPENCLAW_AUTH_TOKEN, null);
     if (tokenFromDefaultEnv) {
       normalized.openclaw.authToken = tokenFromDefaultEnv;
+    }
+  }
+  if (normalized.openclaw.petCommandSharedSecretRef && env && typeof env === "object") {
+    const commandSecretFromRef = toOptionalString(env[normalized.openclaw.petCommandSharedSecretRef], null);
+    if (commandSecretFromRef) {
+      normalized.openclaw.petCommandSharedSecret = commandSecretFromRef;
+    }
+  }
+  if (!normalized.openclaw.petCommandSharedSecret && env && typeof env === "object") {
+    const commandSecretFromDefaultEnv = toOptionalString(env.PET_OPENCLAW_PET_COMMAND_SECRET, null);
+    if (commandSecretFromDefaultEnv) {
+      normalized.openclaw.petCommandSharedSecret = commandSecretFromDefaultEnv;
     }
   }
 
@@ -507,6 +531,21 @@ function applyEnvOverrides(settings, env, sourceMap) {
   }
   if (Object.prototype.hasOwnProperty.call(env, "PET_OPENCLAW_AUTH_TOKEN_REF")) {
     set("openclaw.authTokenRef", toOptionalString(env.PET_OPENCLAW_AUTH_TOKEN_REF, next.openclaw.authTokenRef));
+  }
+  if (Object.prototype.hasOwnProperty.call(env, "PET_OPENCLAW_PET_COMMAND_SECRET_REF")) {
+    set(
+      "openclaw.petCommandSharedSecretRef",
+      toOptionalString(env.PET_OPENCLAW_PET_COMMAND_SECRET_REF, next.openclaw.petCommandSharedSecretRef)
+    );
+  }
+  if (Object.prototype.hasOwnProperty.call(env, "PET_OPENCLAW_PET_COMMAND_SECRET")) {
+    set(
+      "openclaw.petCommandSharedSecret",
+      toOptionalString(env.PET_OPENCLAW_PET_COMMAND_SECRET, next.openclaw.petCommandSharedSecret)
+    );
+  }
+  if (Object.prototype.hasOwnProperty.call(env, "PET_OPENCLAW_PET_COMMAND_KEY_ID")) {
+    set("openclaw.petCommandKeyId", toOptionalString(env.PET_OPENCLAW_PET_COMMAND_KEY_ID, next.openclaw.petCommandKeyId));
   }
   if (Object.prototype.hasOwnProperty.call(env, "PET_OPENCLAW_ALLOW_NON_LOOPBACK")) {
     set(

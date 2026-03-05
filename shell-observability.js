@@ -283,6 +283,13 @@ function buildBridgeRow({ settingsSummary, openclawCapabilityState }) {
       endpoint,
       endpointClass,
       authConfigured: Boolean(openclaw.authTokenConfigured),
+      petCommandAuthConfigured: Boolean(openclaw.petCommandSharedSecretConfigured),
+      petCommandAuthSource: toOptionalString(openclaw.petCommandSharedSecretSource, "none"),
+      petCommandKeyId: toOptionalString(openclaw.petCommandKeyId, null),
+      petCommandSharedSecretRef: toOptionalString(openclaw.petCommandSharedSecretRef, null),
+      petCommandNonceCacheSize: Number.isFinite(Number(openclaw.petCommandNonceCacheSize))
+        ? Math.max(0, Math.round(Number(openclaw.petCommandNonceCacheSize)))
+        : 0,
     };
   }
 
@@ -298,6 +305,13 @@ function buildBridgeRow({ settingsSummary, openclawCapabilityState }) {
     endpoint,
     endpointClass,
     authConfigured: Boolean(openclaw.authTokenConfigured),
+    petCommandAuthConfigured: Boolean(openclaw.petCommandSharedSecretConfigured),
+    petCommandAuthSource: toOptionalString(openclaw.petCommandSharedSecretSource, "none"),
+    petCommandKeyId: toOptionalString(openclaw.petCommandKeyId, null),
+    petCommandSharedSecretRef: toOptionalString(openclaw.petCommandSharedSecretRef, null),
+    petCommandNonceCacheSize: Number.isFinite(Number(openclaw.petCommandNonceCacheSize))
+      ? Math.max(0, Math.round(Number(openclaw.petCommandNonceCacheSize)))
+      : 0,
   };
 }
 
@@ -725,10 +739,33 @@ function buildRowDetail({
     provenance.push(
       { label: "Transport", kind: "runtime", value: toSentence(row?.transport, "unknown") },
       { label: "Mode", kind: "runtime", value: toSentence(row?.mode, "unknown") },
-      { label: "Reason", kind: "runtime", value: normalizeReasonLabel(row?.reason) }
+      { label: "Reason", kind: "runtime", value: normalizeReasonLabel(row?.reason) },
+      {
+        label: "Pet Command Auth",
+        kind: "runtime",
+        value: row?.petCommandAuthConfigured ? "configured" : "missing",
+      },
+      {
+        label: "Pet Command Source",
+        kind: "runtime",
+        value: toSentence(row?.petCommandAuthSource, "none"),
+      },
+      {
+        label: "Pet Command Key",
+        kind: "runtime",
+        value: toSentence(row?.petCommandKeyId, "unknown"),
+      },
+      {
+        label: "Nonce Cache",
+        kind: "runtime",
+        value: String(Number.isFinite(Number(row?.petCommandNonceCacheSize)) ? row.petCommandNonceCacheSize : 0),
+      }
     );
     if (row?.endpoint) {
       provenance.push({ label: "Endpoint", kind: "path", value: row.endpoint });
+    }
+    if (row?.petCommandSharedSecretRef) {
+      provenance.push({ label: "Secret Ref", kind: "runtime", value: row.petCommandSharedSecretRef });
     }
   } else if (rowId === OBSERVABILITY_SUBJECT_IDS.provider) {
     label = "Provider / Model";
