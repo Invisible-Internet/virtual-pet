@@ -100,6 +100,12 @@ const CASES = Object.freeze([
     script: "scripts/check-shell-settings-editor.js",
   },
   {
+    id: "D12a-dialog-openclaw-parity",
+    deliverable: "12a-real-openclaw-dialog-parity",
+    scenario: "Dialog bridge context carries bounded recent turns and follow-up requests retain continuity context.",
+    script: "scripts/check-dialog-openclaw-parity.js",
+  },
+  {
     id: "Layout-assets",
     deliverable: "core-renderer-assets",
     scenario: "Layout bounds and required sprite assets remain internally consistent.",

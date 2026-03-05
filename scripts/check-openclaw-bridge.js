@@ -138,6 +138,102 @@ function createJsonResponse(payload, status = 200) {
   };
 }
 
+class FakeGatewayWebSocket {
+  constructor(_url) {
+    this.readyState = 0;
+    this._listeners = new Map();
+    setTimeout(() => {
+      this.readyState = FakeGatewayWebSocket.OPEN;
+      this._emit("open", {});
+    }, 0);
+  }
+
+  addEventListener(type, handler) {
+    const handlers = this._listeners.get(type) || [];
+    handlers.push(handler);
+    this._listeners.set(type, handlers);
+  }
+
+  send(rawFrame) {
+    const frame = JSON.parse(rawFrame);
+    if (frame.type !== "req") return;
+    if (frame.method === "connect") {
+      this._emit("message", {
+        data: JSON.stringify({
+          type: "res",
+          id: frame.id,
+          ok: true,
+          payload: {
+            snapshot: {
+              status: "ok",
+            },
+          },
+        }),
+      });
+      return;
+    }
+
+    if (frame.method === "chat.send") {
+      const runId = frame.params?.idempotencyKey || "run-ws-check";
+      const sessionKey = frame.params?.sessionKey || "main";
+      this._emit("message", {
+        data: JSON.stringify({
+          type: "res",
+          id: frame.id,
+          ok: true,
+          payload: { runId },
+        }),
+      });
+      this._emit("message", {
+        data: JSON.stringify({
+          type: "event",
+          event: "chat",
+          payload: {
+            sessionKey,
+            runId,
+            state: "delta",
+            message: {
+              role: "assistant",
+              content: [{ type: "text", text: "hello from websocket bridge" }],
+            },
+          },
+        }),
+      });
+      this._emit("message", {
+        data: JSON.stringify({
+          type: "event",
+          event: "chat",
+          payload: {
+            sessionKey,
+            runId,
+            state: "final",
+            message: {
+              role: "assistant",
+              content: [{ type: "text", text: "hello from websocket bridge" }],
+            },
+          },
+        }),
+      });
+      return;
+    }
+  }
+
+  close(code = 1000, reason = "") {
+    this.readyState = FakeGatewayWebSocket.CLOSED;
+    this._emit("close", { code, reason });
+  }
+
+  _emit(type, payload) {
+    const handlers = this._listeners.get(type) || [];
+    for (const handler of handlers) {
+      handler(payload);
+    }
+  }
+}
+
+FakeGatewayWebSocket.OPEN = 1;
+FakeGatewayWebSocket.CLOSED = 3;
+
 async function testHttpLoopbackWithoutToken() {
   let calls = 0;
   const bridge = createOpenClawBridge({
@@ -269,6 +365,34 @@ async function testHttpNonLoopbackWithToken() {
   assertEqual(outcome.response.text, "ok-non-loopback", "non-loopback HTTP response text mismatch");
 }
 
+async function testWebSocketLoopbackDialog() {
+  const bridge = createOpenClawBridge({
+    mode: BRIDGE_MODES.online,
+    transport: BRIDGE_TRANSPORTS.ws,
+    baseUrl: "ws://127.0.0.1:18789",
+    webSocketImpl: FakeGatewayWebSocket,
+    requestTimeoutMs: 1200,
+  });
+
+  const outcome = await requestWithTimeout(
+    bridge.sendDialog({
+      route: "dialog_user_message",
+      correlationId: "corr-ws-loopback",
+      promptText: "hello",
+      context: {
+        currentState: "Idle",
+        source: "online",
+      },
+    }),
+    1200
+  );
+  assertEqual(
+    outcome.response.text,
+    "hello from websocket bridge",
+    "loopback WebSocket response text mismatch"
+  );
+}
+
 async function run() {
   await testOnlineResponse();
   await testTimeoutFallback();
@@ -278,6 +402,7 @@ async function run() {
   await testHttpNonLoopbackRequiresToken();
   await testHttpNonLoopbackDisabledPolicy();
   await testHttpNonLoopbackWithToken();
+  await testWebSocketLoopbackDialog();
   console.log("[openclaw-bridge] checks passed");
 }
 

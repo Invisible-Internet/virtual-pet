@@ -307,6 +307,34 @@ async function testPolicyWarnings() {
   );
 }
 
+async function testWebSocketTransportNormalization() {
+  const root = await makeTempProjectRoot("ws-transport");
+  await writeJson(path.join(root, "config", "settings.json"), {
+    openclaw: {
+      enabled: true,
+      transport: "ws",
+      baseUrl: "ws://127.0.0.1:18789",
+      allowNonLoopback: false,
+    },
+    paths: {
+      localWorkspaceRoot: ".",
+    },
+  });
+
+  const loaded = loadRuntimeSettings({
+    projectRoot: root,
+    env: {},
+  });
+  assert(
+    loaded.settings.openclaw.transport === "ws",
+    "websocket transport should normalize as ws"
+  );
+  assert(
+    loaded.settings.openclaw.baseUrl === "ws://127.0.0.1:18789",
+    "websocket baseUrl should persist"
+  );
+}
+
 async function testPersistRuntimeSettingsPatch() {
   const root = await makeTempProjectRoot("persist");
   await writeJson(path.join(root, "config", "settings.json"), {
@@ -392,6 +420,7 @@ async function run() {
   await testLayeredPrecedenceAndEnvOverrides();
   await testInvalidLocalJsonHandled();
   await testPolicyWarnings();
+  await testWebSocketTransportNormalization();
   await testPersistRuntimeSettingsPatch();
   console.log("[settings-runtime] checks passed");
 }

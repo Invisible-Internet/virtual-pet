@@ -70,6 +70,7 @@ Define the acceptance and regression matrix for the shipped runtime, then tie th
 | `D08-ACC` | `auto + manual` | Acceptance suite produces executed evidence instead of a placeholder checklist. | `npm run check:acceptance` writes a report artifact and D08 maps manual visible rows to concrete evidence links. | [`artifacts/08-acceptance-smoke.md`](./artifacts/08-acceptance-smoke.md) and this file. |
 | `D11a-ACC` | `auto + manual` | Shared shell `Status` tab exposes the observability rows without creating a second popup. | `Inventory...`, `Status...`, and `F10` route to the same shell window, required rows render, and the snapshot builder remains deterministic across healthy/degraded cases. | Shared shell window plus smoke row `D11a-shell-observability`. |
 | `D11b-ACC` | `auto + manual` | Shared shell `Setup` tab previews and explicitly applies canonical Markdown bootstrap without creating a second popup. | `Setup...` and `F11` route to the shared shell window, local-write/apply-mode logic stays deterministic, the OpenClaw target remains observed/read-only, and managed Markdown blocks preview cleanly. | Shared shell window plus smoke row `D11b-setup-bootstrap`. |
+| `D12a-ACC` | `auto + manual` | Dialog parity keeps freeform bridge context continuity and explicit online/offline metadata behavior deterministic. | Generic dialog bridge requests include bounded recent-turn context, follow-up continuity checks stay deterministic, and visible `source`/`fallbackMode` metadata remains coherent in healthy/degraded flows. | Smoke row `D12a-dialog-openclaw-parity` plus `12a` operator demo/failure script evidence. |
 | `D08-FAIL` | `auto + manual` | A smoke or manual row fails during consolidation. | Failure is surfaced with row ID, evidence, and blocker note; D08 remains below `done`. | Acceptance artifact failure row or tracker blocker note. |
 
 ## Required Visible Target Coverage
@@ -101,6 +102,7 @@ Define the acceptance and regression matrix for the shipped runtime, then tie th
 | D07c shell/settings toggles without restart | `D07c-ACC`, D07c operator evidence |
 | D11a shared shell `Status` tab and observability rows | `D11a-ACC`, smoke row `D11a-shell-observability` |
 | D11b shared shell `Setup` tab, target-policy summary, and managed Markdown bootstrap preview/apply | `D11b-ACC`, smoke row `D11b-setup-bootstrap` |
+| D12a freeform dialog continuity context + deterministic parity lane | `D12a-ACC`, smoke row `D12a-dialog-openclaw-parity` |
 
 ## Extension Visible Target Coverage
 | Target | Covered By |
@@ -143,6 +145,7 @@ Define the acceptance and regression matrix for the shipped runtime, then tie th
 | `2026-03-03` | `D07b-FAIL` offline dialog fallback | `passed` | `Codex automated smoke` | Smoke row `D07b-dialog-runtime` -> `[dialog] offline dialog checks passed`. |
 | `2026-03-04` | `D11a-ACC` automated builder/tab-routing coverage | `passed` | `Codex automated smoke` | Smoke row `D11a-shell-observability` -> `[shell-observability] checks passed`. |
 | `2026-03-04` | `D11b-ACC` automated setup preview/apply coverage | `passed` | `Codex automated smoke` | Smoke row `D11b-setup-bootstrap` -> `[setup-bootstrap] checks passed`. |
+| `2026-03-05` | `D12a-ACC` automated dialog parity continuity coverage | `passed` | `Codex automated smoke` | Smoke row `D12a-dialog-openclaw-parity` -> `[dialog-openclaw-parity] checks passed`. |
 | `2026-03-03` | renderer/layout regression backing D07/D07c | `passed` | `Codex automated smoke` | Smoke rows `Layout-assets` and `Sprite-assets`. |
 
 ### Current Manual Retest Status
@@ -221,6 +224,7 @@ Define the acceptance and regression matrix for the shipped runtime, then tie th
 - `2026-03-03`: Added the D08 acceptance runner (`npm run check:acceptance`), new deterministic capability/extension/invariant checks, automated smoke artifacts, a full acceptance matrix, and executed evidence links for both automated and prior operator-visible passes. `Doc Gate` and `Implementation Gate` are now `passed`; deliverable moves to `review`.
 - `2026-03-04`: Extended the automated smoke runner with `D11a-shell-observability` so shared-shell tab routing and observability snapshot rows now contribute to the acceptance artifact (`14/14 automated checks passed`).
 - `2026-03-04`: Added `D11b-setup-bootstrap` so the shared-shell setup snapshot/apply-mode logic, managed Markdown preview output, and block-replacement rules now contribute to the acceptance artifact (`15/15 automated checks passed`).
+- `2026-03-05`: Added `D12a-dialog-openclaw-parity` so bounded recent-turn dialog continuity context and follow-up parity checks now contribute to the acceptance artifact (`18/18 automated checks passed`).
 - `2026-03-03`: Operator D08 step `2` exposed a roam follow-up issue: leaving a custom zone via manual drag/fling could later pull the pet back unexpectedly, walk-speed travel could feel jerky, and roam animation direction could drift from actual motion. Applied a follow-up runtime patch; manual re-test is still required before D08 can close.
 - `2026-03-03`: Operator re-test confirmed the first roam fix improved smoothing and `zone -> desktop` fallback, but exposed one remaining step `2` issue: toggling `desktop -> zone` mid-travel could still snap the pet back to the zone edge on the next loop. Applied a second runtime patch so forced roam-mode transitions rebuild a safe zone-entry leg instead of resuming with stale motion state. Manual re-test is still required before D08 can close.
 - `2026-03-03`: Operator completed the full D08 manual visible sweep successfully after the roam follow-up fixes. D08 is now closed as `done`.

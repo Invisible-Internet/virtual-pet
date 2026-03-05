@@ -124,19 +124,45 @@ Historical v1 deliverables keep their original status wording and are not retrof
 - `accepted` is the only terminal state for future post-v1 deliverables.
 
 ### Current Workflow Snapshot
-- Current Deliverable: `none`
-- Workflow State: `idle`
-- Current Status: `accepted`
+- Current Deliverable: `12a-real-openclaw-dialog-parity`
+- Workflow State: `implementing`
+- Current Status: `implementing`
 - Last Completed Deliverable: `11d-settings-editor-and-service-controls`
-- Next Detailed Target: `12a-real-openclaw-dialog-parity`
-- Next Queued Target: `12a-real-openclaw-dialog-parity`
+- Next Detailed Target: `12a-real-openclaw-dialog-parity` (active)
+- Next Queued Target: `12c-guarded-openclaw-pet-command-lane`
 - Current Gate State:
-  - `Spec Gate`: `n/a`
-  - `Build Gate`: `n/a`
-  - `Acceptance Gate`: `n/a`
+  - `Spec Gate`: `passed` (`2026-03-05`)
+  - `Build Gate`: `passed` (`2026-03-05`)
+  - `Acceptance Gate`: `not_started`
 - Historical Note:
   - D01-D10 are complete historical v1 records.
   - Detailed v1 session history lives in `docs/plan/archive/00-progress-tracker-v1-history.md`.
+- Active `12a` implementation outcome:
+  - Dialog bubble now reveals pet reply text one word at a time.
+  - While revealing words, the app plays a short beep per word:
+    - primary file: `assets/audio/dialog-word-beep.wav`
+    - fallback: synthesized short beep if the file is missing/unavailable
+  - While waiting for a reply, the bubble now shows animated `...` thinking feedback.
+  - Generic bridge dialog requests now include bounded recent-turn continuity context:
+    - `recentDialogSummary`
+    - `recentDialogTurns`
+  - OpenClaw bridge transport now supports real gateway WebSocket parity (`openclaw.transport=ws`).
+  - Direct Node WebSocket gateway calls are attempted first; when blocked by gateway origin/device-identity policy, bridge now relays through `openclaw gateway call` (WSL CLI) so dialog remains `source=online` instead of deterministic offline fallback.
+  - If host runtime lacks native `WebSocket` support (`wsRuntimeUnavailable`), bridge now surfaces startup reason `wsCliRelayConfigured` and uses the same CLI relay path, preventing forced offline generic fallback in Electron main.
+  - Local runtime config for this workspace now defaults to:
+    - `openclaw.transport=ws`
+    - `openclaw.baseUrl=ws://127.0.0.1:18789`
+    - `openclaw.timeoutMs=30000`
+  - Acceptance smoke now includes `D12a-dialog-openclaw-parity`.
+  - `Build Gate` passed on `2026-03-05` with checks green:
+    - `npm run check:syntax`
+    - `npm run check:contracts`
+    - `npm run check:acceptance` -> `18/18`
+- Next `12c` spec outcome:
+  - Draft deliverable file `docs/plan/12c-guarded-openclaw-pet-command-lane.md` now exists.
+  - Auth model defines signed command envelope (`vp-hmac-v1`) with nonce replay protection and expiry checks.
+  - First-slice allowlist is bounded to safe visible actions (`dialog.injectAnnouncement`, `shell.openStatus`).
+  - Slice remains queued until promoted to active work after `12a` acceptance.
 - Last completed `11d` outcome:
   - Shared-shell `Advanced Settings` now lives on a dedicated `Settings` tab (separate from `Setup`).
   - Tray now includes `Advanced Settings...` routing into the shared shell `Settings` tab.
@@ -210,7 +236,9 @@ Historical v1 deliverables keep their original status wording and are not retrof
   - `11` now has accepted baselines through `11a` and `11b`.
   - `11c-repair-actions-and-provenance-visibility` is accepted and closed.
   - `11d-settings-editor-and-service-controls` is accepted and closed.
-  - `12a-real-openclaw-dialog-parity` is staged as the next slice and should move to `specifying` next unless reprioritized.
+  - `12a-real-openclaw-dialog-parity` is now active in `implementing` with `Spec Gate=passed` and `Build Gate=passed`.
+  - `12c-guarded-openclaw-pet-command-lane` is queued as the next follow-on `12` slice (reprioritized).
+  - `12b-chat-shell-and-conversation-presence` remains queued after `12c`.
   - `12` through `15` remain rough placeholders and must not be treated as spec-passed deliverables yet.
 
 ### Session-End Sync Rule

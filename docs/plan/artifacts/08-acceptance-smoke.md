@@ -1,8 +1,8 @@
 # D08 Acceptance Smoke Report
 
-- Generated: 2026-03-05T01:11:56.311Z
+- Generated: 2026-03-05T02:47:56.158Z
 - Runner: Codex automated smoke
-- Summary: 17/17 automated checks passed
+- Summary: 18/18 automated checks passed
 
 | ID | Deliverable | Status | Command | Evidence |
 | --- | --- | --- | --- | --- |
@@ -21,6 +21,7 @@
 | D11b-setup-bootstrap | 11b-guided-pet-setup-and-markdown-bootstrap | passed | `node scripts/check-setup-bootstrap.js` | `[setup-bootstrap] checks passed` |
 | D11c-repair-actions | 11c-repair-actions-and-provenance-visibility | passed | `node scripts/check-shell-repair-actions.js` | `[shell-repair-actions] checks passed` |
 | D11d-settings-editor | 11d-settings-editor-and-service-controls | passed | `node scripts/check-shell-settings-editor.js` | `[shell-settings-editor] checks passed` |
+| D12a-dialog-openclaw-parity | 12a-real-openclaw-dialog-parity | passed | `node scripts/check-dialog-openclaw-parity.js` | `[dialog-openclaw-parity] checks passed` |
 | Layout-assets | core-renderer-assets | passed | `node scripts/check-layout.js` | `layout checks passed` |
 | Sprite-assets | core-renderer-assets | passed | `node scripts/check-assets.js` | `[assets] girl: manifest OK (7 states)
 [assets] checks passed` |

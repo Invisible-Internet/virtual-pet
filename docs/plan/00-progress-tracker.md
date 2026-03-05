@@ -33,16 +33,16 @@ Historical v1 deliverables keep their original wording and remain archived histo
   - operator-visible demo passes and evidence is logged
 
 ## Current Deliverable
-- Current Deliverable: `none`
-- Workflow State: `idle`
-- Current Status: `accepted`
+- Current Deliverable: `12a-real-openclaw-dialog-parity`
+- Workflow State: `implementing`
+- Current Status: `implementing`
 - Last Completed Deliverable: `11d-settings-editor-and-service-controls`
-- Next Detailed Target: `12a-real-openclaw-dialog-parity`
-- Next Queued Target: `12a-real-openclaw-dialog-parity`
+- Next Detailed Target: `12a-real-openclaw-dialog-parity` (active)
+- Next Queued Target: `12c-guarded-openclaw-pet-command-lane`
 - Current Gate State:
-  - `Spec Gate`: `n/a`
-  - `Build Gate`: `n/a`
-  - `Acceptance Gate`: `n/a`
+  - `Spec Gate`: `passed` (`2026-03-05`)
+  - `Build Gate`: `passed` (`2026-03-05`)
+  - `Acceptance Gate`: `not_started`
 
 ## Post-v1 Family Rough-In
 Locked family order:
@@ -57,7 +57,9 @@ Planning state:
 - `11b` is now accepted and closed.
 - `11c` is now accepted and closed.
 - `11d-settings-editor-and-service-controls` is now accepted and closed.
-- `12a-real-openclaw-dialog-parity` is staged as the next target and should move to `specifying` next unless reprioritized.
+- `12a-real-openclaw-dialog-parity` is now active in `implementing` (`Spec Gate=passed`, `Build Gate=passed`).
+- `12c-guarded-openclaw-pet-command-lane` now has a drafted auth/authorization spec and is queued as the next follow-on `12` slice (reprioritized by operator).
+- `12b-chat-shell-and-conversation-presence` remains queued after `12c`.
 - `12` through `15` remain rough placeholders and are not implementation-ready yet.
 - Full family notes live in [`11-15-post-v1-roadmap-rough-in.md`](./11-15-post-v1-roadmap-rough-in.md).
 
@@ -70,14 +72,70 @@ Planning state:
 6. Pass `Spec Gate` before implementation begins.
 
 ## Next 3 Actions
-1. Start `12a-real-openclaw-dialog-parity` in `specifying` using the deliverable template.
-2. Lock `12a` showcase promise plus operator demo and failure/recovery scripts before implementation.
-3. Pass `12a` `Spec Gate` before any runtime code changes.
+1. Run the `12a` operator demo/failure script on the real OpenClaw `ws` path (including gateway-policy relay behavior) and collect acceptance evidence.
+2. Advance `12c-guarded-openclaw-pet-command-lane` from drafted spec to `Spec Gate=passed`.
+3. Start first `12c` implementation slice after `12a` acceptance closes.
 
 ## Blockers
-- None currently; `11d` is accepted and the workflow is ready to begin `12a` specification.
+- None currently; first `12a` runtime slice is implemented and ready for operator demo/iteration.
 
 ## Last Session Summary
+- Implemented the `12a` real OpenClaw WebSocket transport fix for repeated offline fallback replies:
+  - added `openclaw.transport=ws` runtime support in `openclaw-bridge`, `settings-runtime`, `main`, and shell observability.
+  - added direct gateway WebSocket request handling for dialog/status bridge routes.
+  - added gateway-policy fallback relay for `ws` transport:
+    - when direct Node WebSocket is blocked by gateway origin/device-identity policy, bridge now relays via `openclaw gateway call` (WSL CLI) instead of forcing local offline fallback.
+  - switched local runtime config to gateway WS defaults:
+    - `openclaw.transport=ws`
+    - `openclaw.baseUrl=ws://127.0.0.1:18789`
+    - `openclaw.timeoutMs=30000`
+  - added deterministic coverage updates:
+    - `scripts/check-openclaw-bridge.js` now includes WS dialog checks
+    - `scripts/check-settings-runtime.js` now includes WS transport normalization checks
+  - verification run:
+    - `npm run check:syntax`
+    - `npm run check:contracts`
+    - `npm run check:acceptance` -> `18/18 automated checks passed`
+  - live bridge probe verification:
+    - `transport=ws` path now returns `source=online` response text (probe reply: `PONG`) instead of deterministic offline fallback.
+  - follow-up fix for Electron-host runtime parity:
+    - logs showed `openclawBridge ... wsRuntimeUnavailable` in app startup
+    - bridge now treats missing native `WebSocket` runtime as relay-capable when WSL CLI is available (`wsCliRelayConfigured`)
+    - verified by simulating `globalThis.WebSocket=undefined` and receiving online reply via relay (`GREEN`) instead of offline fallback.
+- Drafted `12c-guarded-openclaw-pet-command-lane` spec:
+  - created [`12c-guarded-openclaw-pet-command-lane.md`](./12c-guarded-openclaw-pet-command-lane.md)
+  - defined signed request envelope (`vp-hmac-v1`) with nonce replay protection and expiry checks
+  - defined first-slice allowlist (`dialog.injectAnnouncement`, `shell.openStatus`)
+  - defined explicit reject reasons and operator demo/failure scripts
+  - reprioritized next queued `12` slice from `12b` to `12c` per operator request
+- Implemented the first `12a-real-openclaw-dialog-parity` runtime slice:
+  - added word-by-word reveal for pet bubble replies (`online` and `offline` paths)
+  - added per-word beep playback lane:
+    - primary file: `assets/audio/dialog-word-beep.wav`
+    - fallback synthesized beep when file playback is unavailable
+  - added animated `...` thinking indicator in the bubble while waiting for response completion
+  - added `assets/audio/README.md` to document the drop-in beep asset path
+  - verification run:
+    - `npm run check:syntax`
+    - `npm run check:contracts`
+    - `npm run check:acceptance` -> `17/17 automated checks passed`
+- Extended `12a` with bounded conversation continuity context and explicit parity coverage:
+  - generic `dialog_user_message` bridge requests now include:
+    - `recentDialogSummary`
+    - `recentDialogTurns` (bounded turns with normalized role/text/source)
+  - added deterministic parity check:
+    - `scripts/check-dialog-openclaw-parity.js`
+  - acceptance smoke now includes:
+    - `D12a-dialog-openclaw-parity`
+  - verification re-run:
+    - `npm run check:syntax`
+    - `npm run check:contracts`
+    - `npm run check:acceptance` -> `18/18 automated checks passed`
+- Started `12a-real-openclaw-dialog-parity` as the active deliverable:
+  - created [`12a-real-openclaw-dialog-parity.md`](./12a-real-openclaw-dialog-parity.md) from the post-v1 template
+  - locked showcase promise, operator demo script, failure/recovery script, touchpoints, and acceptance bar
+  - passed `Spec Gate` on `2026-03-05`
+  - intentionally made no runtime code changes in this session
 - Closed `11d-settings-editor-and-service-controls` as accepted:
   - operator confirmed `11d` outcome as good and requested closeout
   - `Acceptance Gate` marked `passed` on `2026-03-05`
@@ -213,4 +271,4 @@ Planning state:
   - D10 closed the v1 roadmap as a doc-only research deliverable
   - detailed v1 session history is preserved in [`archive/00-progress-tracker-v1-history.md`](./archive/00-progress-tracker-v1-history.md)
 - Shipped outcome note for this session:
-  - visible app/runtime change delivered and accepted; `11d` is now closed with settings editor/tray routing, normalized scaling behavior, and corrected diagnostics hitbox overlay alignment
+  - visible app/runtime change delivered: freeform dialog no longer hard-falls back offline when HTTP `/bridge/dialog` is unavailable; `ws` OpenClaw bridge path is now active with gateway-policy relay fallback.

@@ -24,6 +24,7 @@ const {
 const OPENCLAW_TRANSPORTS = Object.freeze({
   stub: "stub",
   http: "http",
+  ws: "ws",
 });
 const ROAMING_MODES = Object.freeze({
   desktop: "desktop",
@@ -361,10 +362,16 @@ function normalizeSettings(rawSettings, { projectRoot, env, warnings, errors }) 
 
   const openclawRaw = raw.openclaw && typeof raw.openclaw === "object" ? raw.openclaw : {};
   normalized.openclaw.enabled = toBoolean(openclawRaw.enabled, normalized.openclaw.enabled);
+  const normalizedOpenClawTransport = toOptionalString(
+    openclawRaw.transport,
+    normalized.openclaw.transport
+  );
   normalized.openclaw.transport =
-    toOptionalString(openclawRaw.transport, normalized.openclaw.transport) === OPENCLAW_TRANSPORTS.http
+    normalizedOpenClawTransport === OPENCLAW_TRANSPORTS.http
       ? OPENCLAW_TRANSPORTS.http
-      : OPENCLAW_TRANSPORTS.stub;
+      : normalizedOpenClawTransport === OPENCLAW_TRANSPORTS.ws
+        ? OPENCLAW_TRANSPORTS.ws
+        : OPENCLAW_TRANSPORTS.stub;
   normalized.openclaw.agentId = toOptionalString(openclawRaw.agentId, normalized.openclaw.agentId);
   normalized.openclaw.agentTimeoutMs = toPositiveInteger(
     openclawRaw.agentTimeoutMs,
@@ -403,7 +410,10 @@ function normalizeSettings(rawSettings, { projectRoot, env, warnings, errors }) 
   normalized.openclaw.loopbackEndpoint = loopback;
   normalized.openclaw.nonLoopbackAuthSatisfied =
     loopback || Boolean(normalized.openclaw.authToken);
-  if (normalized.openclaw.transport === OPENCLAW_TRANSPORTS.http) {
+  if (
+    normalized.openclaw.transport === OPENCLAW_TRANSPORTS.http ||
+    normalized.openclaw.transport === OPENCLAW_TRANSPORTS.ws
+  ) {
     try {
       void new URL(normalized.openclaw.baseUrl);
     } catch {

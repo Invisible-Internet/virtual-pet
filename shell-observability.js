@@ -264,7 +264,10 @@ function buildBridgeRow({ settingsSummary, openclawCapabilityState }) {
   const openclaw = settingsSummary?.openclaw || {};
   const enabled = Boolean(openclaw.enabled);
   const transport = toOptionalString(openclaw.transport, BRIDGE_TRANSPORTS.stub) || BRIDGE_TRANSPORTS.stub;
-  const endpoint = transport === BRIDGE_TRANSPORTS.http ? toOptionalString(openclaw.baseUrl, null) : null;
+  const endpoint =
+    transport === BRIDGE_TRANSPORTS.http || transport === BRIDGE_TRANSPORTS.ws
+      ? toOptionalString(openclaw.baseUrl, null)
+      : null;
   const endpointClass =
     transport === BRIDGE_TRANSPORTS.stub
       ? "stub"

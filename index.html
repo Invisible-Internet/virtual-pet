@@ -137,6 +137,20 @@
         line-height: 1.32;
       }
 
+      .dialog-bubble__thinking {
+        min-height: 12px;
+        margin-top: 4px;
+        color: rgba(66, 77, 92, 0.78);
+        font: 11px/1 Consolas, monospace;
+        letter-spacing: 0.14em;
+        opacity: 0;
+        transition: opacity 120ms ease;
+      }
+
+      .dialog-bubble__thinking.is-visible {
+        opacity: 1;
+      }
+
       .dialog-panel {
         position: absolute;
         left: 10px;
@@ -307,6 +321,7 @@
         <div id="dialog-bubble" class="dialog-bubble" aria-live="polite">
           <div id="dialog-bubble-meta" class="dialog-bubble__meta"></div>
           <div id="dialog-bubble-text" class="dialog-bubble__text"></div>
+          <div id="dialog-bubble-thinking" class="dialog-bubble__thinking" aria-hidden="true"></div>
         </div>
         <div id="dialog-hint" class="dialog-hint">Press Enter or / to talk</div>
         <section id="dialog-panel" class="dialog-panel" aria-label="Dialog surface">

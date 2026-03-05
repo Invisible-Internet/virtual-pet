@@ -9,6 +9,7 @@ const dialogHint = document.getElementById("dialog-hint");
 const dialogBubble = document.getElementById("dialog-bubble");
 const dialogBubbleMeta = document.getElementById("dialog-bubble-meta");
 const dialogBubbleText = document.getElementById("dialog-bubble-text");
+const dialogBubbleThinking = document.getElementById("dialog-bubble-thinking");
 const dialogCloseButton = document.getElementById("dialog-close");
 const visibleBoundsMath = window.PetVisibleBoundsMath || null;
 const spriteRuntimeApi = window.PetSpriteRuntime || null;
@@ -157,6 +158,13 @@ const DIALOG_HISTORY_LIMIT = 24;
 const DIALOG_HISTORY_VISIBLE_COUNT = 8;
 const DIALOG_BUBBLE_VISIBLE_MS = 9000;
 const DIALOG_TALK_FEEDBACK_MS = 2600;
+const DIALOG_WORD_REVEAL_INTERVAL_MS = 115;
+const DIALOG_THINKING_DOT_INTERVAL_MS = 260;
+const DIALOG_WORD_BEEP_AUDIO_PATH = "assets/audio/dialog-word-beep.wav";
+const DIALOG_WORD_BEEP_VOLUME = 0.34;
+const DIALOG_WORD_BEEP_MIN_GAP_MS = 46;
+const DIALOG_WORD_BEEP_OSC_FREQ_HZ = 820;
+const DIALOG_WORD_BEEP_OSC_DURATION_SEC = 0.08;
 const SHELL_ACTIONS = Object.freeze({
   openInventory: "open-inventory",
   openStatus: "open-status",
@@ -341,6 +349,16 @@ let dialogSurfaceOpen = false;
 let dialogSubmitPending = false;
 let activeBubbleMessage = null;
 let talkFeedbackUntilMs = 0;
+let dialogBubbleTextMessageId = "";
+let dialogBubbleTextVisible = "";
+let dialogTypingMessageId = "";
+let dialogTypingChunks = [];
+let dialogTypingChunkIndex = 0;
+let dialogTypingTimer = null;
+let dialogBeepAudio = null;
+let dialogBeepAudioFailed = false;
+let dialogBeepAudioContext = null;
+let dialogBeepLastPlayedAtMs = 0;
 let spriteJumpQueued = false;
 let spriteDragRotation = 0;
 let spriteDragRotationVel = 0;
@@ -488,6 +506,171 @@ function shouldAlwaysShowBubble() {
   return latestShellState?.dialog?.alwaysShowBubble !== false;
 }
 
+function splitDialogIntoWordChunks(text) {
+  if (typeof text !== "string" || text.length <= 0) return [];
+  const chunks = text.match(/\S+\s*/g);
+  return Array.isArray(chunks) ? chunks : [];
+}
+
+function estimateDialogTalkDurationMs(text) {
+  const wordCount = Math.max(1, splitDialogIntoWordChunks(text).length);
+  const revealDurationMs = wordCount * DIALOG_WORD_REVEAL_INTERVAL_MS + 420;
+  return Math.max(DIALOG_TALK_FEEDBACK_MS, revealDurationMs);
+}
+
+function clearDialogTypingTimer() {
+  if (!dialogTypingTimer) return;
+  clearTimeout(dialogTypingTimer);
+  dialogTypingTimer = null;
+}
+
+function stopDialogTyping({ commitFullText = false } = {}) {
+  clearDialogTypingTimer();
+  if (commitFullText && activeBubbleMessage?.messageId) {
+    dialogBubbleTextMessageId = activeBubbleMessage.messageId;
+    dialogBubbleTextVisible = activeBubbleMessage.text || "";
+  }
+  dialogTypingMessageId = "";
+  dialogTypingChunks = [];
+  dialogTypingChunkIndex = 0;
+}
+
+function resolveDialogBubbleText() {
+  if (!activeBubbleMessage || !activeBubbleMessage.messageId) return "";
+  if (activeBubbleMessage.messageId === dialogBubbleTextMessageId) {
+    return dialogBubbleTextVisible;
+  }
+  return activeBubbleMessage.text || "";
+}
+
+function getThinkingDots(nowMs = Date.now()) {
+  const frame = Math.floor(nowMs / DIALOG_THINKING_DOT_INTERVAL_MS) % 3;
+  return ".".repeat(frame + 1);
+}
+
+function ensureDialogBeepAudio() {
+  if (dialogBeepAudio || dialogBeepAudioFailed) return dialogBeepAudio;
+  try {
+    const audio = new Audio(DIALOG_WORD_BEEP_AUDIO_PATH);
+    audio.preload = "auto";
+    audio.volume = DIALOG_WORD_BEEP_VOLUME;
+    audio.addEventListener(
+      "error",
+      () => {
+        dialogBeepAudioFailed = true;
+      },
+      { once: true }
+    );
+    dialogBeepAudio = audio;
+    return dialogBeepAudio;
+  } catch {
+    dialogBeepAudioFailed = true;
+    return null;
+  }
+}
+
+function playDialogWordBeepFallback() {
+  const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+  if (typeof AudioContextCtor !== "function") return;
+  try {
+    if (!dialogBeepAudioContext) {
+      dialogBeepAudioContext = new AudioContextCtor();
+    }
+    if (dialogBeepAudioContext.state === "suspended") {
+      void dialogBeepAudioContext.resume();
+    }
+    const now = dialogBeepAudioContext.currentTime;
+    const gain = dialogBeepAudioContext.createGain();
+    const osc = dialogBeepAudioContext.createOscillator();
+    osc.type = "square";
+    osc.frequency.setValueAtTime(DIALOG_WORD_BEEP_OSC_FREQ_HZ, now);
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(0.06, now + 0.006);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + DIALOG_WORD_BEEP_OSC_DURATION_SEC);
+    osc.connect(gain);
+    gain.connect(dialogBeepAudioContext.destination);
+    osc.start(now);
+    osc.stop(now + DIALOG_WORD_BEEP_OSC_DURATION_SEC);
+  } catch {}
+}
+
+function playDialogWordBeep() {
+  const nowMs = Date.now();
+  if (nowMs - dialogBeepLastPlayedAtMs < DIALOG_WORD_BEEP_MIN_GAP_MS) return;
+  dialogBeepLastPlayedAtMs = nowMs;
+
+  const audio = ensureDialogBeepAudio();
+  if (!audio || dialogBeepAudioFailed) {
+    playDialogWordBeepFallback();
+    return;
+  }
+
+  try {
+    audio.pause();
+    audio.currentTime = 0;
+    const playResult = audio.play();
+    if (playResult && typeof playResult.catch === "function") {
+      playResult.catch(() => {
+        playDialogWordBeepFallback();
+      });
+    }
+  } catch {
+    playDialogWordBeepFallback();
+  }
+}
+
+function scheduleDialogTypingStep(delayMs = DIALOG_WORD_REVEAL_INTERVAL_MS) {
+  clearDialogTypingTimer();
+  dialogTypingTimer = setTimeout(() => {
+    runDialogTypingStep();
+  }, Math.max(16, Math.round(delayMs)));
+}
+
+function runDialogTypingStep() {
+  if (!activeBubbleMessage || activeBubbleMessage.messageId !== dialogTypingMessageId) {
+    stopDialogTyping();
+    return;
+  }
+  if (dialogTypingChunkIndex >= dialogTypingChunks.length) {
+    stopDialogTyping({ commitFullText: true });
+    renderDialogBubble();
+    return;
+  }
+
+  dialogBubbleTextMessageId = dialogTypingMessageId;
+  dialogBubbleTextVisible += dialogTypingChunks[dialogTypingChunkIndex];
+  dialogTypingChunkIndex += 1;
+  playDialogWordBeep();
+  renderDialogBubble();
+
+  if (dialogTypingChunkIndex >= dialogTypingChunks.length) {
+    stopDialogTyping({ commitFullText: true });
+    renderDialogBubble();
+    return;
+  }
+  scheduleDialogTypingStep();
+}
+
+function startDialogTypingForEntry(entry) {
+  stopDialogTyping();
+  if (!entry?.messageId) return;
+
+  const chunks = splitDialogIntoWordChunks(entry.text);
+  dialogBubbleTextMessageId = entry.messageId;
+  dialogBubbleTextVisible = "";
+
+  if (chunks.length <= 1) {
+    dialogBubbleTextVisible = entry.text || "";
+    renderDialogBubble();
+    return;
+  }
+
+  dialogTypingMessageId = entry.messageId;
+  dialogTypingChunks = chunks;
+  dialogTypingChunkIndex = 0;
+  runDialogTypingStep();
+}
+
 function normalizeDialogEntry(payload = {}) {
   const text =
     typeof payload?.text === "string" && payload.text.trim().length > 0
@@ -601,40 +784,50 @@ function renderDialogBubble(nowMs = Date.now()) {
   const bubbleIsFresh =
     activeBubbleMessage &&
     nowMs - activeBubbleMessage.ts < DIALOG_BUBBLE_VISIBLE_MS;
+  const bubbleText = resolveDialogBubbleText();
+  const thinkingActive = dialogSubmitPending;
   const active =
-    (shouldAlwaysShowBubble() || dialogSurfaceOpen || bubbleIsFresh) &&
-    activeBubbleMessage &&
-    typeof activeBubbleMessage.text === "string" &&
-    activeBubbleMessage.text.length > 0;
+    (shouldAlwaysShowBubble() || dialogSurfaceOpen || bubbleIsFresh || thinkingActive) &&
+    (bubbleText.length > 0 || thinkingActive);
 
   dialogBubble.classList.toggle("is-visible", Boolean(active));
   dialogBubble.classList.toggle("is-speaking", Boolean(active && nowMs < talkFeedbackUntilMs));
+  if (dialogBubbleThinking) {
+    dialogBubbleThinking.classList.toggle("is-visible", Boolean(thinkingActive));
+    dialogBubbleThinking.textContent = thinkingActive ? getThinkingDots(nowMs) : "";
+  }
   if (!active) return;
 
   dialogBubbleMeta.textContent = "";
   const kindTag = document.createElement("span");
   kindTag.className = "dialog-bubble__tag";
-  kindTag.textContent = activeBubbleMessage.kind === "announcement" ? "announcement" : "reply";
+  kindTag.textContent = activeBubbleMessage
+    ? activeBubbleMessage.kind === "announcement"
+      ? "announcement"
+      : "reply"
+    : "thinking";
   dialogBubbleMeta.appendChild(kindTag);
 
   const sourceTag = document.createElement("span");
   sourceTag.className = "dialog-bubble__tag";
-  sourceTag.textContent = activeBubbleMessage.source || "offline";
+  sourceTag.textContent = activeBubbleMessage?.source || "local";
   dialogBubbleMeta.appendChild(sourceTag);
 
   const stateTag = document.createElement("span");
   stateTag.className = "dialog-bubble__tag";
-  stateTag.textContent = getDialogStateLabel(activeBubbleMessage);
+  stateTag.textContent = activeBubbleMessage
+    ? getDialogStateLabel(activeBubbleMessage)
+    : latestStateSnapshot?.currentState || "Idle";
   dialogBubbleMeta.appendChild(stateTag);
 
-  if (activeBubbleMessage.fallbackMode && activeBubbleMessage.fallbackMode !== "none") {
+  if (activeBubbleMessage?.fallbackMode && activeBubbleMessage.fallbackMode !== "none") {
     const fallbackTag = document.createElement("span");
     fallbackTag.className = "dialog-bubble__tag dialog-bubble__tag--warning";
     fallbackTag.textContent = activeBubbleMessage.fallbackMode;
     dialogBubbleMeta.appendChild(fallbackTag);
   }
 
-  dialogBubbleText.textContent = activeBubbleMessage.text;
+  dialogBubbleText.textContent = bubbleText.length > 0 ? bubbleText : " ";
 }
 
 function syncDialogSurfaceState() {
@@ -654,6 +847,7 @@ function setDialogPending(pending) {
   if (dialogSubmitButton) {
     dialogSubmitButton.disabled = dialogSubmitPending;
   }
+  renderDialogBubble();
 }
 
 function openDialogSurface(options = {}) {
@@ -697,8 +891,8 @@ function handleDialogMessage(payload) {
   if (entry.role === "pet") {
     activeBubbleMessage = entry;
     talkFeedbackUntilMs =
-      entry.talkFeedbackMode !== "none" ? Date.now() + DIALOG_TALK_FEEDBACK_MS : 0;
-    renderDialogBubble();
+      entry.talkFeedbackMode !== "none" ? Date.now() + estimateDialogTalkDurationMs(entry.text) : 0;
+    startDialogTypingForEntry(entry);
   }
 }
 
@@ -716,9 +910,20 @@ async function loadDialogHistorySnapshot() {
       dialogHistory.length > 0
         ? [...dialogHistory].reverse().find((entry) => entry.role === "pet") || null
         : null;
+    stopDialogTyping();
+    if (activeBubbleMessage?.messageId) {
+      dialogBubbleTextMessageId = activeBubbleMessage.messageId;
+      dialogBubbleTextVisible = activeBubbleMessage.text || "";
+    } else {
+      dialogBubbleTextMessageId = "";
+      dialogBubbleTextVisible = "";
+    }
   } catch {
     dialogHistory = [];
     activeBubbleMessage = null;
+    stopDialogTyping();
+    dialogBubbleTextMessageId = "";
+    dialogBubbleTextVisible = "";
   }
 
   renderDialogHistory();

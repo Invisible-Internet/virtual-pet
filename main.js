@@ -207,6 +207,9 @@ const FLING_CONFIG = FLING_PRESETS[ACTIVE_FLING_PRESET];
 const CAPABILITY_CONTRACT_VERSION = "1.0";
 const DIALOG_HISTORY_LIMIT = 24;
 const DIALOG_TALK_FEEDBACK_MODE = "bubble_pulse";
+const BRIDGE_RECENT_DIALOG_TURNS_LIMIT = 6;
+const BRIDGE_RECENT_DIALOG_TEXT_LIMIT = 140;
+const BRIDGE_RECENT_DIALOG_SUMMARY_LIMIT = 360;
 const STATE_CATALOG_PATH = DEFAULT_STATE_CATALOG_PATH;
 const CAPABILITY_IDS = Object.freeze({
   renderer: "renderer",
@@ -3748,6 +3751,8 @@ function initializeOpenClawBridgeRuntime() {
   const configuredTransport =
     settings.transport === BRIDGE_TRANSPORTS.http
       ? BRIDGE_TRANSPORTS.http
+      : settings.transport === BRIDGE_TRANSPORTS.ws
+        ? BRIDGE_TRANSPORTS.ws
       : BRIDGE_TRANSPORTS.stub;
   const openclawEnabled = Boolean(settings.enabled);
   const bridgeMode =
@@ -4204,12 +4209,60 @@ function buildExtensionContextSummary() {
   );
 }
 
+function normalizeDialogRoleForBridge(value) {
+  if (value === "user") return "user";
+  if (value === "pet") return "pet";
+  return null;
+}
+
+function truncateBridgeDialogText(text, maxLength = BRIDGE_RECENT_DIALOG_TEXT_LIMIT) {
+  if (typeof text !== "string") return "";
+  const normalized = text.trim().replace(/\s+/g, " ");
+  if (!normalized) return "";
+  if (normalized.length <= maxLength) return normalized;
+  return `${normalized.slice(0, Math.max(1, maxLength - 3))}...`;
+}
+
+function buildRecentDialogTurnsForBridge() {
+  const turns = [];
+  for (let index = dialogHistory.length - 1; index >= 0; index -= 1) {
+    if (turns.length >= BRIDGE_RECENT_DIALOG_TURNS_LIMIT) break;
+    const entry = dialogHistory[index];
+    const role = normalizeDialogRoleForBridge(entry?.role);
+    if (!role) continue;
+    const text = truncateBridgeDialogText(entry?.text, BRIDGE_RECENT_DIALOG_TEXT_LIMIT);
+    if (!text) continue;
+    const source =
+      typeof entry?.source === "string" && entry.source.trim().length > 0
+        ? entry.source.trim().slice(0, 24)
+        : role === "user"
+          ? "local_ui"
+          : "offline";
+    turns.push({
+      role,
+      text,
+      source,
+    });
+  }
+  return turns.reverse();
+}
+
+function buildRecentDialogSummaryForBridge(turns) {
+  if (!Array.isArray(turns) || turns.length <= 0) return "";
+  const summary = turns.map((turn) => `${turn.role}: ${turn.text}`).join(" | ");
+  if (summary.length <= BRIDGE_RECENT_DIALOG_SUMMARY_LIMIT) return summary;
+  return `${summary.slice(0, Math.max(1, BRIDGE_RECENT_DIALOG_SUMMARY_LIMIT - 3))}...`;
+}
+
 function buildBridgeRequestContext() {
+  const recentDialogTurns = buildRecentDialogTurnsForBridge();
   return {
     currentState: deriveBridgeCurrentState(),
     stateContextSummary: latestStateSnapshot?.contextSummary || buildStatusText(),
     activePropsSummary: buildActivePropsSummary(),
     extensionContextSummary: buildExtensionContextSummary(),
+    recentDialogSummary: buildRecentDialogSummaryForBridge(recentDialogTurns),
+    recentDialogTurns,
     source: deriveContractSource(),
   };
 }
