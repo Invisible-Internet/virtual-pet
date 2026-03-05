@@ -601,6 +601,38 @@
         font: inherit;
       }
 
+      .setup-slider {
+        width: 100%;
+        accent-color: var(--accent);
+      }
+
+      .setup-slider-wrap {
+        display: grid;
+        gap: 6px;
+      }
+
+      .setup-slider-ticks {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        color: var(--muted);
+        font-size: 10px;
+        letter-spacing: 0.06em;
+      }
+
+      .setup-slider-ticks span:nth-child(1) {
+        text-align: left;
+      }
+
+      .setup-slider-ticks span:nth-child(2),
+      .setup-slider-ticks span:nth-child(3),
+      .setup-slider-ticks span:nth-child(4) {
+        text-align: center;
+      }
+
+      .setup-slider-ticks span:nth-child(5) {
+        text-align: right;
+      }
+
       .setup-input,
       .setup-select {
         min-height: 42px;
@@ -815,6 +847,9 @@
         </button>
         <button id="tab-setup" class="tab-button" type="button" aria-pressed="false">
           Setup
+        </button>
+        <button id="tab-settings" class="tab-button" type="button" aria-pressed="false">
+          Settings
         </button>
       </nav>
 
@@ -1100,6 +1135,21 @@
                   <pre id="setup-preview-markdown" class="preview-code"></pre>
                 </div>
                 <div id="setup-result" class="result-banner">No preview yet. Press Preview to start.</div>
+              </div>
+            </section>
+          </section>
+        </section>
+
+        <section id="tab-panel-settings" class="tab-panel" aria-live="polite">
+          <section class="setup-grid">
+            <section class="section">
+              <div class="section-header">
+                <h2>Advanced Settings</h2>
+                <p>Edit bounded runtime controls and save explicit overrides.</p>
+              </div>
+              <div id="shell-settings-editor" class="setup-card">
+                <h3>Loading Advanced Settings</h3>
+                <span class="setup-card-copy">Open Settings to load editable values.</span>
               </div>
             </section>
           </section>

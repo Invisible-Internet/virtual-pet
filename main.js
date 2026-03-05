@@ -50,8 +50,11 @@ const {
 } = require("./memory-pipeline");
 const { DEFAULT_STATE_CATALOG_PATH, createStateRuntime } = require("./state-runtime");
 const {
+  DEFAULT_CHARACTER_SCALE_PERCENT,
   DEFAULT_ROAMING_ZONE,
   loadRuntimeSettings,
+  MAX_CHARACTER_SCALE_PERCENT,
+  MIN_CHARACTER_SCALE_PERCENT,
   persistRuntimeSettingsPatch,
   ROAMING_MODES,
 } = require("./settings-runtime");
@@ -76,6 +79,10 @@ const {
   previewSetupBootstrap,
   applySetupBootstrap,
 } = require("./setup-bootstrap");
+const {
+  buildShellSettingsSnapshot,
+  validateShellSettingsPatch,
+} = require("./shell-settings-editor");
 
 // Master diagnostics toggle: controls console logs, file logs, and renderer overlay.
 let DIAGNOSTICS_ENABLED = false;
@@ -221,6 +228,7 @@ const SHELL_ACTIONS = Object.freeze({
   openInventory: "open-inventory",
   openStatus: "open-status",
   openSetup: "open-setup",
+  openSettings: "open-settings",
   roamDesktop: "roam-desktop",
   roamZone: "roam-zone",
   selectRoamZone: "select-roam-zone",
@@ -325,7 +333,69 @@ const WINDOW_SIZE = PET_LAYOUT.windowSize;
 // These bounds describe the visible pet shape inside the transparent window.
 const PET_VISUAL_BOUNDS = PET_LAYOUT.visualBounds;
 let activePetVisualBounds = { ...PET_VISUAL_BOUNDS };
+let runtimePetLayout = PET_LAYOUT;
+let runtimeWindowSize = WINDOW_SIZE;
+let runtimeVisualBounds = PET_VISUAL_BOUNDS;
+let runtimeHitboxScale = 1;
 const animationManifestCache = new Map();
+
+function clampNumber(value, min, max) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return min;
+  return Math.min(max, Math.max(min, numeric));
+}
+
+function getPetWindowSize() {
+  return runtimeWindowSize || WINDOW_SIZE;
+}
+
+function getPetLayout() {
+  return runtimePetLayout || PET_LAYOUT;
+}
+
+function getBasePetVisualBounds() {
+  return runtimeVisualBounds || PET_VISUAL_BOUNDS;
+}
+
+function scalePetBounds(bounds, scale, windowSize = getPetWindowSize()) {
+  if (
+    !bounds ||
+    !Number.isFinite(bounds.x) ||
+    !Number.isFinite(bounds.y) ||
+    !Number.isFinite(bounds.width) ||
+    !Number.isFinite(bounds.height)
+  ) {
+    return null;
+  }
+  const safeScale = Number.isFinite(scale) ? Math.max(0.2, scale) : 1;
+  const width = Math.max(1, Math.round(bounds.width * safeScale));
+  const height = Math.max(1, Math.round(bounds.height * safeScale));
+  const centerX = bounds.x + bounds.width * 0.5;
+  const centerY = bounds.y + bounds.height * 0.5;
+  const nextWidth = Math.min(width, windowSize.width);
+  const nextHeight = Math.min(height, windowSize.height);
+  const unclampedX = Math.round(centerX - nextWidth * 0.5);
+  const unclampedY = Math.round(centerY - nextHeight * 0.5);
+  return {
+    x: clampNumber(unclampedX, 0, Math.max(0, windowSize.width - nextWidth)),
+    y: clampNumber(unclampedY, 0, Math.max(0, windowSize.height - nextHeight)),
+    width: nextWidth,
+    height: nextHeight,
+  };
+}
+
+function resolveCharacterScalePercent(settings = runtimeSettings) {
+  const requested = Number(settings?.ui?.characterScalePercent);
+  return clampNumber(
+    Number.isFinite(requested) ? requested : DEFAULT_CHARACTER_SCALE_PERCENT,
+    MIN_CHARACTER_SCALE_PERCENT,
+    MAX_CHARACTER_SCALE_PERCENT
+  );
+}
+
+function resolveCharacterHitboxScalePercent(settings = runtimeSettings) {
+  return resolveCharacterScalePercent(settings);
+}
 
 function asPositiveInteger(value, fallback) {
   const numeric = Number(value);
@@ -637,8 +707,8 @@ function getActivePetVisualBounds(nowMs = Date.now()) {
     activePetBoundsUpdatedAtMs > 0 &&
     nowMs - activePetBoundsUpdatedAtMs > PET_BOUNDS_STALE_MS &&
     (dragging || flingState.active);
-  if (stale) return PET_VISUAL_BOUNDS;
-  return activePetVisualBounds || PET_VISUAL_BOUNDS;
+  const baseBounds = stale ? getBasePetVisualBounds() : activePetVisualBounds || getBasePetVisualBounds();
+  return scalePetBounds(baseBounds, runtimeHitboxScale, getPetWindowSize()) || getBasePetVisualBounds();
 }
 
 function emitToRenderer(channel, payload) {
@@ -779,8 +849,10 @@ function applyWindowBounds(targetX, targetY) {
     };
   }
 
+  const petWindowSize = getPetWindowSize();
+
   if (!DIAGNOSTICS_ENABLED) {
-    applyFixedContentBounds(win, WINDOW_SIZE, targetX, targetY);
+    applyFixedContentBounds(win, petWindowSize, targetX, targetY);
     return {
       windowBefore: null,
       windowAfter: null,
@@ -793,9 +865,9 @@ function applyWindowBounds(targetX, targetY) {
   const windowBefore = win.getBounds();
   const contentBefore = win.getContentBounds();
   const sizeCorrected =
-    contentBefore.width !== WINDOW_SIZE.width || contentBefore.height !== WINDOW_SIZE.height;
+    contentBefore.width !== petWindowSize.width || contentBefore.height !== petWindowSize.height;
 
-  applyFixedContentBounds(win, WINDOW_SIZE, targetX, targetY);
+  applyFixedContentBounds(win, petWindowSize, targetX, targetY);
 
   const windowAfter = win.getBounds();
   const contentAfter = win.getContentBounds();
@@ -955,9 +1027,10 @@ function stepFling() {
   const targetX = flingState.x + flingState.vx * dtSec;
   const targetY = flingState.y + flingState.vy * dtSec;
 
+  const petWindowSize = getPetWindowSize();
   const targetCenter = {
-    x: Math.round(targetX + WINDOW_SIZE.width / 2),
-    y: Math.round(targetY + WINDOW_SIZE.height / 2),
+    x: Math.round(targetX + petWindowSize.width / 2),
+    y: Math.round(targetY + petWindowSize.height / 2),
   };
   const display = screen.getDisplayNearestPoint(targetCenter);
   const clampArea = getClampArea(display);
@@ -1648,6 +1721,8 @@ function buildRuntimeSettingsSummary() {
     },
     ui: {
       diagnosticsEnabled: Boolean(ui.diagnosticsEnabled),
+      characterScalePercent: resolveCharacterScalePercent(settings),
+      characterHitboxScalePercent: resolveCharacterHitboxScalePercent(settings),
     },
     wardrobe: {
       activeAccessories: Array.isArray(wardrobe.activeAccessories)
@@ -1681,7 +1756,10 @@ function buildShellStateSnapshot() {
     },
     ui: {
       diagnosticsEnabled: Boolean(settings.ui?.diagnosticsEnabled),
+      characterScalePercent: resolveCharacterScalePercent(runtimeSettings),
+      characterHitboxScalePercent: resolveCharacterHitboxScalePercent(runtimeSettings),
     },
+    layout: getPetLayout(),
     wardrobe: {
       activeAccessories: [...accessories],
       hasHeadphones: accessories.includes(SHELL_ACCESSORY_IDS.headphones),
@@ -1760,6 +1838,56 @@ function buildCurrentSetupBootstrapSnapshot() {
     resolvedPaths: runtimeSettingsResolvedPaths,
     ts: Date.now(),
   });
+}
+
+function buildCurrentShellSettingsSnapshot() {
+  return buildShellSettingsSnapshot({
+    app,
+    projectRoot: __dirname,
+    settingsSummary: buildRuntimeSettingsSummary(),
+    settingsSourceMap: runtimeSettingsSourceMap,
+    settingsFiles: runtimeSettingsFiles,
+    ts: Date.now(),
+  });
+}
+
+function applyShellSettingsEditorPatch(patchInput = {}) {
+  const validation = validateShellSettingsPatch({ patch: patchInput });
+  const acceptedKeys = validation.accepted.map((entry) => entry.key);
+  const normalizedPatch =
+    validation.normalizedPatch && typeof validation.normalizedPatch === "object"
+      ? validation.normalizedPatch
+      : {};
+  const characterScaleEntry = validation.accepted.find(
+    (entry) => entry.key === "ui.characterScalePercent"
+  );
+  if (characterScaleEntry && Number.isFinite(Number(characterScaleEntry.value))) {
+    if (!normalizedPatch.ui || typeof normalizedPatch.ui !== "object") {
+      normalizedPatch.ui = {};
+    }
+    normalizedPatch.ui.characterHitboxScalePercent = Math.round(
+      Number(characterScaleEntry.value)
+    );
+  }
+  if (acceptedKeys.length > 0) {
+    applyRuntimeSettingsPatch(normalizedPatch, "shell_settings_editor_apply");
+  }
+
+  const shellState = latestShellState || buildShellStateSnapshot();
+  const observability = buildCurrentObservabilitySnapshot();
+  const settingsSnapshot = buildCurrentShellSettingsSnapshot();
+  const fieldByKey = new Map((settingsSnapshot.fields || []).map((field) => [field.key, field]));
+  const envOverrides = acceptedKeys.filter((key) => fieldByKey.get(key)?.source === "env");
+  return {
+    ok: validation.rejected.length === 0,
+    acceptedKeys,
+    rejected: validation.rejected,
+    envOverrides,
+    overridePath: settingsSnapshot.overridePath || null,
+    shellState,
+    observability,
+    settingsSnapshot,
+  };
 }
 
 function buildCurrentObservabilityDetail(
@@ -1942,6 +2070,59 @@ function setDiagnosticsEnabled(nextEnabled, reason = "settings_update") {
   closeDiagnosticsLog();
 }
 
+function applyRuntimePetLayout(reason = "settings_update") {
+  const previousWindowSize = getPetWindowSize();
+  const scalePercent = resolveCharacterScalePercent(runtimeSettings);
+  const nextScale = scalePercent / 100;
+  const nextLayout = computePetLayout({
+    ...BASE_LAYOUT,
+    scale: nextScale,
+  });
+
+  runtimePetLayout = nextLayout;
+  runtimeWindowSize = nextLayout.windowSize;
+  runtimeVisualBounds = nextLayout.visualBounds;
+  runtimeHitboxScale = nextScale;
+  activePetVisualBounds = { ...runtimeVisualBounds };
+  activePetBoundsUpdatedAtMs = 0;
+  syncPropWindowScale(reason);
+
+  if (!win || win.isDestroyed()) return;
+
+  const contentBounds = win.getContentBounds();
+  const center = {
+    x: Math.round(contentBounds.x + previousWindowSize.width * 0.5),
+    y: Math.round(contentBounds.y + previousWindowSize.height * 0.5),
+  };
+  const targetX = Math.round(center.x - runtimeWindowSize.width * 0.5);
+  const targetY = Math.round(center.y - runtimeWindowSize.height * 0.5);
+  const display = screen.getDisplayNearestPoint(center);
+  const clamped = clampWindowPosition(
+    targetX,
+    targetY,
+    getClampArea(display),
+    getActivePetVisualBounds(Date.now())
+  );
+
+  win.setMinimumSize(runtimeWindowSize.width, runtimeWindowSize.height);
+  win.setMaximumSize(runtimeWindowSize.width, runtimeWindowSize.height);
+  applyFixedContentBounds(win, runtimeWindowSize, clamped.x, clamped.y);
+  resetMotionSampleFromWindow();
+  emitMotionState({
+    velocityOverride: { vx: 0, vy: 0 },
+    collided: { x: false, y: false },
+    impact: { triggered: false, strength: 0 },
+  });
+
+  logDiagnostics("layout-updated", {
+    reason,
+    scalePercent,
+    hitboxScalePercent: scalePercent,
+    windowSize: runtimeWindowSize,
+    visualBounds: runtimeVisualBounds,
+  });
+}
+
 function initializeRuntimeSettings(reason = "startup") {
   const loaded = loadRuntimeSettings({
     app,
@@ -1970,6 +2151,7 @@ function initializeRuntimeSettings(reason = "startup") {
     }
   }
   setDiagnosticsEnabled(Boolean(runtimeSettings?.ui?.diagnosticsEnabled), reason);
+  applyRuntimePetLayout(reason);
 }
 
 function createShellTrayIcon() {
@@ -1988,9 +2170,36 @@ function randomBetween(min, max) {
 }
 
 function getPropWindowSpec(propId) {
-  return Object.prototype.hasOwnProperty.call(PROP_WINDOW_SPECS, propId)
-    ? PROP_WINDOW_SPECS[propId]
-    : null;
+  if (!Object.prototype.hasOwnProperty.call(PROP_WINDOW_SPECS, propId)) {
+    return null;
+  }
+  const baseSpec = PROP_WINDOW_SPECS[propId];
+  const scale = clampNumber(getPetLayout()?.scale ?? 1, 0.5, 2);
+  return buildScaledPropWindowSpec(baseSpec, scale);
+}
+
+function scalePropMetric(value, scale) {
+  if (!Number.isFinite(Number(value))) return 0;
+  return Math.max(1, Math.round(Number(value) * scale));
+}
+
+function buildScaledPropWindowSpec(baseSpec, scale) {
+  if (!baseSpec || typeof baseSpec !== "object") return null;
+  const safeScale = clampNumber(scale, 0.5, 2);
+  return {
+    propId: baseSpec.propId,
+    label: baseSpec.label,
+    windowSize: {
+      width: scalePropMetric(baseSpec.windowSize?.width, safeScale),
+      height: scalePropMetric(baseSpec.windowSize?.height, safeScale),
+    },
+    visualBounds: {
+      x: Math.max(0, Math.round(Number(baseSpec.visualBounds?.x || 0) * safeScale)),
+      y: Math.max(0, Math.round(Number(baseSpec.visualBounds?.y || 0) * safeScale)),
+      width: scalePropMetric(baseSpec.visualBounds?.width, safeScale),
+      height: scalePropMetric(baseSpec.visualBounds?.height, safeScale),
+    },
+  };
 }
 
 function buildPropWindowModel(propId) {
@@ -2023,10 +2232,11 @@ function findPropWindowRecordByWebContentsId(webContentsId) {
 function getDefaultInventoryWindowPosition() {
   const margin = 28;
   if (win && !win.isDestroyed()) {
+    const petWindowSize = getPetWindowSize();
     const [petX, petY] = win.getPosition();
-    const display = getWindowDisplay(win, WINDOW_SIZE);
+    const display = getWindowDisplay(win, petWindowSize);
     const area = getClampArea(display);
-    const preferredX = petX + WINDOW_SIZE.width + margin;
+    const preferredX = petX + petWindowSize.width + margin;
     const preferredY = petY + margin;
     return {
       x: Math.max(
@@ -2073,17 +2283,18 @@ function getRoamZoneLabel(snapshot = latestShellState) {
 }
 
 function getRoamPetBounds(nowMs = Date.now()) {
-  const sourceBounds = getActivePetVisualBounds(nowMs) || PET_VISUAL_BOUNDS;
+  const sourceBounds = getActivePetVisualBounds(nowMs) || getBasePetVisualBounds();
+  const petWindowSize = getPetWindowSize();
   const normalized = normalizePetBounds(
     {
       ...sourceBounds,
       tMs: nowMs,
     },
-    WINDOW_SIZE
+    petWindowSize
   );
   if (normalized) return normalized;
   return {
-    ...PET_VISUAL_BOUNDS,
+    ...getBasePetVisualBounds(),
     tMs: nowMs,
   };
 }
@@ -2286,7 +2497,7 @@ function chooseRoamDestination(nowMs = Date.now(), options = {}) {
   const [currentWinX, currentWinY] = win.getPosition();
   const winX = Number.isFinite(Number(options.fromX)) ? Math.round(Number(options.fromX)) : currentWinX;
   const winY = Number.isFinite(Number(options.fromY)) ? Math.round(Number(options.fromY)) : currentWinY;
-  const display = options.display || getWindowDisplay(win, WINDOW_SIZE);
+  const display = options.display || getWindowDisplay(win, getPetWindowSize());
   const roamMode = options.mode || latestShellState?.roaming?.mode || ROAMING_MODES.desktop;
   const roamZone = options.zone || getRoamZoneLabel(latestShellState);
   const roamZoneRect =
@@ -2338,7 +2549,7 @@ function chooseRoamDestination(nowMs = Date.now(), options = {}) {
 function buildRoamModeEntryDestination(snapshot = latestShellState) {
   if (!win || win.isDestroyed()) return null;
   if (snapshot?.roaming?.mode !== ROAMING_MODES.zone) return null;
-  const display = getWindowDisplay(win, WINDOW_SIZE);
+  const display = getWindowDisplay(win, getPetWindowSize());
   const desktopBounds = getDesktopRoamLayout().bounds || getClampArea(display);
   const zoneBounds = getRoamBounds(
     display,
@@ -2502,7 +2713,7 @@ function beginRoamLeg(nowMs = Date.now()) {
   const roamBounds =
     destination.bounds ||
     getRoamBounds(
-      getWindowDisplay(win, WINDOW_SIZE),
+      getWindowDisplay(win, getPetWindowSize()),
       latestShellState?.roaming?.mode || ROAMING_MODES.desktop,
       getRoamZoneLabel(latestShellState),
       latestShellState?.roaming?.zoneRect || null
@@ -2621,7 +2832,7 @@ function stepRoam() {
   const roamBounds =
     roamState.roamBounds ||
     getRoamBounds(
-      getWindowDisplay(win, WINDOW_SIZE),
+      getWindowDisplay(win, getPetWindowSize()),
       latestShellState?.roaming?.mode || ROAMING_MODES.desktop,
       getRoamZoneLabel(latestShellState),
       latestShellState?.roaming?.zoneRect || null
@@ -2680,10 +2891,11 @@ function getDefaultPropWindowPosition(propId) {
   if (!spec) return { x: 0, y: 0 };
 
   if (win && !win.isDestroyed()) {
+    const petWindowSize = getPetWindowSize();
     const [petX, petY] = win.getPosition();
     const proposedX = petX - Math.round(spec.windowSize.width * 0.72);
-    const proposedY = petY + WINDOW_SIZE.height - spec.windowSize.height - 28;
-    const display = getWindowDisplay(win, WINDOW_SIZE);
+    const proposedY = petY + petWindowSize.height - spec.windowSize.height - 28;
+    const display = getWindowDisplay(win, petWindowSize);
     return clampWindowPosition(
       proposedX,
       proposedY,
@@ -2700,6 +2912,32 @@ function getDefaultPropWindowPosition(propId) {
     area,
     spec.visualBounds
   );
+}
+
+function syncPropWindowScale(reason = "settings_update") {
+  for (const [propId, record] of propWindows.entries()) {
+    if (!record || !record.window || record.window.isDestroyed()) continue;
+    const previousWindowSize = record.spec?.windowSize || null;
+    const nextSpec = getPropWindowSpec(propId);
+    if (!nextSpec) continue;
+
+    const center = getWindowCenterPoint(record.window, previousWindowSize);
+    record.spec = nextSpec;
+    record.window.setMinimumSize(nextSpec.windowSize.width, nextSpec.windowSize.height);
+    record.window.setMaximumSize(nextSpec.windowSize.width, nextSpec.windowSize.height);
+    applyPropWindowBounds(
+      propId,
+      Math.round(center.x - nextSpec.windowSize.width * 0.5),
+      Math.round(center.y - nextSpec.windowSize.height * 0.5)
+    );
+    emitToWindow(record.window, "prop:model", buildPropWindowModel(propId));
+  }
+
+  logDiagnostics("prop-scale-updated", {
+    reason,
+    scale: getPetLayout()?.scale || 1,
+    activeWindows: propWindows.size,
+  });
 }
 
 function applyPropWindowBounds(propId, targetX, targetY) {
@@ -3069,6 +3307,10 @@ function openSetupWindow() {
   return openInventoryWindow(SHELL_WINDOW_TABS.setup);
 }
 
+function openSettingsWindow() {
+  return openInventoryWindow(SHELL_WINDOW_TABS.settings);
+}
+
 function closeZoneSelectorWindow() {
   if (!zoneSelectorWin || zoneSelectorWin.isDestroyed()) {
     zoneSelectorWin = null;
@@ -3079,7 +3321,7 @@ function closeZoneSelectorWindow() {
 
 function getZoneSelectorDisplay() {
   if (win && !win.isDestroyed()) {
-    return getWindowDisplay(win, WINDOW_SIZE);
+    return getWindowDisplay(win, getPetWindowSize());
   }
   return screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
 }
@@ -3257,6 +3499,12 @@ function refreshShellTrayMenu() {
         void runShellAction(SHELL_ACTIONS.openSetup);
       },
     },
+    {
+      label: "Advanced Settings...",
+      click: () => {
+        void runShellAction(SHELL_ACTIONS.openSettings);
+      },
+    },
     { type: "separator" },
     {
       label: "Roam",
@@ -3345,13 +3593,31 @@ function initializeShellSurface() {
   }
 }
 
+function collectPatchPaths(patch, prefix = "") {
+  if (!patch || typeof patch !== "object" || Array.isArray(patch)) return [];
+  const paths = [];
+  for (const [key, value] of Object.entries(patch)) {
+    const nextPrefix = prefix ? `${prefix}.${key}` : key;
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      paths.push(...collectPatchPaths(value, nextPrefix));
+      continue;
+    }
+    paths.push(nextPrefix);
+  }
+  return paths;
+}
+
 function applyRuntimeSettingsPatch(patch, reason = "shell_settings_patch") {
   persistRuntimeSettingsPatch({
     app,
     projectRoot: __dirname,
     patch,
   });
+  const touchedPaths = collectPatchPaths(patch);
   initializeRuntimeSettings(reason);
+  if (touchedPaths.some((pathKey) => pathKey.startsWith("openclaw."))) {
+    initializeOpenClawBridgeRuntime();
+  }
   const snapshot = refreshShellTrayMenu();
   return snapshot;
 }
@@ -3367,6 +3633,9 @@ async function runShellAction(actionId) {
       snapshot = emitShellState(buildShellStateSnapshot());
     } else if (actionId === SHELL_ACTIONS.openSetup) {
       openSetupWindow();
+      snapshot = emitShellState(buildShellStateSnapshot());
+    } else if (actionId === SHELL_ACTIONS.openSettings) {
+      openSettingsWindow();
       snapshot = emitShellState(buildShellStateSnapshot());
     } else if (actionId === SHELL_ACTIONS.roamDesktop) {
       snapshot = applyRuntimeSettingsPatch(
@@ -5153,12 +5422,13 @@ function resolveDragDisplay(cursor) {
 }
 
 function createWindow() {
-  activePetVisualBounds = { ...PET_VISUAL_BOUNDS };
+  activePetVisualBounds = { ...getBasePetVisualBounds() };
   activePetBoundsUpdatedAtMs = 0;
+  const petWindowSize = getPetWindowSize();
 
   win = new BrowserWindow({
-    width: WINDOW_SIZE.width,
-    height: WINDOW_SIZE.height,
+    width: petWindowSize.width,
+    height: petWindowSize.height,
     frame: false,
     transparent: true,
     resizable: false,
@@ -5174,8 +5444,8 @@ function createWindow() {
     },
   });
 
-  win.setMinimumSize(WINDOW_SIZE.width, WINDOW_SIZE.height);
-  win.setMaximumSize(WINDOW_SIZE.width, WINDOW_SIZE.height);
+  win.setMinimumSize(petWindowSize.width, petWindowSize.height);
+  win.setMaximumSize(petWindowSize.width, petWindowSize.height);
 
   win.loadFile("index.html");
   win.webContents.once("did-finish-load", () => {
@@ -5211,8 +5481,8 @@ function createWindow() {
   });
 
   logDiagnostics("window-created", {
-    windowSize: WINDOW_SIZE,
-    petVisualBounds: PET_VISUAL_BOUNDS,
+    windowSize: petWindowSize,
+    petVisualBounds: getBasePetVisualBounds(),
     activePetVisualBounds,
     petBoundsStaleMs: PET_BOUNDS_STALE_MS,
     clampAreaType: CLAMP_TO_WORK_AREA ? "workArea" : "bounds",
@@ -5224,10 +5494,11 @@ function createWindow() {
 
 ipcMain.on("pet:setPosition", (_event, x, y) => {
   if (!win) return;
+  const petWindowSize = getPetWindowSize();
 
   const targetPoint = {
-    x: Math.round(x + WINDOW_SIZE.width / 2),
-    y: Math.round(y + WINDOW_SIZE.height / 2),
+    x: Math.round(x + petWindowSize.width / 2),
+    y: Math.round(y + petWindowSize.height / 2),
   };
   const display = screen.getDisplayNearestPoint(targetPoint);
   const petBounds = getActivePetVisualBounds(Date.now());
@@ -5374,7 +5645,7 @@ ipcMain.on("pet:drag", () => {
 });
 
 ipcMain.on("pet:setVisibleBounds", (_event, bounds) => {
-  const normalized = normalizePetBounds(bounds, WINDOW_SIZE);
+  const normalized = normalizePetBounds(bounds, getPetWindowSize());
   if (!normalized) return;
   activePetVisualBounds = {
     x: normalized.x,
@@ -5413,7 +5684,7 @@ ipcMain.handle("pet:getConfig", () => {
     flingPreset: ACTIVE_FLING_PRESET,
     flingEnabled: FLING_CONFIG.enabled,
     availableFlingPresets: Object.keys(FLING_PRESETS),
-    layout: PET_LAYOUT,
+    layout: getPetLayout(),
     capabilityRuntimeState: latestCapabilitySnapshot?.runtimeState || "unknown",
     capabilitySummary: latestCapabilitySnapshot?.summary || null,
     stateCurrentState: latestStateSnapshot?.currentState || "Idle",
@@ -5491,6 +5762,15 @@ ipcMain.handle("pet:applySetupBootstrap", async (_event, payload) => {
     ts: Date.now(),
   });
   return result;
+});
+
+ipcMain.handle("pet:getShellSettingsSnapshot", () => {
+  return buildCurrentShellSettingsSnapshot();
+});
+
+ipcMain.handle("pet:applyShellSettingsPatch", (_event, payload) => {
+  const patch = payload?.patch && typeof payload.patch === "object" ? payload.patch : {};
+  return applyShellSettingsEditorPatch(patch);
 });
 
 ipcMain.handle("pet:runShellAction", (_event, payload) => {

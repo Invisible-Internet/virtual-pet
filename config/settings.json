@@ -58,7 +58,9 @@
     "zoneRect": null
   },
   "ui": {
-    "diagnosticsEnabled": false
+    "diagnosticsEnabled": false,
+    "characterScalePercent": 100,
+    "characterHitboxScalePercent": 100
   },
   "wardrobe": {
     "activeAccessories": []

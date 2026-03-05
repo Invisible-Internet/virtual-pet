@@ -124,24 +124,34 @@ Historical v1 deliverables keep their original status wording and are not retrof
 - `accepted` is the only terminal state for future post-v1 deliverables.
 
 ### Current Workflow Snapshot
-- Current Deliverable: `11d-settings-editor-and-service-controls`
-- Workflow State: `specifying`
-- Current Status: `specifying`
-- Last Completed Deliverable: `11c-repair-actions-and-provenance-visibility`
-- Next Detailed Target: `11d-settings-editor-and-service-controls`
+- Current Deliverable: `none`
+- Workflow State: `idle`
+- Current Status: `accepted`
+- Last Completed Deliverable: `11d-settings-editor-and-service-controls`
+- Next Detailed Target: `12a-real-openclaw-dialog-parity`
 - Next Queued Target: `12a-real-openclaw-dialog-parity`
 - Current Gate State:
-  - `Spec Gate`: `passed`
-  - `Build Gate`: `not_started`
-  - `Acceptance Gate`: `not_started`
+  - `Spec Gate`: `n/a`
+  - `Build Gate`: `n/a`
+  - `Acceptance Gate`: `n/a`
 - Historical Note:
   - D01-D10 are complete historical v1 records.
   - Detailed v1 session history lives in `docs/plan/archive/00-progress-tracker-v1-history.md`.
-- Current `11d` spec outcome:
-  - Shared-shell `Setup` owns an `Advanced Settings` first slice for bounded settings edits.
-  - Write safety is locked to a whitelist with explicit blocked-key behavior and env-override visibility.
-  - `11d` demo and failure/recovery scripts are defined, and `Spec Gate` passed on `2026-03-04`.
-  - No implementation started yet; `Build Gate` remains `not_started`.
+- Last completed `11d` outcome:
+  - Shared-shell `Advanced Settings` now lives on a dedicated `Settings` tab (separate from `Setup`).
+  - Tray now includes `Advanced Settings...` routing into the shared shell `Settings` tab.
+  - New bounded settings IPC is live:
+    - `pet:getShellSettingsSnapshot`
+    - `pet:applyShellSettingsPatch`
+  - Character scale control now uses normalized slider semantics in GUI (`0..1`, with `0.5=100%`, `0=50%`, `1=200%`) with quarter-labeled tick marks (`0/25/50/75/100`) while still allowing in-between values.
+  - Runtime scale now applies together to character visuals, hitbox envelope, and quick-prop windows.
+  - Renderer diagnostics overlay now uses live computed sprite/rig visible bounds so hitbox boxes stay aligned after runtime scaling changes.
+  - `11d` deterministic checks are green, including `D11d-settings-editor`; `Build Gate` passed on `2026-03-04`.
+  - Gate outcome:
+    - `Spec Gate` passed on `2026-03-04`
+    - `Build Gate` passed on `2026-03-04` (`npm run check:syntax`, `npm run check:contracts`, `npm run check:acceptance` -> `17/17`)
+    - `Acceptance Gate` passed on `2026-03-05` (operator-accepted closure)
+  - Shipped outcome: visible app/runtime change delivered and accepted; `11d` closed with dedicated settings routing, bounded settings apply/provenance visibility, normalized unified character scaling, and corrected diagnostics hitbox overlay alignment after scale changes.
 - Last completed `11a` outcome:
   - Tray `Inventory...` and `Status...` open the same shared shell popup on different tabs.
   - `Inventory` preserves the D07c inventory UI; `Status` owns the `11a` observability rows.
@@ -199,7 +209,8 @@ Historical v1 deliverables keep their original status wording and are not retrof
 - Planning rule:
   - `11` now has accepted baselines through `11a` and `11b`.
   - `11c-repair-actions-and-provenance-visibility` is accepted and closed.
-  - `11d-settings-editor-and-service-controls` is the active slice in `specifying` with `Spec Gate=passed`.
+  - `11d-settings-editor-and-service-controls` is accepted and closed.
+  - `12a-real-openclaw-dialog-parity` is staged as the next slice and should move to `specifying` next unless reprioritized.
   - `12` through `15` remain rough placeholders and must not be treated as spec-passed deliverables yet.
 
 ### Session-End Sync Rule

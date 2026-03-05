@@ -31,6 +31,12 @@ const ROAMING_MODES = Object.freeze({
 });
 const DEFAULT_ROAMING_ZONE = "desk-center";
 const MIN_ZONE_RECT_SIZE = 120;
+const DEFAULT_CHARACTER_SCALE_PERCENT = 100;
+const MIN_CHARACTER_SCALE_PERCENT = 50;
+const MAX_CHARACTER_SCALE_PERCENT = 200;
+const DEFAULT_CHARACTER_HITBOX_SCALE_PERCENT = 100;
+const MIN_CHARACTER_HITBOX_SCALE_PERCENT = 50;
+const MAX_CHARACTER_HITBOX_SCALE_PERCENT = 200;
 const KNOWN_ACCESSORY_IDS = new Set(["headphones"]);
 const KNOWN_QUICK_PROP_IDS = new Set(["poolRing"]);
 
@@ -60,6 +66,13 @@ function toPositiveInteger(value, fallback, min = 1) {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) return fallback;
   return Math.max(min, Math.round(numeric));
+}
+
+function toBoundedInteger(value, fallback, min, max) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return fallback;
+  const rounded = Math.round(numeric);
+  return Math.min(max, Math.max(min, rounded));
 }
 
 function normalizeStringArray(value, allowedValues = null) {
@@ -250,6 +263,8 @@ function buildDefaultSettings(projectRoot) {
     },
     ui: {
       diagnosticsEnabled: false,
+      characterScalePercent: DEFAULT_CHARACTER_SCALE_PERCENT,
+      characterHitboxScalePercent: DEFAULT_CHARACTER_HITBOX_SCALE_PERCENT,
     },
     wardrobe: {
       activeAccessories: [],
@@ -312,6 +327,18 @@ function normalizeSettings(rawSettings, { projectRoot, env, warnings, errors }) 
   normalized.ui.diagnosticsEnabled = toBoolean(
     uiRaw.diagnosticsEnabled,
     normalized.ui.diagnosticsEnabled
+  );
+  normalized.ui.characterScalePercent = toBoundedInteger(
+    uiRaw.characterScalePercent,
+    normalized.ui.characterScalePercent,
+    MIN_CHARACTER_SCALE_PERCENT,
+    MAX_CHARACTER_SCALE_PERCENT
+  );
+  normalized.ui.characterHitboxScalePercent = toBoundedInteger(
+    uiRaw.characterHitboxScalePercent,
+    normalized.ui.characterHitboxScalePercent,
+    MIN_CHARACTER_HITBOX_SCALE_PERCENT,
+    MAX_CHARACTER_HITBOX_SCALE_PERCENT
   );
 
   const wardrobeRaw = raw.wardrobe && typeof raw.wardrobe === "object" ? raw.wardrobe : {};
@@ -497,6 +524,28 @@ function applyEnvOverrides(settings, env, sourceMap) {
   }
   if (Object.prototype.hasOwnProperty.call(env, "PET_UI_DIAGNOSTICS_ENABLED")) {
     set("ui.diagnosticsEnabled", toBoolean(env.PET_UI_DIAGNOSTICS_ENABLED, next.ui.diagnosticsEnabled));
+  }
+  if (Object.prototype.hasOwnProperty.call(env, "PET_UI_CHARACTER_SCALE_PERCENT")) {
+    set(
+      "ui.characterScalePercent",
+      toBoundedInteger(
+        env.PET_UI_CHARACTER_SCALE_PERCENT,
+        next.ui.characterScalePercent,
+        MIN_CHARACTER_SCALE_PERCENT,
+        MAX_CHARACTER_SCALE_PERCENT
+      )
+    );
+  }
+  if (Object.prototype.hasOwnProperty.call(env, "PET_UI_CHARACTER_HITBOX_SCALE_PERCENT")) {
+    set(
+      "ui.characterHitboxScalePercent",
+      toBoundedInteger(
+        env.PET_UI_CHARACTER_HITBOX_SCALE_PERCENT,
+        next.ui.characterHitboxScalePercent,
+        MIN_CHARACTER_HITBOX_SCALE_PERCENT,
+        MAX_CHARACTER_HITBOX_SCALE_PERCENT
+      )
+    );
   }
   if (Object.prototype.hasOwnProperty.call(env, "PET_WARDROBE_ACCESSORIES")) {
     set(
@@ -690,9 +739,15 @@ function persistRuntimeSettingsPatch({ app, projectRoot, patch } = {}) {
 }
 
 module.exports = {
+  DEFAULT_CHARACTER_HITBOX_SCALE_PERCENT,
+  DEFAULT_CHARACTER_SCALE_PERCENT,
   DEFAULT_ROAMING_ZONE,
   KNOWN_ACCESSORY_IDS,
   KNOWN_QUICK_PROP_IDS,
+  MAX_CHARACTER_HITBOX_SCALE_PERCENT,
+  MAX_CHARACTER_SCALE_PERCENT,
+  MIN_CHARACTER_HITBOX_SCALE_PERCENT,
+  MIN_CHARACTER_SCALE_PERCENT,
   OPENCLAW_TRANSPORTS,
   ROAMING_MODES,
   isLoopbackEndpoint,

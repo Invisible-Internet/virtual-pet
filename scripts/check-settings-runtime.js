@@ -132,6 +132,8 @@ async function testLayeredPrecedenceAndEnvOverrides() {
     },
     ui: {
       diagnosticsEnabled: true,
+      characterScalePercent: 108,
+      characterHitboxScalePercent: 102,
     },
     wardrobe: {
       activeAccessories: ["headphones"],
@@ -164,6 +166,8 @@ async function testLayeredPrecedenceAndEnvOverrides() {
       PET_ROAMING_MODE: "desktop",
       PET_ROAMING_ZONE: "desk-right",
       PET_UI_DIAGNOSTICS_ENABLED: "0",
+      PET_UI_CHARACTER_SCALE_PERCENT: "124",
+      PET_UI_CHARACTER_HITBOX_SCALE_PERCENT: "117",
       PET_WARDROBE_ACCESSORIES: "headphones",
       PET_INVENTORY_QUICK_PROPS: "poolRing",
       PET_DIALOG_ALWAYS_SHOW_BUBBLE: "1",
@@ -193,6 +197,11 @@ async function testLayeredPrecedenceAndEnvOverrides() {
     "local file should preserve roaming.zoneRect when env does not override it"
   );
   assert(loaded.settings.ui.diagnosticsEnabled === false, "env should override ui.diagnosticsEnabled");
+  assert(loaded.settings.ui.characterScalePercent === 124, "env should override ui.characterScalePercent");
+  assert(
+    loaded.settings.ui.characterHitboxScalePercent === 117,
+    "env should override ui.characterHitboxScalePercent"
+  );
   assert(
     Array.isArray(loaded.settings.wardrobe.activeAccessories) &&
       loaded.settings.wardrobe.activeAccessories.length === 1 &&
@@ -225,6 +234,14 @@ async function testLayeredPrecedenceAndEnvOverrides() {
   assert(
     loaded.sourceMap["ui.diagnosticsEnabled"] === "env",
     "env source map should mark ui.diagnosticsEnabled"
+  );
+  assert(
+    loaded.sourceMap["ui.characterScalePercent"] === "env",
+    "env source map should mark ui.characterScalePercent"
+  );
+  assert(
+    loaded.sourceMap["ui.characterHitboxScalePercent"] === "env",
+    "env source map should mark ui.characterHitboxScalePercent"
   );
   assert(loaded.sourceMap["openclaw.agentId"] === "env", "env source map should mark openclaw.agentId");
   assert(loaded.sourceMap["openclaw.baseUrl"] === "env", "env source map should mark openclaw.baseUrl");
@@ -316,6 +333,8 @@ async function testPersistRuntimeSettingsPatch() {
       },
       ui: {
         diagnosticsEnabled: true,
+        characterScalePercent: 120,
+        characterHitboxScalePercent: 110,
       },
       wardrobe: {
         activeAccessories: ["headphones"],
@@ -347,6 +366,14 @@ async function testPersistRuntimeSettingsPatch() {
     "persisted roaming.zoneRect should load back"
   );
   assert(loaded.settings.ui.diagnosticsEnabled === true, "persisted diagnostics setting should load back");
+  assert(
+    loaded.settings.ui.characterScalePercent === 120,
+    "persisted character scale should load back"
+  );
+  assert(
+    loaded.settings.ui.characterHitboxScalePercent === 110,
+    "persisted character hitbox scale should load back"
+  );
   assert(
     loaded.settings.dialog.alwaysShowBubble === false,
     "persisted dialog bubble setting should load back"

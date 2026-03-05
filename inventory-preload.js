@@ -10,6 +10,8 @@ contextBridge.exposeInMainWorld("inventoryAPI", {
   getSetupBootstrapSnapshot: () => ipcRenderer.invoke("pet:getSetupBootstrapSnapshot"),
   previewSetupBootstrap: (input) => ipcRenderer.invoke("pet:previewSetupBootstrap", { input }),
   applySetupBootstrap: (input) => ipcRenderer.invoke("pet:applySetupBootstrap", { input }),
+  getShellSettingsSnapshot: () => ipcRenderer.invoke("pet:getShellSettingsSnapshot"),
+  applyShellSettingsPatch: (patch) => ipcRenderer.invoke("pet:applyShellSettingsPatch", { patch }),
   runShellAction: (actionId) => ipcRenderer.invoke("pet:runShellAction", { actionId }),
   setActiveTab: (tabId) => ipcRenderer.invoke("inventory:setActiveTab", { tabId }),
   beginPropPlacement: (propId) => ipcRenderer.invoke("inventory:beginPropPlacement", { propId }),

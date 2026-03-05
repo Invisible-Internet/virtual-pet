@@ -161,6 +161,7 @@ const SHELL_ACTIONS = Object.freeze({
   openInventory: "open-inventory",
   openStatus: "open-status",
   openSetup: "open-setup",
+  openSettings: "open-settings",
   roamDesktop: "roam-desktop",
   roamZone: "roam-zone",
   toggleDiagnostics: "toggle-diagnostics",
@@ -201,6 +202,7 @@ const DEFAULT_SHELL_STATE = Object.freeze({
     enabled: true,
     hotkeys: Object.freeze(["F6", "F7", "F8", "F9", "F10", "F11"]),
   }),
+  layout: null,
 });
 const TAIL_STYLES = Object.freeze({
   ribbon: "ribbon",
@@ -407,6 +409,8 @@ function normalizeShellState(payload = {}) {
   const tray = payload?.tray && typeof payload.tray === "object" ? payload.tray : {};
   const devFallback =
     payload?.devFallback && typeof payload.devFallback === "object" ? payload.devFallback : {};
+  const normalizedLayout =
+    payload?.layout && typeof payload.layout === "object" ? normalizeLayout(payload.layout) : null;
   const activeAccessories = normalizeStringArray(wardrobe.activeAccessories);
   const quickProps = normalizeStringArray(inventory.quickProps);
   return {
@@ -445,7 +449,14 @@ function normalizeShellState(payload = {}) {
     },
     inventoryUi: {
       open: Boolean(inventoryUi.open),
-      activeTab: inventoryUi.activeTab === "status" ? "status" : "inventory",
+      activeTab:
+        inventoryUi.activeTab === "status"
+          ? "status"
+          : inventoryUi.activeTab === "setup"
+            ? "setup"
+            : inventoryUi.activeTab === "settings"
+              ? "settings"
+              : "inventory",
     },
     tray: {
       available: Boolean(tray.available),
@@ -459,11 +470,16 @@ function normalizeShellState(payload = {}) {
           ? normalizeStringArray(devFallback.hotkeys)
           : [...DEFAULT_SHELL_STATE.devFallback.hotkeys],
     },
+    layout: normalizedLayout,
   };
 }
 
 function syncShellState(payload) {
   latestShellState = normalizeShellState(payload);
+  if (latestShellState.layout) {
+    petLayout = latestShellState.layout;
+    resize();
+  }
   diagnosticsEnabled = Boolean(latestShellState.ui.diagnosticsEnabled);
   renderDialogBubble();
 }
@@ -3167,7 +3183,9 @@ function draw() {
     layerTransforms = getSpriteLayerTransforms();
     latestRigState = layerTransforms;
     spriteFrame = updateSpriteFrame(nowMs, dtSec, layerTransforms);
-    latestVisibleBounds = getDesignVisualBounds();
+    latestVisibleBounds =
+      computeSpriteVisibleBounds(spriteFrame?.transform, spriteFrame?.global, w, h) ||
+      getDesignVisualBounds();
   } else {
     spriteDragRotation = 0;
     spriteDragRotationVel = 0;
@@ -3175,7 +3193,7 @@ function draw() {
     updateFx(dtSec);
     layerTransforms = getLayerTransforms(nowMs, dtSec);
     latestRigState = layerTransforms;
-    latestVisibleBounds = getDesignVisualBounds();
+    latestVisibleBounds = computeVisibleBoundsForFrame(layerTransforms, w, h) || getDesignVisualBounds();
   }
 
   maybeEmitVisibleBounds(latestVisibleBounds, nowMs);

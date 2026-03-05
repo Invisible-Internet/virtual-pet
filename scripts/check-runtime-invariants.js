@@ -17,6 +17,13 @@ function assertIncludes(source, snippet, message) {
   assert(source.includes(snippet), `${message} (missing "${snippet}")`);
 }
 
+function assertIncludesAny(source, snippets, message) {
+  assert(
+    snippets.some((snippet) => source.includes(snippet)),
+    `${message} (missing one of: ${snippets.map((snippet) => `"${snippet}"`).join(", ")})`
+  );
+}
+
 function run() {
   const mainSource = readProjectFile("main.js");
   const preloadSource = readProjectFile("preload.js");
@@ -58,19 +65,25 @@ function run() {
     "screen.getCursorScreenPoint()",
     "drag authority should read cursor in the main process"
   );
-  assertIncludes(
+  assertIncludesAny(
     mainSource,
-    "applyFixedContentBounds(win, WINDOW_SIZE",
+    ["applyFixedContentBounds(win, WINDOW_SIZE", "applyFixedContentBounds(win, petWindowSize"],
     "window size should be enforced through fixed content bounds"
   );
-  assertIncludes(
+  assertIncludesAny(
     mainSource,
-    "win.setMinimumSize(WINDOW_SIZE.width, WINDOW_SIZE.height)",
+    [
+      "win.setMinimumSize(WINDOW_SIZE.width, WINDOW_SIZE.height)",
+      "win.setMinimumSize(petWindowSize.width, petWindowSize.height)",
+    ],
     "main window minimum size should be fixed"
   );
-  assertIncludes(
+  assertIncludesAny(
     mainSource,
-    "win.setMaximumSize(WINDOW_SIZE.width, WINDOW_SIZE.height)",
+    [
+      "win.setMaximumSize(WINDOW_SIZE.width, WINDOW_SIZE.height)",
+      "win.setMaximumSize(petWindowSize.width, petWindowSize.height)",
+    ],
     "main window maximum size should be fixed"
   );
   assertIncludes(
@@ -83,9 +96,9 @@ function run() {
     "nodeIntegration: false",
     "main window should preserve nodeIntegration=false"
   );
-  assertIncludes(
+  assertIncludesAny(
     mainSource,
-    "layout: PET_LAYOUT",
+    ["layout: PET_LAYOUT", "layout: getPetLayout()"],
     "main config payload should expose the shared pet layout"
   );
 

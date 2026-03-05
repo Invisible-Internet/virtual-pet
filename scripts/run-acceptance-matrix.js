@@ -94,6 +94,12 @@ const CASES = Object.freeze([
     script: "scripts/check-shell-repair-actions.js",
   },
   {
+    id: "D11d-settings-editor",
+    deliverable: "11d-settings-editor-and-service-controls",
+    scenario: "Advanced settings snapshot and bounded patch validation persist only allowed keys.",
+    script: "scripts/check-shell-settings-editor.js",
+  },
+  {
     id: "Layout-assets",
     deliverable: "core-renderer-assets",
     scenario: "Layout bounds and required sprite assets remain internally consistent.",

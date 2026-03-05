@@ -39,5 +39,10 @@
     "localWorkspaceRoot": ".",
     "openClawWorkspaceRoot": "\\\\wsl$\\Ubuntu\\home\\user\\openclaw-workspace",
     "obsidianVaultRoot": "W:\\AI\\PrimeaVault"
+  },
+  "ui": {
+    "diagnosticsEnabled": false,
+    "characterScalePercent": 100,
+    "characterHitboxScalePercent": 100
   }
 }

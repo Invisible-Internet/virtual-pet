@@ -33,16 +33,16 @@ Historical v1 deliverables keep their original wording and remain archived histo
   - operator-visible demo passes and evidence is logged
 
 ## Current Deliverable
-- Current Deliverable: `11d-settings-editor-and-service-controls`
-- Workflow State: `specifying`
-- Current Status: `specifying`
-- Last Completed Deliverable: `11c-repair-actions-and-provenance-visibility`
-- Next Detailed Target: `11d-settings-editor-and-service-controls`
+- Current Deliverable: `none`
+- Workflow State: `idle`
+- Current Status: `accepted`
+- Last Completed Deliverable: `11d-settings-editor-and-service-controls`
+- Next Detailed Target: `12a-real-openclaw-dialog-parity`
 - Next Queued Target: `12a-real-openclaw-dialog-parity`
 - Current Gate State:
-  - `Spec Gate`: `passed`
-  - `Build Gate`: `not_started`
-  - `Acceptance Gate`: `not_started`
+  - `Spec Gate`: `n/a`
+  - `Build Gate`: `n/a`
+  - `Acceptance Gate`: `n/a`
 
 ## Post-v1 Family Rough-In
 Locked family order:
@@ -56,7 +56,8 @@ Planning state:
 - `11` has an accepted baseline through `11a`.
 - `11b` is now accepted and closed.
 - `11c` is now accepted and closed.
-- `11d-settings-editor-and-service-controls` is now active in `specifying` with `Spec Gate=passed`.
+- `11d-settings-editor-and-service-controls` is now accepted and closed.
+- `12a-real-openclaw-dialog-parity` is staged as the next target and should move to `specifying` next unless reprioritized.
 - `12` through `15` remain rough placeholders and are not implementation-ready yet.
 - Full family notes live in [`11-15-post-v1-roadmap-rough-in.md`](./11-15-post-v1-roadmap-rough-in.md).
 
@@ -69,14 +70,57 @@ Planning state:
 6. Pass `Spec Gate` before implementation begins.
 
 ## Next 3 Actions
-1. Implement the first `11d` runtime/settings IPC lane (`get/apply`) with whitelist validation and explicit apply semantics.
-2. Add `Setup` `Advanced Settings` controls for the `11d` key set with provenance/effective-value visibility.
-3. Add deterministic `11d` coverage (`scripts/check-shell-settings-editor.js`) and wire a `D11d-settings-editor` row into the acceptance matrix.
+1. Start `12a-real-openclaw-dialog-parity` in `specifying` using the deliverable template.
+2. Lock `12a` showcase promise plus operator demo and failure/recovery scripts before implementation.
+3. Pass `12a` `Spec Gate` before any runtime code changes.
 
 ## Blockers
-- None currently; `11d` spec is locked and ready to enter implementation.
+- None currently; `11d` is accepted and the workflow is ready to begin `12a` specification.
 
 ## Last Session Summary
+- Closed `11d-settings-editor-and-service-controls` as accepted:
+  - operator confirmed `11d` outcome as good and requested closeout
+  - `Acceptance Gate` marked `passed` on `2026-03-05`
+  - workflow moved to `idle` with `Current Deliverable: none`
+- Iterated `11d` diagnostics overlay bounds from operator feedback:
+  - fixed renderer visible-hitbox/debug bounds to use live computed sprite/rig bounds instead of static design bounds
+  - scale up/down now keeps diagnostics hitbox boxes aligned with the actual character runtime bounds
+  - verification run:
+    - `npm run check:syntax`
+    - `npm run check:contracts`
+    - `npm run check:acceptance` -> `17/17 automated checks passed`
+- Iterated `11d` shared-shell settings UX and runtime scaling behavior:
+  - promoted `Advanced Settings` from `Setup` section into a dedicated `Settings` tab
+  - added tray routing item `Advanced Settings...` to open shared shell on the `Settings` tab
+  - changed `Character Scale` to normalized slider semantics (`0..1`, where `0.5=100%`, `0=50%`, `1=200%`)
+  - fixed slider drag interaction so it no longer stalls from per-input re-render
+  - kept quarter-labeled tick marks (`0/25/50/75/100`) while allowing in-between slider values
+  - restored a concise real-time slider value readout
+  - simplified per-field value display to a single `Value` row unless an env override is active
+  - unified runtime scale application so character visuals, hitbox envelope, and desktop quick-prop windows scale together
+  - updated bounded editor contract so `ui.characterScalePercent` remains the GUI write key and GUI apply mirrors hitbox scale internally
+  - updated deterministic checks for new shell tab routing and updated settings-editor whitelist behavior
+  - verification run:
+    - `npm run check:syntax`
+    - `npm run check:contracts`
+    - `npm run check:acceptance` -> `17/17 automated checks passed`
+- Implemented the first `11d-settings-editor-and-service-controls` runtime slice:
+  - added shared-shell `Setup` -> `Advanced Settings` editor with bounded controls and explicit save
+  - added new settings IPC:
+    - `pet:getShellSettingsSnapshot`
+    - `pet:applyShellSettingsPatch`
+  - added bounded write-safety validation and blocked-key handling via `shell-settings-editor.js`
+  - extended runtime settings for character sizing controls:
+    - `ui.characterScalePercent`
+    - `ui.characterHitboxScalePercent`
+  - wired runtime layout/hitbox updates and shell-state layout propagation for visible effect
+  - added deterministic coverage:
+    - `scripts/check-shell-settings-editor.js`
+    - acceptance matrix row `D11d-settings-editor`
+  - verification run:
+    - `npm run check:syntax`
+    - `npm run check:contracts`
+    - `npm run check:acceptance` -> `17/17 automated checks passed`
 - Started `11d-settings-editor-and-service-controls` as the active deliverable and completed spec work:
   - promoted `11d` from queued placeholder to a full spec using the post-v1 template contract
   - locked the first-slice settings whitelist, blocked-key policy, and persistence/provenance behavior
@@ -169,4 +213,4 @@ Planning state:
   - D10 closed the v1 roadmap as a doc-only research deliverable
   - detailed v1 session history is preserved in [`archive/00-progress-tracker-v1-history.md`](./archive/00-progress-tracker-v1-history.md)
 - Shipped outcome note for this session:
-  - no visible app change; session delivered `11d` spec-only planning and gate updates before implementation
+  - visible app/runtime change delivered and accepted; `11d` is now closed with settings editor/tray routing, normalized scaling behavior, and corrected diagnostics hitbox overlay alignment

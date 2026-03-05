@@ -1,5 +1,6 @@
 const SHELL_ACTIONS = Object.freeze({
   openSetup: "open-setup",
+  openSettings: "open-settings",
   roamDesktop: "roam-desktop",
   roamZone: "roam-zone",
   selectRoamZone: "select-roam-zone",
@@ -11,6 +12,7 @@ const TAB_IDS = Object.freeze({
   inventory: "inventory",
   status: "status",
   setup: "setup",
+  settings: "settings",
 });
 const OBSERVABILITY_SUBJECT_IDS = Object.freeze({
   bridge: "bridge",
@@ -50,9 +52,11 @@ const statusLine = document.getElementById("status-line");
 const tabInventoryButton = document.getElementById("tab-inventory");
 const tabStatusButton = document.getElementById("tab-status");
 const tabSetupButton = document.getElementById("tab-setup");
+const tabSettingsButton = document.getElementById("tab-settings");
 const inventoryPanel = document.getElementById("tab-panel-inventory");
 const statusPanel = document.getElementById("tab-panel-status");
 const setupPanel = document.getElementById("tab-panel-setup");
+const settingsPanel = document.getElementById("tab-panel-settings");
 const overviewContainer = document.getElementById("observability-overview");
 const runtimeRowsContainer = document.getElementById("observability-runtime-rows");
 const configRowsContainer = document.getElementById("observability-config-rows");
@@ -90,6 +94,7 @@ const setupPreviewTabs = document.getElementById("setup-preview-tabs");
 const setupPreviewCopy = document.getElementById("setup-preview-copy");
 const setupPreviewMarkdown = document.getElementById("setup-preview-markdown");
 const setupResult = document.getElementById("setup-result");
+const shellSettingsEditor = document.getElementById("shell-settings-editor");
 const hoverHintText = document.getElementById("hover-hint-text");
 
 const SETUP_ERROR_MESSAGES = Object.freeze({
@@ -103,6 +108,7 @@ const HOVER_HINTS_BY_ID = Object.freeze({
   "tab-inventory": "Open the Inventory tools tab.",
   "tab-status": "Open live status and health checks.",
   "tab-setup": "Open setup to fill in pet details.",
+  "tab-settings": "Open advanced runtime settings controls.",
   "refresh-observability": "Refresh status now.",
   "close-window": "Close this shell window.",
   "roam-desktop": "Let the pet roam anywhere on your desktop.",
@@ -128,14 +134,26 @@ const HOVER_HINTS_BY_ID = Object.freeze({
   "setup-preview": "Build a preview. Nothing is saved yet.",
   "setup-apply": "Save setup files to your local pet folder.",
 });
+const CHARACTER_SCALE_FIELD_KEY = "ui.characterScalePercent";
+const CHARACTER_SCALE_SLIDER_MIN = 0;
+const CHARACTER_SCALE_SLIDER_MAX = 1;
+const CHARACTER_SCALE_SLIDER_STEP = 0.01;
+const CHARACTER_SCALE_PERCENT_MIN = 50;
+const CHARACTER_SCALE_PERCENT_MAX = 200;
+const CHARACTER_SCALE_PERCENT_DEFAULT = 100;
 
 let latestShellState = { ...DEFAULT_SHELL_STATE };
 let latestObservabilitySnapshot = null;
 let latestObservabilityDetail = null;
 let latestSetupSnapshot = null;
 let latestSetupPreview = null;
+let latestShellSettingsSnapshot = null;
+let shellSettingsDraft = {};
 let setupLoading = false;
 let setupApplying = false;
+let shellSettingsLoading = false;
+let shellSettingsSaving = false;
+let shellSettingsDirty = false;
 let setupDirty = true;
 let activeSetupPreviewFileId = "SOUL.md";
 let activeObservabilitySubjectId = OBSERVABILITY_SUBJECT_IDS.bridge;
@@ -145,6 +163,89 @@ let statusMessage = "";
 let hoverHintMessage = "";
 let activePlacement = null;
 let placementTimer = null;
+
+function clampNumber(value, min, max) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return min;
+  return Math.min(max, Math.max(min, numeric));
+}
+
+function characterScaleNormalizedToPercent(rawValue) {
+  const normalized = clampNumber(
+    rawValue,
+    CHARACTER_SCALE_SLIDER_MIN,
+    CHARACTER_SCALE_SLIDER_MAX
+  );
+  const ratio = Math.pow(2, normalized * 2 - 1);
+  const percent = Math.round(ratio * 100);
+  return clampNumber(percent, CHARACTER_SCALE_PERCENT_MIN, CHARACTER_SCALE_PERCENT_MAX);
+}
+
+function characterScalePercentToNormalized(rawValue) {
+  const percent = clampNumber(
+    rawValue,
+    CHARACTER_SCALE_PERCENT_MIN,
+    CHARACTER_SCALE_PERCENT_MAX
+  );
+  const ratio = percent / CHARACTER_SCALE_PERCENT_DEFAULT;
+  const normalized = (Math.log2(ratio) + 1) / 2;
+  return clampNumber(normalized, CHARACTER_SCALE_SLIDER_MIN, CHARACTER_SCALE_SLIDER_MAX);
+}
+
+function formatCharacterScaleValue(rawPercent) {
+  const percent = clampNumber(
+    rawPercent,
+    CHARACTER_SCALE_PERCENT_MIN,
+    CHARACTER_SCALE_PERCENT_MAX
+  );
+  const slider = characterScalePercentToNormalized(percent);
+  return `${slider.toFixed(2)} (${percent}%)`;
+}
+
+function buildCharacterScaleReadout(rawSliderValue) {
+  const normalized = clampNumber(
+    rawSliderValue,
+    CHARACTER_SCALE_SLIDER_MIN,
+    CHARACTER_SCALE_SLIDER_MAX
+  );
+  return `Current: ${normalized.toFixed(2)} (${characterScaleNormalizedToPercent(normalized)}%)`;
+}
+
+function refreshShellSettingsActionButtons() {
+  if (!shellSettingsEditor) return;
+  const reloadButton = shellSettingsEditor.querySelector(
+    '[data-shell-settings-action="reload"]'
+  );
+  const resetButton = shellSettingsEditor.querySelector(
+    '[data-shell-settings-action="reset"]'
+  );
+  const saveButton = shellSettingsEditor.querySelector(
+    '[data-shell-settings-action="save"]'
+  );
+  if (reloadButton) {
+    reloadButton.disabled = shellSettingsLoading || shellSettingsSaving;
+  }
+  if (resetButton) {
+    resetButton.disabled =
+      shellSettingsLoading || shellSettingsSaving || !shellSettingsDirty;
+  }
+  if (saveButton) {
+    saveButton.disabled =
+      shellSettingsLoading || shellSettingsSaving || !shellSettingsDirty;
+  }
+}
+
+function updateCharacterScaleReadout(controlElement) {
+  if (!controlElement) return;
+  const key = controlElement.dataset?.shellSettingKey;
+  if (key !== CHARACTER_SCALE_FIELD_KEY) return;
+  const setupField = controlElement.closest(".setup-field");
+  const readout = setupField?.querySelector?.(
+    `[data-shell-setting-readout="${CHARACTER_SCALE_FIELD_KEY}"]`
+  );
+  if (!readout) return;
+  readout.textContent = buildCharacterScaleReadout(controlElement.value);
+}
 
 function normalizeStringArray(value) {
   const rawValues =
@@ -200,6 +301,8 @@ function normalizeShellState(payload = {}) {
           ? TAB_IDS.status
           : inventoryUi.activeTab === TAB_IDS.setup
             ? TAB_IDS.setup
+            : inventoryUi.activeTab === TAB_IDS.settings
+              ? TAB_IDS.settings
             : TAB_IDS.inventory,
     },
     tray: {
@@ -220,6 +323,7 @@ function normalizeShellState(payload = {}) {
 function getActiveTab() {
   if (latestShellState.inventoryUi.activeTab === TAB_IDS.status) return TAB_IDS.status;
   if (latestShellState.inventoryUi.activeTab === TAB_IDS.setup) return TAB_IDS.setup;
+  if (latestShellState.inventoryUi.activeTab === TAB_IDS.settings) return TAB_IDS.settings;
   return TAB_IDS.inventory;
 }
 
@@ -296,6 +400,239 @@ function formatStatusDetailValue(value) {
   return formatReason(value);
 }
 
+function normalizeShellSettingsSnapshot(payload = {}) {
+  const rawFields = Array.isArray(payload?.fields) ? payload.fields : [];
+  const fields = rawFields
+    .map((field) => {
+      if (!field || typeof field !== "object") return null;
+      const key = formatText(field.key, "");
+      const kind = formatText(field.kind, "");
+      if (!key || (kind !== "boolean" && kind !== "integer")) return null;
+      const validation =
+        kind === "integer"
+          ? {
+              kind: "integer",
+              min: Number.isFinite(Number(field?.validation?.min))
+                ? Math.round(Number(field.validation.min))
+                : 0,
+              max: Number.isFinite(Number(field?.validation?.max))
+                ? Math.round(Number(field.validation.max))
+                : 100,
+            }
+          : { kind: "boolean" };
+      const value =
+        kind === "boolean"
+          ? field.value === true
+          : Number.isFinite(Number(field.value))
+            ? Math.round(Number(field.value))
+            : 0;
+      const effectiveValue =
+        kind === "boolean"
+          ? field.effectiveValue === true
+          : Number.isFinite(Number(field.effectiveValue))
+            ? Math.round(Number(field.effectiveValue))
+            : value;
+      return {
+        key,
+        label: formatText(field.label, key),
+        description: formatText(field.description, ""),
+        kind,
+        editable: field.editable !== false,
+        value,
+        effectiveValue,
+        source: formatText(field.source, "base"),
+        envOverridden: field.envOverridden === true,
+        validation,
+      };
+    })
+    .filter(Boolean);
+  return {
+    kind: "shellSettingsSnapshot",
+    ts: Number.isFinite(Number(payload?.ts)) ? Number(payload.ts) : Date.now(),
+    overridePath: formatText(payload?.overridePath, "Unavailable"),
+    warnings: Array.isArray(payload?.warnings)
+      ? payload.warnings.map((entry) => formatText(entry, "")).filter(Boolean)
+      : [],
+    fields,
+  };
+}
+
+function coerceShellSettingsFieldValue(field, rawValue) {
+  if (!field) return rawValue;
+  if (field.kind === "boolean") {
+    if (typeof rawValue === "boolean") return rawValue;
+    const normalized = formatText(rawValue, "").toLowerCase();
+    if (normalized === "true" || normalized === "1" || normalized === "yes" || normalized === "on") {
+      return true;
+    }
+    if (
+      normalized === "false" ||
+      normalized === "0" ||
+      normalized === "no" ||
+      normalized === "off"
+    ) {
+      return false;
+    }
+    return field.value === true;
+  }
+  if (field.kind === "integer") {
+    if (field.key === CHARACTER_SCALE_FIELD_KEY) {
+      const numeric = Number(rawValue);
+      if (!Number.isFinite(numeric)) return field.value;
+      if (numeric < CHARACTER_SCALE_SLIDER_MIN || numeric > CHARACTER_SCALE_SLIDER_MAX) {
+        return Math.round(
+          clampNumber(
+            numeric,
+            CHARACTER_SCALE_PERCENT_MIN,
+            CHARACTER_SCALE_PERCENT_MAX
+          )
+        );
+      }
+      return characterScaleNormalizedToPercent(numeric);
+    }
+    const numeric = Number(rawValue);
+    if (!Number.isFinite(numeric)) return field.value;
+    return Math.round(numeric);
+  }
+  return rawValue;
+}
+
+function syncShellSettingsDraftFromSnapshot() {
+  shellSettingsDraft = {};
+  const fields = latestShellSettingsSnapshot?.fields || [];
+  for (const field of fields) {
+    shellSettingsDraft[field.key] = field.value;
+  }
+  shellSettingsDirty = false;
+}
+
+function getShellSettingsFieldByKey(key) {
+  const fields = latestShellSettingsSnapshot?.fields || [];
+  return fields.find((field) => field.key === key) || null;
+}
+
+function renderShellSettingsEditor() {
+  if (!shellSettingsEditor) return;
+  if (!latestShellSettingsSnapshot) {
+    shellSettingsEditor.innerHTML =
+      '<h3>Loading Advanced Settings</h3><span class="setup-card-copy">Open Settings to load editable values.</span>';
+    return;
+  }
+  const fields = latestShellSettingsSnapshot.fields || [];
+  const fieldMarkup = fields
+    .map((field) => {
+      const draftValue = Object.prototype.hasOwnProperty.call(shellSettingsDraft, field.key)
+        ? shellSettingsDraft[field.key]
+        : field.value;
+      const controlMarkup =
+        field.kind === "boolean"
+          ? `<select class="setup-select" data-shell-setting-key="${escapeHtml(field.key)}" ${
+              field.editable ? "" : "disabled"
+            }>
+              <option value="true" ${draftValue === true ? "selected" : ""}>Enabled</option>
+              <option value="false" ${draftValue === false ? "selected" : ""}>Disabled</option>
+            </select>`
+          : field.key === CHARACTER_SCALE_FIELD_KEY
+            ? `<div class="setup-slider-wrap">
+                <input class="setup-slider" type="range" step="${CHARACTER_SCALE_SLIDER_STEP}" data-shell-setting-key="${escapeHtml(
+                  field.key
+                )}" min="${CHARACTER_SCALE_SLIDER_MIN}" max="${CHARACTER_SCALE_SLIDER_MAX}" list="character-scale-ticks" value="${Math.round(
+                  characterScalePercentToNormalized(draftValue) * 100
+                ) / 100}" ${field.editable ? "" : "disabled"} />
+                <datalist id="character-scale-ticks">
+                  <option value="0" label="0"></option>
+                  <option value="0.25" label="25"></option>
+                  <option value="0.5" label="50"></option>
+                  <option value="0.75" label="75"></option>
+                  <option value="1" label="100"></option>
+                </datalist>
+                <div class="setup-slider-ticks" aria-hidden="true">
+                  <span>0</span>
+                  <span>25</span>
+                  <span>50</span>
+                  <span>75</span>
+                  <span>100</span>
+                </div>
+                <span class="setup-card-copy" data-shell-setting-readout="${escapeHtml(
+                  field.key
+                )}">${escapeHtml(buildCharacterScaleReadout(characterScalePercentToNormalized(draftValue)))}</span>
+              </div>`
+            : `<input class="setup-input" type="number" step="1" data-shell-setting-key="${escapeHtml(
+                field.key
+              )}" min="${escapeHtml(field.validation.min)}" max="${escapeHtml(
+                field.validation.max
+              )}" value="${escapeHtml(draftValue)}" ${field.editable ? "" : "disabled"} />`;
+      const sourceLabel = formatSettingsSource(field.source);
+      const effectiveValueLabel =
+        field.kind === "boolean"
+          ? field.effectiveValue === true
+            ? "Enabled"
+            : "Disabled"
+          : field.key === CHARACTER_SCALE_FIELD_KEY
+            ? formatCharacterScaleValue(field.effectiveValue)
+            : `${field.effectiveValue}%`;
+      const savedValueLabel =
+        field.kind === "boolean"
+          ? field.value === true
+            ? "Enabled"
+            : "Disabled"
+          : field.key === CHARACTER_SCALE_FIELD_KEY
+            ? formatCharacterScaleValue(field.value)
+            : `${field.value}%`;
+      const descriptionMarkup =
+        field.key === CHARACTER_SCALE_FIELD_KEY || !field.description
+          ? ""
+          : `<span class="setup-card-copy">${escapeHtml(field.description)}</span>`;
+      const valueRows =
+        field.envOverridden
+          ? `${buildDetailRow("Saved Value", savedValueLabel)}${buildDetailRow("Effective Value", effectiveValueLabel)}`
+          : buildDetailRow("Value", effectiveValueLabel);
+      return `<div class="setup-field">
+        <span class="setup-label">${escapeHtml(field.label)}</span>
+        ${controlMarkup}
+        ${descriptionMarkup}
+        <div class="settings-detail-list">
+          ${valueRows}
+          ${buildDetailRow("Source", sourceLabel)}
+          ${buildDetailRow("Env Override", field.envOverridden ? "Active" : "None")}
+        </div>
+      </div>`;
+    })
+    .join("");
+
+  const warnings = latestShellSettingsSnapshot.warnings || [];
+  const warningMarkup =
+    warnings.length > 0
+      ? `<ul class="detail-list">${warnings
+          .map((warning) => `<li>${escapeHtml(warning)}</li>`)
+          .join("")}</ul>`
+      : '<span class="setup-card-copy">No settings parse warnings.</span>';
+
+  shellSettingsEditor.innerHTML = [
+    "<h3>Advanced Settings</h3>",
+    '<span class="setup-card-copy">Save writes only bounded keys to your runtime override file.</span>',
+    `<div class="settings-detail-list">${buildDetailRow(
+      "Override File",
+      formatText(latestShellSettingsSnapshot.overridePath, "Unavailable")
+    )}</div>`,
+    `<div class="setup-form-grid">${fieldMarkup}</div>`,
+    '<h4>Warnings</h4>',
+    warningMarkup,
+    `<div class="setup-actions">
+      <button class="setup-action-button" type="button" data-shell-settings-action="reload" ${
+        shellSettingsLoading || shellSettingsSaving ? "disabled" : ""
+      }>Reload Settings</button>
+      <button class="setup-action-button" type="button" data-shell-settings-action="reset" ${
+        shellSettingsLoading || shellSettingsSaving || !shellSettingsDirty ? "disabled" : ""
+      }>Reset Unsaved</button>
+      <button class="setup-action-button" type="button" data-shell-settings-action="save" ${
+        shellSettingsLoading || shellSettingsSaving || !shellSettingsDirty ? "disabled" : ""
+      }>Save Settings</button>
+    </div>`,
+  ].join("");
+  refreshShellSettingsActionButtons();
+}
+
 function formatProvenanceEntryValue(entry) {
   if (entry?.kind === "settings") return formatSettingsSource(entry?.value);
   return formatStatusDetailValue(entry?.value);
@@ -308,6 +645,9 @@ function getDefaultHoverHint() {
   }
   if (activeTab === TAB_IDS.setup) {
     return "Fill details, press Preview, then press Save Setup.";
+  }
+  if (activeTab === TAB_IDS.settings) {
+    return "Adjust advanced settings, then press Save Settings.";
   }
   return "Open a card to control roaming, accessories, or props.";
 }
@@ -502,6 +842,8 @@ function renderStatus() {
       message = "Refresh re-reads bridge, memory, path, and canonical file health.";
     } else if (getActiveTab() === TAB_IDS.setup) {
       message = "Press Preview first, then press Save Setup.";
+    } else if (getActiveTab() === TAB_IDS.settings) {
+      message = "Adjust values, then press Save Settings.";
     } else if (latestShellState.roaming.mode === "zone" && !latestShellState.roaming.zoneRect) {
       message = "Draw a roam zone to keep the pet moving inside a marquee area.";
       tone = "warning";
@@ -520,7 +862,13 @@ function renderHeader() {
   const activeTab = getActiveTab();
   if (shellTitle) {
     shellTitle.textContent =
-      activeTab === TAB_IDS.status ? "Status" : activeTab === TAB_IDS.setup ? "Setup" : "Inventory";
+      activeTab === TAB_IDS.status
+        ? "Status"
+        : activeTab === TAB_IDS.setup
+          ? "Setup"
+          : activeTab === TAB_IDS.settings
+            ? "Settings"
+            : "Inventory";
   }
   if (shellSubtitle) {
     shellSubtitle.textContent =
@@ -528,6 +876,8 @@ function renderHeader() {
         ? "Bridge, memory, canonical files, and runtime path visibility."
         : activeTab === TAB_IDS.setup
           ? "Fill in pet details, preview files, then save."
+          : activeTab === TAB_IDS.settings
+            ? "Bounded runtime controls with explicit save and provenance."
           : "Wardrobe, roaming, and trusted prop controls.";
   }
   if (refreshButton) refreshButton.hidden = activeTab !== TAB_IDS.status;
@@ -547,9 +897,14 @@ function renderTabs() {
     tabSetupButton.classList.toggle("is-active", activeTab === TAB_IDS.setup);
     tabSetupButton.setAttribute("aria-pressed", String(activeTab === TAB_IDS.setup));
   }
+  if (tabSettingsButton) {
+    tabSettingsButton.classList.toggle("is-active", activeTab === TAB_IDS.settings);
+    tabSettingsButton.setAttribute("aria-pressed", String(activeTab === TAB_IDS.settings));
+  }
   if (inventoryPanel) inventoryPanel.classList.toggle("is-active", activeTab === TAB_IDS.inventory);
   if (statusPanel) statusPanel.classList.toggle("is-active", activeTab === TAB_IDS.status);
   if (setupPanel) setupPanel.classList.toggle("is-active", activeTab === TAB_IDS.setup);
+  if (settingsPanel) settingsPanel.classList.toggle("is-active", activeTab === TAB_IDS.settings);
 }
 
 function buildDetailRow(label, value) {
@@ -941,6 +1296,7 @@ function render() {
   renderObservabilityDetail();
   renderSetupTargets();
   renderSetupPresets();
+  renderShellSettingsEditor();
   renderSetupPreview();
   renderHoverHint();
 }
@@ -977,6 +1333,93 @@ async function refreshSetupSnapshot(successMessage = "Setup targets loaded.") {
     setSetupResult(error?.message || "Setup targets failed to load.", "warning");
   } finally {
     setupLoading = false;
+    render();
+  }
+}
+
+async function refreshShellSettingsSnapshot(successMessage = "Advanced settings loaded.") {
+  if (typeof window.inventoryAPI?.getShellSettingsSnapshot !== "function") return;
+  shellSettingsLoading = true;
+  render();
+  try {
+    const snapshot = await window.inventoryAPI.getShellSettingsSnapshot();
+    latestShellSettingsSnapshot = normalizeShellSettingsSnapshot(snapshot);
+    syncShellSettingsDraftFromSnapshot();
+    setStatus(successMessage, "ok");
+  } catch (error) {
+    setStatus(error?.message || "Advanced settings failed to load.", "warning");
+  } finally {
+    shellSettingsLoading = false;
+    render();
+  }
+}
+
+function buildShellSettingsPatchFromDraft() {
+  const patch = {};
+  const fields = latestShellSettingsSnapshot?.fields || [];
+  for (const field of fields) {
+    const hasDraftValue = Object.prototype.hasOwnProperty.call(shellSettingsDraft, field.key);
+    const draftValue = hasDraftValue ? shellSettingsDraft[field.key] : field.value;
+    const normalizedDraftValue = coerceShellSettingsFieldValue(field, draftValue);
+    if (normalizedDraftValue !== field.value) {
+      patch[field.key] = normalizedDraftValue;
+    }
+  }
+  return patch;
+}
+
+async function applyShellSettings() {
+  if (typeof window.inventoryAPI?.applyShellSettingsPatch !== "function") return;
+  if (!latestShellSettingsSnapshot) return;
+  shellSettingsSaving = true;
+  render();
+  try {
+    const patch = buildShellSettingsPatchFromDraft();
+    if (Object.keys(patch).length <= 0) {
+      setStatus("No advanced setting changes to save.", "muted");
+      shellSettingsDirty = false;
+      return;
+    }
+
+    const result = await window.inventoryAPI.applyShellSettingsPatch(patch);
+    if (result?.shellState) {
+      syncShellState(result.shellState);
+    }
+    if (result?.observability) {
+      latestObservabilitySnapshot = result.observability;
+      const preferredSubject =
+        activeObservabilitySubjectId &&
+        subjectExistsInSnapshot(latestObservabilitySnapshot, activeObservabilitySubjectId)
+          ? activeObservabilitySubjectId
+          : pickDefaultObservabilitySubject(latestObservabilitySnapshot);
+      void loadObservabilityDetail(preferredSubject);
+    }
+    if (result?.settingsSnapshot) {
+      latestShellSettingsSnapshot = normalizeShellSettingsSnapshot(result.settingsSnapshot);
+      syncShellSettingsDraftFromSnapshot();
+    } else {
+      await refreshShellSettingsSnapshot("Advanced settings refreshed.");
+    }
+    const rejected = Array.isArray(result?.rejected) ? result.rejected : [];
+    const envOverrides = Array.isArray(result?.envOverrides) ? result.envOverrides : [];
+    if (rejected.length > 0) {
+      const rejectedMessage = rejected
+        .map((entry) => `${entry.key}: ${formatReason(entry.reason || "rejected")}`)
+        .join(" | ");
+      setStatus(`Some settings were rejected: ${rejectedMessage}`, "warning");
+    } else if (envOverrides.length > 0) {
+      setStatus(
+        `Settings saved. Environment overrides still control: ${envOverrides.join(", ")}.`,
+        "warning"
+      );
+    } else {
+      setStatus("Advanced settings saved.", "ok");
+    }
+    shellSettingsDirty = false;
+  } catch (error) {
+    setStatus(error?.message || "Advanced settings save failed.", "warning");
+  } finally {
+    shellSettingsSaving = false;
     render();
   }
 }
@@ -1136,6 +1579,12 @@ function syncShellState(payload) {
   if (getActiveTab() === TAB_IDS.setup && (previousTab !== TAB_IDS.setup || !latestSetupSnapshot)) {
     void refreshSetupSnapshot("Setup targets loaded.");
   }
+  if (
+    getActiveTab() === TAB_IDS.settings &&
+    (previousTab !== TAB_IDS.settings || !latestShellSettingsSnapshot)
+  ) {
+    void refreshShellSettingsSnapshot("Advanced settings loaded.");
+  }
 }
 
 async function initialize() {
@@ -1169,6 +1618,9 @@ tabStatusButton?.addEventListener("click", () => {
 });
 tabSetupButton?.addEventListener("click", () => {
   void switchTab(TAB_IDS.setup);
+});
+tabSettingsButton?.addEventListener("click", () => {
+  void switchTab(TAB_IDS.settings);
 });
 headphonesToggle?.addEventListener("click", () => {
   void runShellAction(SHELL_ACTIONS.toggleHeadphones, latestShellState.wardrobe.hasHeadphones ? "Headphones removed from the pet." : "Headphones equipped on the pet.", "Headphones toggle failed.");
@@ -1286,6 +1738,51 @@ setupPreviewButton?.addEventListener("click", () => {
 });
 setupApplyButton?.addEventListener("click", () => {
   void applySetup();
+});
+
+shellSettingsEditor?.addEventListener("input", (event) => {
+  const input = event.target?.closest?.("[data-shell-setting-key]");
+  if (!input) return;
+  const key = input.dataset?.shellSettingKey;
+  if (!key) return;
+  const field = getShellSettingsFieldByKey(key);
+  if (!field) return;
+  shellSettingsDraft[key] = coerceShellSettingsFieldValue(field, input.value);
+  shellSettingsDirty = true;
+  updateCharacterScaleReadout(input);
+  refreshShellSettingsActionButtons();
+});
+
+shellSettingsEditor?.addEventListener("change", (event) => {
+  const input = event.target?.closest?.("[data-shell-setting-key]");
+  if (!input) return;
+  const key = input.dataset?.shellSettingKey;
+  if (!key) return;
+  const field = getShellSettingsFieldByKey(key);
+  if (!field) return;
+  shellSettingsDraft[key] = coerceShellSettingsFieldValue(field, input.value);
+  shellSettingsDirty = true;
+  updateCharacterScaleReadout(input);
+  refreshShellSettingsActionButtons();
+});
+
+shellSettingsEditor?.addEventListener("click", (event) => {
+  const button = event.target?.closest?.("[data-shell-settings-action]");
+  if (!button) return;
+  const action = button.dataset?.shellSettingsAction;
+  if (action === "reload") {
+    void refreshShellSettingsSnapshot("Advanced settings loaded.");
+    return;
+  }
+  if (action === "reset") {
+    syncShellSettingsDraftFromSnapshot();
+    renderShellSettingsEditor();
+    setStatus("Advanced settings changes reset.", "muted");
+    return;
+  }
+  if (action === "save") {
+    void applyShellSettings();
+  }
 });
 
 window.addEventListener("keydown", (event) => {

@@ -17,6 +17,7 @@ const SHELL_WINDOW_TABS = Object.freeze({
   inventory: "inventory",
   status: "status",
   setup: "setup",
+  settings: "settings",
 });
 const OBSERVABILITY_SUBJECT_IDS = Object.freeze({
   bridge: "bridge",
@@ -48,6 +49,9 @@ function normalizeShellWindowTab(value, fallback = SHELL_WINDOW_TABS.inventory) 
   if (normalized === SHELL_WINDOW_TABS.setup) {
     return SHELL_WINDOW_TABS.setup;
   }
+  if (normalized === SHELL_WINDOW_TABS.settings) {
+    return SHELL_WINDOW_TABS.settings;
+  }
   return SHELL_WINDOW_TABS.inventory;
 }
 
@@ -58,6 +62,9 @@ function resolveShellWindowTabForAction(actionId, fallback = SHELL_WINDOW_TABS.i
   }
   if (normalizedActionId === "open-setup") {
     return SHELL_WINDOW_TABS.setup;
+  }
+  if (normalizedActionId === "open-settings") {
+    return SHELL_WINDOW_TABS.settings;
   }
   if (normalizedActionId === "open-inventory") {
     return SHELL_WINDOW_TABS.inventory;

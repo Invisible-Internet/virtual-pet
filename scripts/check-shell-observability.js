@@ -179,6 +179,11 @@ function run() {
     SHELL_WINDOW_TABS.setup,
     "setup action should route to setup tab"
   );
+  assertEqual(
+    resolveShellWindowTabForAction("open-settings", SHELL_WINDOW_TABS.inventory),
+    SHELL_WINDOW_TABS.settings,
+    "settings action should route to settings tab"
+  );
 
   fs.rmSync(tempRoot, { recursive: true, force: true });
   console.log("[shell-observability] checks passed");
