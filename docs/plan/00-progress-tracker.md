@@ -33,16 +33,16 @@ Historical v1 deliverables keep their original wording and remain archived histo
   - operator-visible demo passes and evidence is logged
 
 ## Current Deliverable
-- Current Deliverable: `12a-real-openclaw-dialog-parity`
-- Workflow State: `implementing`
-- Current Status: `implementing`
-- Last Completed Deliverable: `11d-settings-editor-and-service-controls`
-- Next Detailed Target: `12a-real-openclaw-dialog-parity` (active)
-- Next Queued Target: `12c-guarded-openclaw-pet-command-lane`
+- Current Deliverable: `none`
+- Workflow State: `idle`
+- Current Status: `accepted`
+- Last Completed Deliverable: `12b-chat-shell-and-conversation-presence`
+- Next Detailed Target: `12c-guarded-openclaw-pet-command-lane`
+- Next Queued Target: `13c-persona-aware-offline-dialog-and-proactive-behavior` (proactive robustness follow-up fit)
 - Current Gate State:
-  - `Spec Gate`: `passed` (`2026-03-05`)
-  - `Build Gate`: `passed` (`2026-03-05`)
-  - `Acceptance Gate`: `not_started`
+  - `Spec Gate`: `n/a`
+  - `Build Gate`: `n/a`
+  - `Acceptance Gate`: `n/a`
 
 ## Post-v1 Family Rough-In
 Locked family order:
@@ -57,9 +57,10 @@ Planning state:
 - `11b` is now accepted and closed.
 - `11c` is now accepted and closed.
 - `11d-settings-editor-and-service-controls` is now accepted and closed.
-- `12a-real-openclaw-dialog-parity` is now active in `implementing` (`Spec Gate=passed`, `Build Gate=passed`).
-- `12c-guarded-openclaw-pet-command-lane` now has a drafted auth/authorization spec and is queued as the next follow-on `12` slice (reprioritized by operator).
-- `12b-chat-shell-and-conversation-presence` remains queued after `12c`.
+- `12a-real-openclaw-dialog-parity` is now accepted and closed (`Spec/Build/Acceptance Gates passed`).
+- `12b-chat-shell-and-conversation-presence` is now accepted and closed (`Spec/Build/Acceptance Gates passed`).
+- `12c-guarded-openclaw-pet-command-lane` remains queued after `12b` with explicit quick-pickup notes captured in both `12b` and `12c` docs.
+- `13c-persona-aware-offline-dialog-and-proactive-behavior` is the best-fit family placeholder for deeper proactive timing/style robustness after command-lane work.
 - `12` through `15` remain rough placeholders and are not implementation-ready yet.
 - Full family notes live in [`11-15-post-v1-roadmap-rough-in.md`](./11-15-post-v1-roadmap-rough-in.md).
 
@@ -72,14 +73,50 @@ Planning state:
 6. Pass `Spec Gate` before implementation begins.
 
 ## Next 3 Actions
-1. Run the `12a` operator demo/failure script on the real OpenClaw `ws` path (including gateway-policy relay behavior) and collect acceptance evidence.
-2. Advance `12c-guarded-openclaw-pet-command-lane` from drafted spec to `Spec Gate=passed`.
-3. Start first `12c` implementation slice after `12a` acceptance closes.
+1. Promote `12c-guarded-openclaw-pet-command-lane` to active and pass `Spec Gate`.
+2. Implement first `12c` allowlist slice (`dialog.injectAnnouncement`, `shell.openStatus`) with deterministic checks.
+3. Keep proactive robustness scoped for the `13c-persona-aware-offline-dialog-and-proactive-behavior` deliverable (timing windows, context triggers, quiet-hours policy, and anti-spam pacing).
 
 ## Blockers
-- None currently; first `12a` runtime slice is implemented and ready for operator demo/iteration.
+- None currently.
 
 ## Last Session Summary
+- Closed `12b-chat-shell-and-conversation-presence` as accepted after operator demo/failure run:
+  - operator-confirmed tray `Open Chat...` routing, chat-open locomotion hold, and bounded proactive suppression behavior
+  - log evidence confirms proactive cooldown policy fired on ~90-second cadence:
+    - `evt-mmczx8q2` -> `evt-mmczz6e7`: `90293ms`
+    - `evt-mmczz6e7` -> `evt-mmd013z3`: `90176ms`
+  - follow-up captured: cadence is technically compliant but feels frequent; tune robustness in future proactive-focused slice
+- Implemented first `12b-chat-shell-and-conversation-presence` runtime slice:
+  - added tray/menu action `Open Chat...` routing to existing dialog surface
+  - added renderer->main dialog presence IPC and main-authoritative conversation hold during dialog-open
+  - added bounded proactive conversation-start lane with deterministic suppression and cooldown behavior:
+    - `suppressed_dialog_open`
+    - `suppressed_input_active`
+    - `suppressed_state_ineligible`
+    - `suppressed_cooldown`
+  - added shell snapshot visibility fields for dialog hold/proactive cooldown state
+  - extended deterministic checks:
+    - `scripts/check-chat-shell-presence.js` (new)
+    - `scripts/check-contract-router.js` proactive-check coverage
+    - `scripts/run-acceptance-matrix.js` row `D12b-chat-shell-presence`
+  - verification run:
+    - `npm run check:syntax`
+    - `npm run check:contracts`
+    - `npm run check:acceptance` -> `19/19 automated checks passed`
+- Reprioritized family `12` sequencing to run `12b` next:
+  - created [`12b-chat-shell-and-conversation-presence.md`](./12b-chat-shell-and-conversation-presence.md) from template
+  - set `12b` as active deliverable in `specifying`
+  - captured explicit `12c` quick-pickup checklist in `12b` so the command-lane slice can restart immediately after `12b`
+  - kept `12c` queued (not discarded) and documented as next queued target
+- Closed `12a-real-openclaw-dialog-parity` as accepted after operator-confirmed demo:
+  - online dialog path verified
+  - timeout/offline fallback path verified
+  - beep word reveal and animated `...` wait indicator verified
+  - deliverable gates now complete:
+    - `Spec Gate` passed
+    - `Build Gate` passed
+    - `Acceptance Gate` passed (`2026-03-05`)
 - Implemented the `12a` real OpenClaw WebSocket transport fix for repeated offline fallback replies:
   - added `openclaw.transport=ws` runtime support in `openclaw-bridge`, `settings-runtime`, `main`, and shell observability.
   - added direct gateway WebSocket request handling for dialog/status bridge routes.
@@ -271,4 +308,4 @@ Planning state:
   - D10 closed the v1 roadmap as a doc-only research deliverable
   - detailed v1 session history is preserved in [`archive/00-progress-tracker-v1-history.md`](./archive/00-progress-tracker-v1-history.md)
 - Shipped outcome note for this session:
-  - visible app/runtime change delivered: freeform dialog no longer hard-falls back offline when HTTP `/bridge/dialog` is unavailable; `ws` OpenClaw bridge path is now active with gateway-policy relay fallback.
+  - visible app/runtime change delivered and operator-accepted: `12a` closed with real OpenClaw dialog parity, `ws` bridge path + fallback behavior, and dialog beep/thinking feedback.

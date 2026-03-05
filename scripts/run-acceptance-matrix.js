@@ -106,6 +106,12 @@ const CASES = Object.freeze([
     script: "scripts/check-dialog-openclaw-parity.js",
   },
   {
+    id: "D12b-chat-shell-presence",
+    deliverable: "12b-chat-shell-and-conversation-presence",
+    scenario: "Tray open-chat routing, dialog presence hold wiring, and proactive suppression/cooldown contracts remain deterministic.",
+    script: "scripts/check-chat-shell-presence.js",
+  },
+  {
     id: "Layout-assets",
     deliverable: "core-renderer-assets",
     scenario: "Layout bounds and required sprite assets remain internally consistent.",

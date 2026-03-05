@@ -194,6 +194,26 @@ class PetContractRouter {
       ];
     }
 
+    if (event.type === "PROACTIVE_CHECK") {
+      return [
+        {
+          type: "INTENT_PROACTIVE_ANNOUNCEMENT",
+          reason: "proactive_conversation_check",
+          correlationId: event.correlationId,
+          ts: this._now(),
+          payload: {
+            reason: normalizeText(event.payload?.reason) || "proactive_conversation",
+            text:
+              extractUserInputText(event.payload) ||
+              normalizeText(event.payload?.announcementText) ||
+              "I am here if you want to chat.",
+            priority: normalizeText(event.payload?.priority) || "low",
+            channel: normalizeText(event.payload?.channel) || "dialog",
+          },
+        },
+      ];
+    }
+
     if (event.type === "EXT_PROP_INTERACTED") {
       return [
         {
@@ -298,17 +318,34 @@ class PetContractRouter {
 
     if (intent.type === "INTENT_PROACTIVE_ANNOUNCEMENT") {
       const reason = normalizeText(intent.payload?.reason) || "general";
-      const cooldownMap = asCooldownMap(context.announcementCooldownMsByReason);
-      const cooldownMs = asNumber(cooldownMap[reason], this._announcementCooldownMs);
       const nowMs = this._now();
-      const lastSentMs = this._announcementLastSentByReason.get(reason) || 0;
-      if (nowMs - lastSentMs < cooldownMs) {
+      const suppressedReason = normalizeText(context.announcementSuppressedReason);
+      if (suppressedReason) {
         return [
           {
             type: "PET_ANNOUNCEMENT_SKIPPED",
             reason,
-            skipReason: "cooldown_active",
+            skipReason: suppressedReason,
+            source,
+            correlationId: intent.correlationId,
+            ts: nowMs,
+          },
+        ];
+      }
+
+      const cooldownMap = asCooldownMap(context.announcementCooldownMsByReason);
+      const cooldownMs = asNumber(cooldownMap[reason], this._announcementCooldownMs);
+      const lastSentMs = this._announcementLastSentByReason.get(reason) || 0;
+      if (nowMs - lastSentMs < cooldownMs) {
+        const cooldownSkipReason =
+          normalizeText(context.announcementCooldownSkipReason) || "cooldown_active";
+        return [
+          {
+            type: "PET_ANNOUNCEMENT_SKIPPED",
+            reason,
+            skipReason: cooldownSkipReason,
             cooldownMs,
+            cooldownRemainingMs: Math.max(0, cooldownMs - (nowMs - lastSentMs)),
             source,
             correlationId: intent.correlationId,
             ts: nowMs,
@@ -321,7 +358,7 @@ class PetContractRouter {
         {
           type: "PET_ANNOUNCEMENT",
           reason,
-          channel: "bubble",
+          channel: normalizeText(intent.payload?.channel) || "bubble",
           priority: normalizeText(intent.payload?.priority) || "low",
           source,
           text:

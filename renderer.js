@@ -166,6 +166,7 @@ const DIALOG_WORD_BEEP_MIN_GAP_MS = 46;
 const DIALOG_WORD_BEEP_OSC_FREQ_HZ = 820;
 const DIALOG_WORD_BEEP_OSC_DURATION_SEC = 0.08;
 const SHELL_ACTIONS = Object.freeze({
+  openChat: "open-chat",
   openInventory: "open-inventory",
   openStatus: "open-status",
   openSetup: "open-setup",
@@ -196,6 +197,14 @@ const DEFAULT_SHELL_STATE = Object.freeze({
   }),
   dialog: Object.freeze({
     alwaysShowBubble: true,
+    surfaceOpen: false,
+    conversationHoldActive: false,
+    inputActive: false,
+    proactiveCooldownRemainingMs: 0,
+    proactiveEligible: false,
+    proactiveSuppressionReason: "",
+    proactiveLastSuppressedAtMs: 0,
+    proactiveNextCheckAtMs: 0,
   }),
   inventoryUi: Object.freeze({
     open: false,
@@ -464,6 +473,24 @@ function normalizeShellState(payload = {}) {
     },
     dialog: {
       alwaysShowBubble: dialog.alwaysShowBubble !== false,
+      surfaceOpen: Boolean(dialog.surfaceOpen),
+      conversationHoldActive: Boolean(dialog.conversationHoldActive),
+      inputActive: Boolean(dialog.inputActive),
+      proactiveCooldownRemainingMs: Number.isFinite(Number(dialog.proactiveCooldownRemainingMs))
+        ? Math.max(0, Math.round(Number(dialog.proactiveCooldownRemainingMs)))
+        : 0,
+      proactiveEligible: Boolean(dialog.proactiveEligible),
+      proactiveSuppressionReason:
+        typeof dialog.proactiveSuppressionReason === "string" &&
+        dialog.proactiveSuppressionReason.trim().length > 0
+          ? dialog.proactiveSuppressionReason.trim()
+          : "",
+      proactiveLastSuppressedAtMs: Number.isFinite(Number(dialog.proactiveLastSuppressedAtMs))
+        ? Math.max(0, Math.round(Number(dialog.proactiveLastSuppressedAtMs)))
+        : 0,
+      proactiveNextCheckAtMs: Number.isFinite(Number(dialog.proactiveNextCheckAtMs))
+        ? Math.max(0, Math.round(Number(dialog.proactiveNextCheckAtMs)))
+        : 0,
     },
     inventoryUi: {
       open: Boolean(inventoryUi.open),
@@ -850,9 +877,18 @@ function setDialogPending(pending) {
   renderDialogBubble();
 }
 
+function reportDialogSurfaceOpen(open, reason = "renderer") {
+  if (typeof window.petAPI.setDialogSurfaceOpen !== "function") return;
+  window.petAPI.setDialogSurfaceOpen(Boolean(open), reason);
+}
+
 function openDialogSurface(options = {}) {
+  const wasOpen = dialogSurfaceOpen;
   dialogSurfaceOpen = true;
   syncDialogSurfaceState();
+  if (!wasOpen) {
+    reportDialogSurfaceOpen(true, options?.reason || "renderer_open");
+  }
   setMousePassthrough(false);
   if (dialogInput) {
     if (
@@ -869,9 +905,11 @@ function openDialogSurface(options = {}) {
   }
 }
 
-function closeDialogSurface() {
+function closeDialogSurface(reason = "renderer_close") {
+  if (!dialogSurfaceOpen) return;
   dialogSurfaceOpen = false;
   syncDialogSurfaceState();
+  reportDialogSurfaceOpen(false, reason);
   if (dialogInput) {
     dialogInput.blur();
   }
@@ -1300,7 +1338,7 @@ function onMovementKeyDown(event) {
 
   if (editableTarget) {
     if (key === "escape") {
-      closeDialogSurface();
+      closeDialogSurface("hotkey_escape_editable");
       event.preventDefault();
     }
     return;
@@ -1309,13 +1347,14 @@ function onMovementKeyDown(event) {
   if ((key === "enter" || key === "/") && !event.repeat) {
     openDialogSurface({
       prefill: key === "/" ? "/" : "",
+      reason: "hotkey_open",
     });
     event.preventDefault();
     return;
   }
 
   if (key === "escape" && dialogSurfaceOpen) {
-    closeDialogSurface();
+    closeDialogSurface("hotkey_escape");
     event.preventDefault();
     return;
   }
@@ -3277,7 +3316,11 @@ function drawDebugOverlay(w, h) {
       latestShellState?.wardrobe?.activeAccessories?.join("+") || "none"
     } prop=${latestShellState?.inventory?.quickProps?.join("+") || "none"} tray=${
       latestShellState?.tray?.available ? "ready" : latestShellState?.devFallback?.enabled ? "fallback" : "missing"
-    }`,
+    } hold=${latestShellState?.dialog?.conversationHoldActive ? "on" : "off"} proactive=${
+      latestShellState?.dialog?.proactiveEligible
+        ? "eligible"
+        : latestShellState?.dialog?.proactiveSuppressionReason || "cooldown"
+    } cd=${latestShellState?.dialog?.proactiveCooldownRemainingMs || 0}ms`,
     `talk: ${isTalkFeedbackActive() ? "active" : "idle"} source=${activeBubbleMessage?.source || "n/a"} fallback=${activeBubbleMessage?.fallbackMode || "none"}`,
     `memory: ${
       latestMemorySnapshot
@@ -3830,6 +3873,14 @@ async function init() {
     });
   }
 
+  if (typeof window.petAPI.onDialogOpenRequest === "function") {
+    window.petAPI.onDialogOpenRequest(() => {
+      openDialogSurface({
+        reason: "shell_action",
+      });
+    });
+  }
+
   if (dialogForm) {
     dialogForm.addEventListener("submit", (event) => {
       event.preventDefault();
@@ -3839,7 +3890,7 @@ async function init() {
 
   if (dialogCloseButton) {
     dialogCloseButton.addEventListener("click", () => {
-      closeDialogSurface();
+      closeDialogSurface("button_close");
     });
   }
 

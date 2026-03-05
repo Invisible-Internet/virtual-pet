@@ -124,20 +124,20 @@ Historical v1 deliverables keep their original status wording and are not retrof
 - `accepted` is the only terminal state for future post-v1 deliverables.
 
 ### Current Workflow Snapshot
-- Current Deliverable: `12a-real-openclaw-dialog-parity`
-- Workflow State: `implementing`
-- Current Status: `implementing`
-- Last Completed Deliverable: `11d-settings-editor-and-service-controls`
-- Next Detailed Target: `12a-real-openclaw-dialog-parity` (active)
-- Next Queued Target: `12c-guarded-openclaw-pet-command-lane`
+- Current Deliverable: `none`
+- Workflow State: `idle`
+- Current Status: `accepted`
+- Last Completed Deliverable: `12b-chat-shell-and-conversation-presence`
+- Next Detailed Target: `12c-guarded-openclaw-pet-command-lane`
+- Next Queued Target: `13c-persona-aware-offline-dialog-and-proactive-behavior` (proactive robustness follow-up fit)
 - Current Gate State:
-  - `Spec Gate`: `passed` (`2026-03-05`)
-  - `Build Gate`: `passed` (`2026-03-05`)
-  - `Acceptance Gate`: `not_started`
+  - `Spec Gate`: `n/a`
+  - `Build Gate`: `n/a`
+  - `Acceptance Gate`: `n/a`
 - Historical Note:
   - D01-D10 are complete historical v1 records.
   - Detailed v1 session history lives in `docs/plan/archive/00-progress-tracker-v1-history.md`.
-- Active `12a` implementation outcome:
+- Last completed `12a` outcome:
   - Dialog bubble now reveals pet reply text one word at a time.
   - While revealing words, the app plays a short beep per word:
     - primary file: `assets/audio/dialog-word-beep.wav`
@@ -158,11 +158,30 @@ Historical v1 deliverables keep their original status wording and are not retrof
     - `npm run check:syntax`
     - `npm run check:contracts`
     - `npm run check:acceptance` -> `18/18`
+  - `Acceptance Gate` passed on `2026-03-05` (operator-accepted closure).
+  - Shipped outcome: visible app/runtime change delivered and accepted; dialog parity is now real OpenClaw `ws` path with deterministic timeout/offline fallback and beep/thinking feedback in the existing dialog surface.
+- Last completed `12b` outcome:
+  - tray/menu `Open Chat...` now opens the dialog directly.
+  - renderer reports dialog open/close presence to main; roaming locomotion now holds while chat is open and resumes on close.
+  - proactive conversation checks now run in a bounded lane with deterministic suppression/cooldown reasons:
+    - `suppressed_dialog_open`
+    - `suppressed_input_active`
+    - `suppressed_state_ineligible`
+    - `suppressed_cooldown`
+  - deterministic coverage added:
+    - `scripts/check-chat-shell-presence.js`
+    - acceptance row `D12b-chat-shell-presence`
+  - gate outcome:
+    - `Spec Gate` passed on `2026-03-05`
+    - `Build Gate` passed on `2026-03-05` (`npm run check:syntax`, `npm run check:contracts`, `npm run check:acceptance` -> `19/19`)
+    - `Acceptance Gate` passed on `2026-03-05` (operator-accepted closure)
+  - follow-up note:
+    - proactive cadence is currently policy-compliant but still feels frequent to operator; deeper timing/context robustness should be handled in `13c-persona-aware-offline-dialog-and-proactive-behavior`.
 - Next `12c` spec outcome:
   - Draft deliverable file `docs/plan/12c-guarded-openclaw-pet-command-lane.md` now exists.
   - Auth model defines signed command envelope (`vp-hmac-v1`) with nonce replay protection and expiry checks.
   - First-slice allowlist is bounded to safe visible actions (`dialog.injectAnnouncement`, `shell.openStatus`).
-  - Slice remains queued until promoted to active work after `12a` acceptance.
+  - Slice is queued after `12b` and should resume from the documented quick-pickup checklist.
 - Last completed `11d` outcome:
   - Shared-shell `Advanced Settings` now lives on a dedicated `Settings` tab (separate from `Setup`).
   - Tray now includes `Advanced Settings...` routing into the shared shell `Settings` tab.
@@ -236,9 +255,10 @@ Historical v1 deliverables keep their original status wording and are not retrof
   - `11` now has accepted baselines through `11a` and `11b`.
   - `11c-repair-actions-and-provenance-visibility` is accepted and closed.
   - `11d-settings-editor-and-service-controls` is accepted and closed.
-  - `12a-real-openclaw-dialog-parity` is now active in `implementing` with `Spec Gate=passed` and `Build Gate=passed`.
-  - `12c-guarded-openclaw-pet-command-lane` is queued as the next follow-on `12` slice (reprioritized).
-  - `12b-chat-shell-and-conversation-presence` remains queued after `12c`.
+  - `12a-real-openclaw-dialog-parity` is accepted and closed (`Spec/Build/Acceptance Gates passed`).
+  - `12b-chat-shell-and-conversation-presence` is accepted and closed (`Spec/Build/Acceptance Gates passed`).
+  - `12c-guarded-openclaw-pet-command-lane` remains the next detailed target.
+  - `13c-persona-aware-offline-dialog-and-proactive-behavior` is the best-fit follow-up placeholder for proactive timing/style robustness.
   - `12` through `15` remain rough placeholders and must not be treated as spec-passed deliverables yet.
 
 ### Session-End Sync Rule

@@ -207,6 +207,11 @@ const FLING_CONFIG = FLING_PRESETS[ACTIVE_FLING_PRESET];
 const CAPABILITY_CONTRACT_VERSION = "1.0";
 const DIALOG_HISTORY_LIMIT = 24;
 const DIALOG_TALK_FEEDBACK_MODE = "bubble_pulse";
+const PROACTIVE_CONVERSATION_REASON = "proactive_conversation";
+const PROACTIVE_CONVERSATION_COOLDOWN_MS = 90000;
+const PROACTIVE_CONVERSATION_START_DELAY_MS = 20000;
+const PROACTIVE_CONVERSATION_CHECK_INTERVAL_MS = 2000;
+const PROACTIVE_CONVERSATION_SUPPRESSED_RETRY_MS = 6000;
 const BRIDGE_RECENT_DIALOG_TURNS_LIMIT = 6;
 const BRIDGE_RECENT_DIALOG_TEXT_LIMIT = 140;
 const BRIDGE_RECENT_DIALOG_SUMMARY_LIMIT = 360;
@@ -228,6 +233,7 @@ const CAPABILITY_TEST_FLAGS = Object.freeze({
   openclawFail: process.env.PET_FORCE_OPENCLAW_FAIL === "1",
 });
 const SHELL_ACTIONS = Object.freeze({
+  openChat: "open-chat",
   openInventory: "open-inventory",
   openStatus: "open-status",
   openSetup: "open-setup",
@@ -264,6 +270,7 @@ let lastMotionSample = null;
 let cursorTimer = null;
 let localMediaPollTimer = null;
 let freshRssPollTimer = null;
+let proactiveConversationTimer = null;
 let dragClampLatch = createDragClampLatch();
 let activePetBoundsUpdatedAtMs = 0;
 let lastMotionPayload = null;
@@ -307,6 +314,18 @@ let zoneSelectorWin = null;
 let roamTimer = null;
 let appIsQuitting = false;
 const propWindows = new Map();
+const dialogPresence = {
+  surfaceOpen: false,
+  updatedAtMs: 0,
+};
+let dialogUserMessageInFlightCount = 0;
+const proactiveConversationState = {
+  nextCheckAtMs: 0,
+  lastCheckedAtMs: 0,
+  lastAnnouncementAtMs: 0,
+  lastSuppressedReason: "none",
+  lastSuppressedAtMs: 0,
+};
 
 const flingState = {
   active: false,
@@ -1749,9 +1768,11 @@ function buildShellStateSnapshot() {
   const accessories = settings.wardrobe?.activeAccessories || [];
   const quickProps = settings.inventory?.quickProps || [];
   const trayAvailable = Boolean(shellTray);
+  const nowMs = Date.now();
+  const proactiveCooldownRemainingMs = getProactiveCooldownRemainingMs(nowMs);
   return {
     kind: "shellState",
-    ts: Date.now(),
+    ts: nowMs,
     roaming: {
       mode: settings.roaming?.mode || ROAMING_MODES.desktop,
       zone: settings.roaming?.zone || DEFAULT_ROAMING_ZONE,
@@ -1773,6 +1794,18 @@ function buildShellStateSnapshot() {
     },
     dialog: {
       alwaysShowBubble: settings.dialog?.alwaysShowBubble !== false,
+      surfaceOpen: isDialogSurfaceOpen(),
+      conversationHoldActive: isConversationHoldActive(),
+      inputActive: isDialogInputActive(),
+      proactiveCooldownRemainingMs,
+      proactiveEligible: !getProactiveSuppressionReason() && proactiveCooldownRemainingMs <= 0,
+      proactiveSuppressionReason:
+        getProactiveSuppressionReason() ||
+        (proactiveConversationState.lastSuppressedReason === "none"
+          ? ""
+          : proactiveConversationState.lastSuppressedReason),
+      proactiveLastSuppressedAtMs: proactiveConversationState.lastSuppressedAtMs || 0,
+      proactiveNextCheckAtMs: proactiveConversationState.nextCheckAtMs || 0,
     },
     inventoryUi: {
       open: Boolean(inventoryWin && !inventoryWin.isDestroyed()),
@@ -2306,6 +2339,43 @@ function isAmbientStateId(stateId) {
   return stateId === "Idle" || stateId === "Roam" || stateId === "WatchMode";
 }
 
+function isDialogSurfaceOpen() {
+  return dialogPresence.surfaceOpen === true;
+}
+
+function isConversationHoldActive() {
+  return isDialogSurfaceOpen();
+}
+
+function isDialogInputActive() {
+  return dialogUserMessageInFlightCount > 0;
+}
+
+function getProactiveCooldownRemainingMs(nowMs = Date.now()) {
+  const elapsedMs = Math.max(0, nowMs - proactiveConversationState.lastAnnouncementAtMs);
+  if (elapsedMs >= PROACTIVE_CONVERSATION_COOLDOWN_MS) return 0;
+  return PROACTIVE_CONVERSATION_COOLDOWN_MS - elapsedMs;
+}
+
+function getProactiveSuppressionReason() {
+  if (isDialogSurfaceOpen()) return "suppressed_dialog_open";
+  if (isDialogInputActive()) return "suppressed_input_active";
+  if (!isAmbientStateId(latestStateSnapshot?.currentState || "Idle")) {
+    return "suppressed_state_ineligible";
+  }
+  return "";
+}
+
+function buildProactiveConversationText() {
+  if (isMusicStateId(latestStateSnapshot?.currentState)) {
+    return "Want to talk about what is playing right now?";
+  }
+  if (latestStateSnapshot?.currentState === "Reading") {
+    return "I can chat about what I am reading if you want.";
+  }
+  return "Want to chat for a minute?";
+}
+
 function pickAmbientRestStateId() {
   return Math.random() < 0.55 ? "WatchMode" : "Idle";
 }
@@ -2783,10 +2853,19 @@ function finishRoamLeg(reason = "roam_leg_complete", nowMs = Date.now()) {
 function shouldRoamAutonomously() {
   if (!win || win.isDestroyed()) return false;
   if (dragging || flingState.active) return false;
+  if (isConversationHoldActive()) return false;
   return isAmbientStateId(latestStateSnapshot?.currentState || "Idle");
 }
 
 function stepRoam() {
+  if (isConversationHoldActive()) {
+    cancelRoamMotion();
+    if (latestStateSnapshot?.currentState === "Roam") {
+      enterAmbientRestState("dialog_surface_open_hold", getPreferredRoamStateId(latestShellState));
+    }
+    return;
+  }
+
   if (!shouldRoamAutonomously()) {
     cancelRoamMotion();
     return;
@@ -3476,6 +3555,124 @@ function syncShellRoamingState(reason = "shell_roam_sync", force = false) {
   return latestStateSnapshot;
 }
 
+function updateProactiveConversationStateFromResult(result, nowMs = Date.now()) {
+  proactiveConversationState.lastCheckedAtMs = nowMs;
+  const suggestion = Array.isArray(result?.suggestions)
+    ? result.suggestions.find(
+        (entry) => entry?.type === "PET_ANNOUNCEMENT" || entry?.type === "PET_ANNOUNCEMENT_SKIPPED"
+      ) || null
+    : null;
+
+  if (!suggestion) {
+    proactiveConversationState.nextCheckAtMs = nowMs + PROACTIVE_CONVERSATION_SUPPRESSED_RETRY_MS;
+    return;
+  }
+
+  if (suggestion.type === "PET_ANNOUNCEMENT") {
+    proactiveConversationState.lastAnnouncementAtMs = nowMs;
+    proactiveConversationState.lastSuppressedReason = "none";
+    proactiveConversationState.lastSuppressedAtMs = 0;
+    proactiveConversationState.nextCheckAtMs = nowMs + PROACTIVE_CONVERSATION_COOLDOWN_MS;
+    return;
+  }
+
+  const skipReason =
+    typeof suggestion.skipReason === "string" && suggestion.skipReason.trim().length > 0
+      ? suggestion.skipReason.trim()
+      : "unknown";
+  proactiveConversationState.lastSuppressedReason = skipReason;
+  proactiveConversationState.lastSuppressedAtMs = nowMs;
+  if (skipReason === "suppressed_cooldown") {
+    const remainingMs = Number.isFinite(Number(suggestion.cooldownRemainingMs))
+      ? Math.max(0, Math.round(Number(suggestion.cooldownRemainingMs)))
+      : getProactiveCooldownRemainingMs(nowMs);
+    proactiveConversationState.nextCheckAtMs =
+      nowMs + Math.max(PROACTIVE_CONVERSATION_SUPPRESSED_RETRY_MS, remainingMs);
+    return;
+  }
+
+  proactiveConversationState.nextCheckAtMs = nowMs + PROACTIVE_CONVERSATION_SUPPRESSED_RETRY_MS;
+}
+
+function setDialogSurfaceOpen(open, reason = "renderer") {
+  const nowMs = Date.now();
+  const nextOpen = Boolean(open);
+  if (dialogPresence.surfaceOpen === nextOpen) {
+    return latestShellState || buildShellStateSnapshot();
+  }
+  dialogPresence.surfaceOpen = nextOpen;
+  dialogPresence.updatedAtMs = nowMs;
+
+  if (nextOpen) {
+    cancelRoamMotion();
+    if (latestStateSnapshot?.currentState === "Roam") {
+      enterAmbientRestState("dialog_surface_open_hold", getPreferredRoamStateId(latestShellState));
+    }
+  } else if (proactiveConversationState.lastSuppressedReason === "suppressed_dialog_open") {
+    proactiveConversationState.nextCheckAtMs = Math.min(
+      proactiveConversationState.nextCheckAtMs || nowMs,
+      nowMs + 800
+    );
+  }
+
+  if (DIAGNOSTICS_ENABLED) {
+    logDiagnostics("dialog-surface-open", {
+      open: nextOpen,
+      reason,
+    });
+  }
+  return emitShellState(buildShellStateSnapshot());
+}
+
+async function runProactiveConversationCheck(trigger = "interval") {
+  const nowMs = Date.now();
+  if (!contractRouter || nowMs < proactiveConversationState.nextCheckAtMs) return null;
+  const context = {
+    source: deriveContractSource(),
+    statusText: buildStatusText(),
+    announcementSuppressedReason: getProactiveSuppressionReason(),
+    announcementCooldownSkipReason: "suppressed_cooldown",
+    announcementCooldownMsByReason: {
+      [PROACTIVE_CONVERSATION_REASON]: PROACTIVE_CONVERSATION_COOLDOWN_MS,
+    },
+  };
+  const result = await processPetContractEvent(
+    "PROACTIVE_CHECK",
+    {
+      reason: PROACTIVE_CONVERSATION_REASON,
+      text: buildProactiveConversationText(),
+      priority: "low",
+      channel: "dialog",
+    },
+    {
+      correlationId: createContractCorrelationId(),
+      trigger,
+      ...context,
+    }
+  );
+  updateProactiveConversationStateFromResult(result, nowMs);
+  emitShellState(buildShellStateSnapshot());
+  return result;
+}
+
+function startProactiveConversationController() {
+  if (proactiveConversationTimer) {
+    clearInterval(proactiveConversationTimer);
+    proactiveConversationTimer = null;
+  }
+  const nowMs = Date.now();
+  proactiveConversationState.nextCheckAtMs = nowMs + PROACTIVE_CONVERSATION_START_DELAY_MS;
+  proactiveConversationState.lastCheckedAtMs = 0;
+  proactiveConversationState.lastAnnouncementAtMs = 0;
+  proactiveConversationState.lastSuppressedReason = "none";
+  proactiveConversationState.lastSuppressedAtMs = 0;
+  proactiveConversationTimer = setInterval(() => {
+    void runProactiveConversationCheck("interval").catch((error) => {
+      console.warn(`[pet-contract] proactive-check error: ${error?.message || String(error)}`);
+    });
+  }, PROACTIVE_CONVERSATION_CHECK_INTERVAL_MS);
+}
+
 function refreshShellTrayMenu() {
   const snapshot = buildShellStateSnapshot();
   if (!shellTray) {
@@ -3506,6 +3703,12 @@ function refreshShellTrayMenu() {
       label: "Advanced Settings...",
       click: () => {
         void runShellAction(SHELL_ACTIONS.openSettings);
+      },
+    },
+    {
+      label: "Open Chat...",
+      click: () => {
+        void runShellAction(SHELL_ACTIONS.openChat);
       },
     },
     { type: "separator" },
@@ -3639,6 +3842,13 @@ async function runShellAction(actionId) {
       snapshot = emitShellState(buildShellStateSnapshot());
     } else if (actionId === SHELL_ACTIONS.openSettings) {
       openSettingsWindow();
+      snapshot = emitShellState(buildShellStateSnapshot());
+    } else if (actionId === SHELL_ACTIONS.openChat) {
+      emitToRenderer("pet:dialog-open-request", {
+        source: "shell",
+        actionId,
+        ts: Date.now(),
+      });
       snapshot = emitShellState(buildShellStateSnapshot());
     } else if (actionId === SHELL_ACTIONS.roamDesktop) {
       snapshot = applyRuntimeSettingsPatch(
@@ -5723,6 +5933,15 @@ ipcMain.on("pet:setIgnoreMouseEvents", (_event, payload) => {
   win.setIgnoreMouseEvents(false);
 });
 
+ipcMain.on("pet:setDialogSurfaceOpen", (_event, payload) => {
+  const open = Boolean(payload?.open);
+  const reason =
+    typeof payload?.reason === "string" && payload.reason.trim().length > 0
+      ? payload.reason.trim()
+      : "renderer_signal";
+  setDialogSurfaceOpen(open, reason);
+});
+
 ipcMain.handle("pet:getPosition", () => {
   if (!win) return { x: 0, y: 0 };
   const [x, y] = win.getPosition();
@@ -6045,24 +6264,31 @@ ipcMain.handle("pet:sendUserMessage", async (_event, payload) => {
     correlationId,
     text,
   });
-  const contractResult = await processPetContractEvent(
-    "USER_MESSAGE",
-    {
-      text,
-      command: text,
-      type: text,
-    },
-    {
-      correlationId,
-    }
-  );
+  dialogUserMessageInFlightCount += 1;
+  emitShellState(buildShellStateSnapshot());
+  try {
+    const contractResult = await processPetContractEvent(
+      "USER_MESSAGE",
+      {
+        text,
+        command: text,
+        type: text,
+      },
+      {
+        correlationId,
+      }
+    );
 
-  return {
-    ok: Boolean(contractResult?.ok),
-    correlationId,
-    historyEntry,
-    contractResult,
-  };
+    return {
+      ok: Boolean(contractResult?.ok),
+      correlationId,
+      historyEntry,
+      contractResult,
+    };
+  } finally {
+    dialogUserMessageInFlightCount = Math.max(0, dialogUserMessageInFlightCount - 1);
+    emitShellState(buildShellStateSnapshot());
+  }
 });
 
 ipcMain.handle("pet:runUserCommand", (_event, payload) => {
@@ -6343,6 +6569,7 @@ app.whenReady().then(async () => {
   createWindow();
   initializeShellSurface();
   startRoamController();
+  startProactiveConversationController();
   physicsTimer = setInterval(stepFling, FLING_CONFIG.stepMs);
   cursorTimer = setInterval(emitCursorState, CURSOR_EMIT_INTERVAL_MS);
   initializeExtensionPackRuntime();
@@ -6392,6 +6619,10 @@ app.on("before-quit", () => {
   if (roamTimer) {
     clearInterval(roamTimer);
     roamTimer = null;
+  }
+  if (proactiveConversationTimer) {
+    clearInterval(proactiveConversationTimer);
+    proactiveConversationTimer = null;
   }
   if (localMediaPollTimer) {
     clearInterval(localMediaPollTimer);

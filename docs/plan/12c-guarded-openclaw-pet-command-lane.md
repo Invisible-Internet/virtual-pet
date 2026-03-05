@@ -10,6 +10,17 @@
 ## Objective
 Define a secure, app-authoritative command lane so OpenClaw can request bounded pet actions through explicit authorization, replay protection, and strict allowlisting, without giving OpenClaw direct authority over pet state, movement, rendering, or identity writes.
 
+## Quick Resume Checklist
+1. Confirm `12b` is accepted/closed and set `12c` as active deliverable.
+2. Pass `Spec Gate` for this file using current auth envelope + reject-reason taxonomy.
+3. Implement first allowlist-only slice:
+   - `dialog.injectAnnouncement`
+   - `shell.openStatus`
+4. Add deterministic check + matrix row:
+   - `scripts/check-openclaw-pet-command-lane.js`
+   - `D12c-guarded-pet-command-lane`
+5. Run operator demo/failure script and close `Acceptance Gate`.
+
 ## In Scope
 - Define a signed `pet_command_request` contract carried through the bridge response lane.
 - Define authorization verification in app runtime:

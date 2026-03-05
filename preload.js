@@ -6,6 +6,8 @@ contextBridge.exposeInMainWorld("petAPI", {
   endDrag: () => ipcRenderer.send("pet:endDrag"),
   setIgnoreMouseEvents: (ignore, forward = true) =>
     ipcRenderer.send("pet:setIgnoreMouseEvents", { ignore, forward }),
+  setDialogSurfaceOpen: (open, reason = "renderer") =>
+    ipcRenderer.send("pet:setDialogSurfaceOpen", { open, reason }),
   setVisibleBounds: (bounds) => ipcRenderer.send("pet:setVisibleBounds", bounds),
   getConfig: () => ipcRenderer.invoke("pet:getConfig"),
   getCapabilitySnapshot: () => ipcRenderer.invoke("pet:getCapabilitySnapshot"),
@@ -187,6 +189,18 @@ contextBridge.exposeInMainWorld("petAPI", {
 
     return () => {
       ipcRenderer.removeListener("pet:dialog-message", listener);
+    };
+  },
+  onDialogOpenRequest: (callback) => {
+    if (typeof callback !== "function") {
+      return () => {};
+    }
+
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on("pet:dialog-open-request", listener);
+
+    return () => {
+      ipcRenderer.removeListener("pet:dialog-open-request", listener);
     };
   },
   onIntegration: (callback) => {

@@ -161,6 +161,111 @@ function testAnnouncementCooldownFlow() {
   assertEqual(third.suggestions[0].type, "PET_ANNOUNCEMENT", "announcement third run should emit PET_ANNOUNCEMENT");
 }
 
+function testProactiveConversationSuppressionFlow() {
+  const clock = createClock(26000);
+  const router = createPetContractRouter({
+    now: () => clock.now(),
+  });
+
+  const first = router.processEvent(
+    {
+      type: "PROACTIVE_CHECK",
+      correlationId: "corr-proactive-1",
+      payload: {
+        reason: "proactive_conversation",
+        text: "Want to chat for a minute?",
+        priority: "low",
+        channel: "dialog",
+      },
+      ts: clock.now(),
+    },
+    {
+      source: "offline",
+      announcementSuppressedReason: "suppressed_dialog_open",
+      announcementCooldownSkipReason: "suppressed_cooldown",
+      announcementCooldownMsByReason: {
+        proactive_conversation: 5000,
+      },
+    }
+  );
+  assertEqual(first.suggestions.length, 1, "proactive suppression should emit one suggestion");
+  assertEqual(
+    first.suggestions[0].type,
+    "PET_ANNOUNCEMENT_SKIPPED",
+    "proactive suppression should emit skipped suggestion"
+  );
+  assertEqual(
+    first.suggestions[0].skipReason,
+    "suppressed_dialog_open",
+    "proactive suppression reason mismatch"
+  );
+
+  clock.advance(100);
+  const second = router.processEvent(
+    {
+      type: "PROACTIVE_CHECK",
+      correlationId: "corr-proactive-2",
+      payload: {
+        reason: "proactive_conversation",
+        text: "Want to chat for a minute?",
+        priority: "low",
+        channel: "dialog",
+      },
+      ts: clock.now(),
+    },
+    {
+      source: "offline",
+      announcementCooldownSkipReason: "suppressed_cooldown",
+      announcementCooldownMsByReason: {
+        proactive_conversation: 5000,
+      },
+    }
+  );
+  assertEqual(second.suggestions.length, 1, "proactive second run should emit one suggestion");
+  assertEqual(
+    second.suggestions[0].type,
+    "PET_ANNOUNCEMENT",
+    "proactive second run should emit announcement"
+  );
+  assertEqual(second.suggestions[0].channel, "dialog", "proactive channel should stay dialog");
+
+  clock.advance(1000);
+  const third = router.processEvent(
+    {
+      type: "PROACTIVE_CHECK",
+      correlationId: "corr-proactive-3",
+      payload: {
+        reason: "proactive_conversation",
+        text: "Want to chat for a minute?",
+      },
+      ts: clock.now(),
+    },
+    {
+      source: "offline",
+      announcementCooldownSkipReason: "suppressed_cooldown",
+      announcementCooldownMsByReason: {
+        proactive_conversation: 5000,
+      },
+    }
+  );
+  assertEqual(third.suggestions.length, 1, "proactive cooldown run should emit one suggestion");
+  assertEqual(
+    third.suggestions[0].type,
+    "PET_ANNOUNCEMENT_SKIPPED",
+    "proactive cooldown should emit skipped suggestion"
+  );
+  assertEqual(
+    third.suggestions[0].skipReason,
+    "suppressed_cooldown",
+    "proactive cooldown skip reason mismatch"
+  );
+  assert(
+    Number.isFinite(third.suggestions[0].cooldownRemainingMs) &&
+      third.suggestions[0].cooldownRemainingMs > 0,
+    "proactive cooldown remaining time should be positive"
+  );
+}
+
 function testExtensionInteractionFlow() {
   const clock = createClock(3000);
   const trace = [];
@@ -429,6 +534,7 @@ function testFreshRssSummaryFlow() {
 function run() {
   testStatusFlow();
   testAnnouncementCooldownFlow();
+  testProactiveConversationSuppressionFlow();
   testExtensionInteractionFlow();
   testBridgeDialogFlow();
   testUserMessageDialogFlow();

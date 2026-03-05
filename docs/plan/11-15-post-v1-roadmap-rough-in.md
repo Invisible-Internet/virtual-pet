@@ -203,6 +203,18 @@ Use the derived persona snapshot in deterministic local behavior:
 - proactive conversation style
 - bounded personality-influenced reactions
 
+### `13c` Addendum (Proactive Robustness, Brief)
+- Add context gating before proactive prompts:
+  - do not prompt while user is actively chatting, shortly after user input, or during recent proactive cooldown.
+- Add adaptive pacing:
+  - base cooldown plus exponential backoff when prompts are ignored/dismissed.
+- Add anti-repeat memory:
+  - avoid repeating near-duplicate proactive openers within a rolling time window.
+- Add quiet windows:
+  - optional local quiet-hours policy so proactive prompts are suppressed at configured times.
+- Add lightweight observability:
+  - expose last proactive reason, suppression reason, and next eligible time in Status/diagnostics.
+
 ### Likely Public Interfaces / Touchpoints
 - Runtime read-model for canonical Markdown identity/persona files
 - Derived persona snapshot format with provenance

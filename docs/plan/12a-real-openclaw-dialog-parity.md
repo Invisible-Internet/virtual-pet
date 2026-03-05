@@ -1,11 +1,11 @@
 # Deliverable 12a: Real OpenClaw Dialog Parity
 
 **Deliverable ID:** `12a-real-openclaw-dialog-parity`  
-**Status:** `implementing`  
+**Status:** `accepted`  
 **Owner:** `Mic + Codex`  
 **Last Updated:** `2026-03-05`  
 **Depends On:** `04-openclaw-bridge-spec`, `07b-dialog-surface-and-minimal-offline-loop`, `11a-openclaw-memory-observability-surface`, `11d-settings-editor-and-service-controls`  
-**Blocks:** `12b-chat-shell-and-conversation-presence`, `12c-guarded-openclaw-pet-command-lane`  
+**Blocks:** `none`  
 
 ## Objective
 Close the gap between the existing dialog surface and real OpenClaw conversation by ensuring freeform user messages are sent through the configured OpenClaw bridge transport with explicit online/offline metadata, bounded continuity context, and deterministic fallback behavior when the bridge is unavailable.
@@ -209,8 +209,8 @@ Required response behavior:
 ## Gate Status
 - `Spec Gate`: `passed`
 - `Build Gate`: `passed` (`2026-03-05`)
-- `Acceptance Gate`: `not_started`
-- `Overall`: `implementing`
+- `Acceptance Gate`: `passed` (`2026-03-05`)
+- `Overall`: `accepted`
 
 ## Change Log
 - `2026-03-05`: File created from the post-v1 deliverable template.
@@ -218,3 +218,4 @@ Required response behavior:
 - `2026-03-05`: Implemented first `12a` runtime slice for bubble typing-beep feedback and thinking indicator, with all deterministic checks green.
 - `2026-03-05`: Implemented bounded continuity context lane for generic dialog bridge requests and added explicit `D12a-dialog-openclaw-parity` acceptance coverage.
 - `2026-03-05`: Implemented `ws` transport parity for OpenClaw dialog bridge, including gateway-policy fallback relay and deterministic transport normalization checks.
+- `2026-03-05`: Operator demo/failure run accepted; deliverable closed as `accepted`.
