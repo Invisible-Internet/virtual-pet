@@ -33,16 +33,16 @@ Historical v1 deliverables keep their original wording and remain archived histo
   - operator-visible demo passes and evidence is logged
 
 ## Current Deliverable
-- Current Deliverable: `none`
-- Workflow State: `idle`
-- Current Status: `accepted`
+- Current Deliverable: `13a-offline-identity-and-recent-recall`
+- Workflow State: `specifying`
+- Current Status: `specifying`
 - Last Completed Deliverable: `12e-guided-openclaw-connectivity-and-pairing`
-- Next Detailed Target: `13a-runtime-memory-retrieval-and-evidence-tags`
+- Next Detailed Target: `13a-offline-identity-and-recent-recall`
 - Next Queued Target: `13b-persona-snapshot-synthesis-and-provenance`
 - Current Gate State:
-  - `Spec Gate`: `n/a`
-  - `Build Gate`: `n/a`
-  - `Acceptance Gate`: `n/a`
+  - `Spec Gate`: `passed` (`2026-03-06`)
+  - `Build Gate`: `not_started`
+  - `Acceptance Gate`: `not_started`
 
 ## Post-v1 Family Rough-In
 Locked family order:
@@ -62,6 +62,7 @@ Planning state:
 - `12c-guarded-openclaw-pet-command-lane` is accepted and closed (`Spec/Build/Acceptance Gates passed`).
 - `12d-openclaw-plugin-and-skill-virtual-pet-lane` is accepted and closed (`Spec/Build/Acceptance Gates passed`; Acceptance on `2026-03-06`).
 - `12e-guided-openclaw-connectivity-and-pairing` is accepted and closed (`Spec/Build/Acceptance Gates passed`; Acceptance on `2026-03-06`).
+- `13a-offline-identity-and-recent-recall` is now active in `specifying` (`Spec Gate` passed on `2026-03-06`).
 - Families `13` through `15` now follow the cohesive `12c`-`15c` sequence in rough-in, with family-14 control/animation policy decisions locked.
 - Full family notes live in [`11-15-post-v1-roadmap-rough-in.md`](./11-15-post-v1-roadmap-rough-in.md).
 
@@ -74,14 +75,23 @@ Planning state:
 6. Pass `Spec Gate` before implementation begins.
 
 ## Next 3 Actions
-1. Set `13a-runtime-memory-retrieval-and-evidence-tags` as the new active deliverable (`specifying`).
-2. Draft `13a` using template with the required quick operator test card + evidence checklist.
-3. Pass `13a` `Spec Gate` before implementation.
+1. Start the first `13a` implementation slice (offline recall routing + bounded evidence tags) without expanding scope beyond the accepted spec.
+2. Add deterministic coverage for offline identity recall and recent-highlight retrieval (`D13a-offline-identity-recall`).
+3. Run `npm run check:syntax`, `npm run check:contracts`, and `npm run check:acceptance`, then capture operator demo and failure/recovery evidence.
 
 ## Blockers
 - None currently.
 
 ## Last Session Summary
+- Started `13a-offline-identity-and-recent-recall` as the active deliverable:
+  - created [`13a-offline-identity-and-recent-recall.md`](./13a-offline-identity-and-recent-recall.md) from the post-v1 template
+  - set workflow to `specifying`
+  - locked showcase promise, operator demo script, failure/recovery script, quick operator test card, evidence checklist, and first-slice contracts for:
+    - offline identity recall (name + birthday)
+    - bounded recent-highlight recall with evidence tags
+  - passed `Spec Gate` on `2026-03-06`
+  - intentionally made no runtime implementation changes in this session
+  - shipped outcome note: `no visible app change` (spec-only session to satisfy post-v1 Spec Gate rule before implementation)
 - Closed `12e-guided-openclaw-connectivity-and-pairing` as `accepted`:
   - operator-provided degraded evidence captured:
     - `Openclaw disabled`

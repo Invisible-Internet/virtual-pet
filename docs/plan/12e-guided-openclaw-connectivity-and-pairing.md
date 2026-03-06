@@ -5,7 +5,7 @@
 **Owner:** `Mic + Codex`  
 **Last Updated:** `2026-03-06`  
 **Depends On:** `04-openclaw-bridge-spec`, `11a-openclaw-memory-observability-surface`, `11c-repair-actions-and-provenance-visibility`, `11d-settings-editor-and-service-controls`, `12a-real-openclaw-dialog-parity`, `12c-guarded-openclaw-pet-command-lane`, `12d-openclaw-plugin-and-skill-virtual-pet-lane`  
-**Blocks:** `13a-runtime-memory-retrieval-and-evidence-tags`
+**Blocks:** `13a-offline-identity-and-recent-recall`
 
 ## Objective
 Add a guided in-app connectivity/pairing flow so an operator can move from "OpenClaw degraded or auth-required" to a verifiable ready state without guessing through logs, while keeping secrets protected and app authority boundaries unchanged for both desktop-local and desktop-to-VPS OpenClaw deployments.

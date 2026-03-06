@@ -50,7 +50,7 @@ Planning status:
 1. `12c-guarded-openclaw-pet-command-lane`
 2. `12d-openclaw-plugin-and-skill-virtual-pet-lane`
 3. `12e-guided-openclaw-connectivity-and-pairing`
-4. `13a-runtime-memory-retrieval-and-evidence-tags`
+4. `13a-offline-identity-and-recent-recall`
 5. `13b-persona-snapshot-synthesis-and-provenance`
 6. `13c-persona-aware-offline-dialog-and-proactive-behavior`
 7. `13d-online-reflection-and-runtime-sync`
@@ -513,7 +513,7 @@ These are the minimum user-visible anchors we should remember when detailed plan
 - `12b-chat-shell-and-conversation-presence` is accepted and closed.
 - `12c-guarded-openclaw-pet-command-lane` is accepted and closed.
 - `12d` and `12e` are accepted and closed after `12c` acceptance.
-- `13a-runtime-memory-retrieval-and-evidence-tags` is the next detailed target.
+- `13a-offline-identity-and-recent-recall` is the next detailed target.
 - `13a` and `13b` should be specified before implementing `13c` so proactive style sits on a stable persona/read-model base.
 - `13d` follows `13c` and uses heartbeat + digest sync with log-first governance.
 - Family `14` driver model is locked: utility scoring + FSM + per-state micro BT.
