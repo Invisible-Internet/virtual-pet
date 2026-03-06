@@ -31,8 +31,21 @@ const DEFAULT_OBSERVABILITY_SUBJECT_ID = OBSERVABILITY_SUBJECT_IDS.bridge;
 const OBSERVABILITY_DETAIL_ACTION_IDS = Object.freeze({
   refreshStatus: "refresh_status",
   openSetup: "open_setup",
+  openSettings: "open_settings",
+  startPairingQr: "start_pairing_qr",
+  copyPairingCode: "copy_pairing_code",
+  retryPairing: "retry_pairing",
+  runPairingProbe: "run_pairing_probe",
   copyPath: "copy_path",
   copyDetails: "copy_details",
+});
+const PAIRING_STATES = Object.freeze({
+  notStarted: "not_started",
+  challengeReady: "challenge_ready",
+  pendingApproval: "pending_approval",
+  paired: "paired",
+  challengeExpired: "challenge_expired",
+  failed: "failed",
 });
 
 function toOptionalString(value, fallback = null) {
@@ -667,6 +680,94 @@ function buildDetailActions({ allowOpenSetup = false, hasPath = false } = {}) {
   return actions;
 }
 
+function normalizePairingState(value) {
+  const normalized = toOptionalString(value, PAIRING_STATES.notStarted) || PAIRING_STATES.notStarted;
+  if (normalized === PAIRING_STATES.challengeReady) return PAIRING_STATES.challengeReady;
+  if (normalized === PAIRING_STATES.pendingApproval) return PAIRING_STATES.pendingApproval;
+  if (normalized === PAIRING_STATES.paired) return PAIRING_STATES.paired;
+  if (normalized === PAIRING_STATES.challengeExpired) return PAIRING_STATES.challengeExpired;
+  if (normalized === PAIRING_STATES.failed) return PAIRING_STATES.failed;
+  return PAIRING_STATES.notStarted;
+}
+
+function buildBridgeDetailActions({ pairing = null, hasPath = false } = {}) {
+  const actions = [];
+  const pairingState = normalizePairingState(pairing?.pairingState);
+  const canPair = pairingState !== PAIRING_STATES.paired;
+
+  actions.push(
+    buildDetailAction(
+      OBSERVABILITY_DETAIL_ACTION_IDS.runPairingProbe,
+      "Run Pairing Probe",
+      canPair ? "primary" : "secondary",
+      true
+    )
+  );
+  actions.push(
+    buildDetailAction(
+      OBSERVABILITY_DETAIL_ACTION_IDS.openSettings,
+      "Open Settings",
+      "secondary",
+      true
+    )
+  );
+  if (canPair) {
+    actions.push(
+      buildDetailAction(
+        OBSERVABILITY_DETAIL_ACTION_IDS.startPairingQr,
+        "Show QR",
+        "secondary",
+        true
+      )
+    );
+    actions.push(
+      buildDetailAction(
+        OBSERVABILITY_DETAIL_ACTION_IDS.copyPairingCode,
+        "Copy Pairing Code",
+        "secondary",
+        true
+      )
+    );
+  }
+  if (pairingState === PAIRING_STATES.challengeExpired || pairingState === PAIRING_STATES.failed) {
+    actions.push(
+      buildDetailAction(
+        OBSERVABILITY_DETAIL_ACTION_IDS.retryPairing,
+        "Retry Pairing",
+        "secondary",
+        true
+      )
+    );
+  }
+  actions.push(
+    buildDetailAction(
+      OBSERVABILITY_DETAIL_ACTION_IDS.refreshStatus,
+      "Refresh Status",
+      "secondary",
+      true
+    )
+  );
+  if (hasPath) {
+    actions.push(
+      buildDetailAction(
+        OBSERVABILITY_DETAIL_ACTION_IDS.copyPath,
+        "Copy Path",
+        "secondary",
+        true
+      )
+    );
+  }
+  actions.push(
+    buildDetailAction(
+      OBSERVABILITY_DETAIL_ACTION_IDS.copyDetails,
+      "Copy Details",
+      "secondary",
+      true
+    )
+  );
+  return actions;
+}
+
 function findFirstUnreadableFile(workspace) {
   if (!workspace || !Array.isArray(workspace.files)) return null;
   return workspace.files.find((entry) => !entry.readable) || null;
@@ -731,11 +832,13 @@ function buildRowDetail({
   let ownership = "manual_runtime";
   const provenance = [];
   const suggestedSteps = ["Press Refresh Status to re-check this row."];
+  let pairing = null;
 
   if (rowId === OBSERVABILITY_SUBJECT_IDS.bridge) {
     label = "OpenClaw Bridge";
     headline = `OpenClaw bridge is ${normalizeStateLabel(state)}.`;
     impact = "Bridge state controls whether online advisory responses are available.";
+    pairing = row?.pairing && typeof row.pairing === "object" ? row.pairing : null;
     provenance.push(
       { label: "Transport", kind: "runtime", value: toSentence(row?.transport, "unknown") },
       { label: "Mode", kind: "runtime", value: toSentence(row?.mode, "unknown") },
@@ -766,6 +869,67 @@ function buildRowDetail({
     }
     if (row?.petCommandSharedSecretRef) {
       provenance.push({ label: "Secret Ref", kind: "runtime", value: row.petCommandSharedSecretRef });
+    }
+    if (pairing) {
+      const pairingState = normalizePairingState(pairing.pairingState);
+      const challenge = pairing.challenge && typeof pairing.challenge === "object" ? pairing.challenge : null;
+      const methodAvailability =
+        pairing.methodAvailability && typeof pairing.methodAvailability === "object"
+          ? pairing.methodAvailability
+          : {};
+      provenance.push(
+        { label: "Pairing State", kind: "runtime", value: pairingState },
+        {
+          label: "QR Pairing",
+          kind: "runtime",
+          value: methodAvailability.qr === false ? "unavailable" : "available",
+        },
+        {
+          label: "Code Pairing",
+          kind: "runtime",
+          value: methodAvailability.code === false ? "unavailable" : "available",
+        }
+      );
+      if (typeof pairing.lastMethod === "string" && pairing.lastMethod.trim().length > 0) {
+        provenance.push({ label: "Last Method", kind: "runtime", value: pairing.lastMethod });
+      }
+      if (challenge) {
+        provenance.push(
+          { label: "Pairing Id", kind: "runtime", value: challenge.pairingId || "unknown" },
+          {
+            label: "Challenge Expires",
+            kind: "runtime",
+            value: Number.isFinite(Number(challenge.expiresAtMs))
+              ? String(Math.round(Number(challenge.expiresAtMs)))
+              : "unknown",
+          }
+        );
+      }
+      const lastProbe = pairing.lastProbe && typeof pairing.lastProbe === "object" ? pairing.lastProbe : null;
+      if (lastProbe) {
+        provenance.push(
+          {
+            label: "Last Probe",
+            kind: "runtime",
+            value: toSentence(lastProbe.overallState, "unknown"),
+          }
+        );
+      }
+      suggestedSteps.length = 0;
+      if (pairingState === PAIRING_STATES.paired) {
+        suggestedSteps.push("Run Pairing Probe after config changes to confirm the lane is still healthy.");
+      } else if (pairingState === PAIRING_STATES.pendingApproval) {
+        suggestedSteps.push("Complete external OpenClaw pairing approval, then run Pairing Probe.");
+      } else if (pairingState === PAIRING_STATES.challengeExpired) {
+        suggestedSteps.push("Press Retry Pairing to mint a fresh challenge, then run Pairing Probe.");
+      } else if (pairingState === PAIRING_STATES.challengeReady) {
+        suggestedSteps.push("Scan the QR challenge or copy the pairing code, then run Pairing Probe.");
+      } else {
+        suggestedSteps.push("Open Settings, verify endpoint and refs, then run Pairing Probe.");
+      }
+    } else {
+      suggestedSteps.length = 0;
+      suggestedSteps.push("Open Settings, verify endpoint and refs, then run Pairing Probe.");
     }
   } else if (rowId === OBSERVABILITY_SUBJECT_IDS.provider) {
     label = "Provider / Model";
@@ -876,7 +1040,11 @@ function buildRowDetail({
     },
     provenance,
     suggestedSteps,
-    actions: buildDetailActions({ allowOpenSetup: false, hasPath }),
+    actions:
+      rowId === OBSERVABILITY_SUBJECT_IDS.bridge
+        ? buildBridgeDetailActions({ pairing, hasPath })
+        : buildDetailActions({ allowOpenSetup: false, hasPath }),
+    pairing,
   };
 }
 
@@ -1177,6 +1345,7 @@ function buildObservabilityDetail({
     provenance: detail.provenance,
     suggestedSteps: detail.suggestedSteps,
     actions: detail.actions,
+    pairing: detail.pairing && typeof detail.pairing === "object" ? detail.pairing : null,
   };
 }
 

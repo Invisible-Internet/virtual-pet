@@ -39,6 +39,38 @@
 2. <!-- what the user should still see -->
 3. <!-- what recovery looks like, if applicable -->
 
+## Quick Operator Test Card (Mandatory)
+### Preflight (2 min max)
+1. Run: `<!-- exact command, usually npm start -->`
+2. Open: `<!-- exact tray/menu/tab path -->`
+3. Confirm start signal: `<!-- exact visible text/chip/status -->`
+
+### Happy Path (5 min max)
+1. Action: `<!-- click/type action -->`
+   - Expect: `<!-- exact visible signal -->`
+2. Action: `<!-- click/type action -->`
+   - Expect: `<!-- exact visible signal -->`
+3. Action: `<!-- click/type action -->`
+   - Expect: `<!-- exact visible signal -->`
+
+### Failure + Recovery (5 min max)
+1. Break it: `<!-- explicit break action -->`
+   - Expect degraded signal: `<!-- exact visible degraded text/state -->`
+2. Recover it: `<!-- explicit recovery action -->`
+   - Expect recovered signal: `<!-- exact visible recovered text/state -->`
+
+### Pass / Fail Checklist
+- [ ] `<!-- happy-path signal #1 seen -->`
+- [ ] `<!-- happy-path signal #2 seen -->`
+- [ ] `<!-- degraded signal seen -->`
+- [ ] `<!-- recovered signal seen -->`
+
+## Acceptance Evidence Checklist (Mandatory)
+- [ ] `<!-- status line text copied -->`
+- [ ] `<!-- probe/check output copied -->`
+- [ ] `<!-- screenshot path or note -->`
+- [ ] `<!-- terminal command output line copied -->`
+
 ## Public Interfaces / Touchpoints
 - <!-- files, settings keys, commands, controls, IPC paths, UI surfaces, or docs touched by this slice -->
 

@@ -99,6 +99,13 @@ const {
   buildShellSettingsSnapshot,
   validateShellSettingsPatch,
 } = require("./shell-settings-editor");
+const {
+  PAIRING_CHECK_IDS: OPENCLAW_PAIRING_CHECK_IDS,
+  PAIRING_CHECK_STATES: OPENCLAW_PAIRING_CHECK_STATES,
+  PAIRING_STATES: OPENCLAW_PAIRING_STATES,
+  createOpenClawPairingGuidance,
+} = require("./openclaw-pairing-guidance");
+const { buildPairingQrDataUrl } = require("./openclaw-pairing-qr");
 
 // Master diagnostics toggle: controls console logs, file logs, and renderer overlay.
 let DIAGNOSTICS_ENABLED = false;
@@ -305,6 +312,7 @@ let openclawPetCommandLane = null;
 let openclawPetCommandAuditHistory = [];
 let openclawPluginSkillLane = null;
 let openclawPluginSkillAuditHistory = [];
+let openclawPairingGuidance = createOpenClawPairingGuidance();
 let memoryPipeline = null;
 let latestMemorySnapshot = null;
 let latestIntegrationEvent = null;
@@ -2070,6 +2078,289 @@ function setInventoryWindowActiveTab(nextTab, emitSnapshot = true) {
   return emitShellState(buildShellStateSnapshot());
 }
 
+function asOptionalString(value, fallback = null) {
+  if (typeof value !== "string") return fallback;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : fallback;
+}
+
+function buildPairingCheck(id, state, reason, detail) {
+  return {
+    id,
+    state,
+    reason,
+    detail,
+  };
+}
+
+function isPairingProbeSevereFailure(reason) {
+  return (
+    reason === "bridge_config_invalid" ||
+    reason === "bridge_non_loopback_disabled" ||
+    reason === "bridge_unavailable" ||
+    reason === "plugin_lane_unavailable" ||
+    reason === "bridge_unavailable_runtime"
+  );
+}
+
+function derivePairingProbeOverallState(openclawEnabled, checks) {
+  if (!openclawEnabled) return "disabled";
+  const normalizedChecks = Array.isArray(checks) ? checks : [];
+  const failedChecks = normalizedChecks.filter(
+    (check) => check?.state === OPENCLAW_PAIRING_CHECK_STATES.fail
+  );
+  if (failedChecks.length <= 0) {
+    const warned = normalizedChecks.some(
+      (check) => check?.state === OPENCLAW_PAIRING_CHECK_STATES.warn
+    );
+    return warned ? "degraded" : "ready";
+  }
+  const severeFailure = failedChecks.some((check) =>
+    isPairingProbeSevereFailure(asOptionalString(check?.reason, "unknown") || "unknown")
+  );
+  return severeFailure ? "failed" : "degraded";
+}
+
+function getOpenClawPairingSnapshot() {
+  if (!openclawPairingGuidance || typeof openclawPairingGuidance.getSnapshot !== "function") {
+    return null;
+  }
+  const openclawEnabled = Boolean(buildRuntimeSettingsSummary()?.openclaw?.enabled);
+  if (!openclawEnabled && typeof openclawPairingGuidance.markProbeOutcome === "function") {
+    openclawPairingGuidance.markProbeOutcome({
+      kind: "openclawPairingSnapshot",
+      ts: Date.now(),
+      overallState: "disabled",
+      checks: [],
+    });
+  }
+  const snapshot = openclawPairingGuidance.getSnapshot();
+  if (!snapshot || typeof snapshot !== "object") {
+    return null;
+  }
+  const challenge =
+    snapshot.challenge && typeof snapshot.challenge === "object"
+      ? snapshot.challenge
+      : null;
+  const qrPayload = asOptionalString(challenge?.qrPayload, null);
+  if (!challenge || !qrPayload) {
+    return snapshot;
+  }
+  const qrImageDataUrl = buildPairingQrDataUrl(qrPayload, {
+    cellSize: 8,
+    margin: 2,
+    errorCorrectionLevel: "M",
+  });
+  if (!qrImageDataUrl) {
+    return snapshot;
+  }
+  return {
+    ...snapshot,
+    challenge: {
+      ...challenge,
+      qrImageDataUrl,
+    },
+  };
+}
+
+async function runOpenClawPairingProbe() {
+  const settingsSummary = buildRuntimeSettingsSummary();
+  const openclaw =
+    settingsSummary?.openclaw && typeof settingsSummary.openclaw === "object"
+      ? settingsSummary.openclaw
+      : {};
+  const openclawEnabled = Boolean(openclaw.enabled);
+  const checks = [];
+
+  checks.push(
+    openclawEnabled
+      ? buildPairingCheck(
+          OPENCLAW_PAIRING_CHECK_IDS.bridgeEnabled,
+          OPENCLAW_PAIRING_CHECK_STATES.pass,
+          "openclaw_enabled",
+          "OpenClaw bridge is enabled."
+        )
+      : buildPairingCheck(
+          OPENCLAW_PAIRING_CHECK_IDS.bridgeEnabled,
+          OPENCLAW_PAIRING_CHECK_STATES.fail,
+          "openclaw_disabled",
+          "Enable OpenClaw Service in Settings before pairing."
+        )
+  );
+
+  const transport = asOptionalString(openclaw.transport, BRIDGE_TRANSPORTS.stub) || BRIDGE_TRANSPORTS.stub;
+  const endpoint = asOptionalString(openclaw.baseUrl, "");
+  const endpointCheck = {
+    ok: false,
+    reason: "bridge_config_invalid",
+    detail: "OpenClaw endpoint configuration is invalid.",
+  };
+  if (!openclawEnabled) {
+    endpointCheck.ok = false;
+    endpointCheck.reason = "openclaw_disabled";
+    endpointCheck.detail = "OpenClaw is disabled.";
+  } else if (transport === BRIDGE_TRANSPORTS.stub) {
+    endpointCheck.ok = false;
+    endpointCheck.reason = "bridge_transport_stub";
+    endpointCheck.detail = "Switch transport to ws or http for pairing.";
+  } else {
+    try {
+      const parsed = new URL(endpoint || "");
+      const host = String(parsed.hostname || "").toLowerCase();
+      const isLoopback =
+        host === "localhost" || host === "127.0.0.1" || host === "::1";
+      if (!isLoopback && !openclaw.allowNonLoopback) {
+        endpointCheck.ok = false;
+        endpointCheck.reason = "bridge_non_loopback_disabled";
+        endpointCheck.detail = "Enable non-loopback endpoints for remote/VPS pairing.";
+      } else {
+        endpointCheck.ok = true;
+        endpointCheck.reason = "endpoint_policy_ok";
+        endpointCheck.detail = isLoopback
+          ? "Loopback endpoint is valid."
+          : "Remote endpoint policy is satisfied.";
+      }
+    } catch {
+      endpointCheck.ok = false;
+      endpointCheck.reason = "bridge_config_invalid";
+      endpointCheck.detail = "OpenClaw Base URL is not a valid URL.";
+    }
+  }
+  checks.push(
+    buildPairingCheck(
+      OPENCLAW_PAIRING_CHECK_IDS.bridgeEndpointPolicy,
+      endpointCheck.ok ? OPENCLAW_PAIRING_CHECK_STATES.pass : OPENCLAW_PAIRING_CHECK_STATES.fail,
+      endpointCheck.reason,
+      endpointCheck.detail
+    )
+  );
+
+  let bridgeAuthReason = "bridge_unavailable_runtime";
+  let bridgeAuthDetail = "OpenClaw bridge runtime is unavailable.";
+  let bridgeAuthState = OPENCLAW_PAIRING_CHECK_STATES.fail;
+  if (!openclawEnabled) {
+    bridgeAuthReason = "openclaw_disabled";
+    bridgeAuthDetail = "OpenClaw is disabled.";
+  } else if (!endpointCheck.ok) {
+    bridgeAuthReason = endpointCheck.reason;
+    bridgeAuthDetail = "Fix endpoint policy issues before auth pairing.";
+  } else {
+    const correlationId = `pair-probe-${Date.now().toString(36)}`;
+    const bridgeResult = await requestBridgeDialog({
+      correlationId,
+      route: "introspection_status",
+      promptText: "status",
+    });
+    const fallbackMode = asOptionalString(bridgeResult?.fallbackMode, "bridge_unavailable") || "bridge_unavailable";
+    if (bridgeResult?.source === "online" && fallbackMode === "none") {
+      bridgeAuthState = OPENCLAW_PAIRING_CHECK_STATES.pass;
+      bridgeAuthReason = "bridge_auth_ok";
+      bridgeAuthDetail = "Bridge auth is healthy.";
+    } else if (fallbackMode === "bridge_auth_required") {
+      bridgeAuthReason = "bridge_auth_required";
+      bridgeAuthDetail = "Complete OpenClaw pairing/auth approval, then rerun probe.";
+    } else {
+      bridgeAuthReason = fallbackMode;
+      bridgeAuthDetail = `Bridge request fell back: ${fallbackMode}.`;
+    }
+  }
+  checks.push(
+    buildPairingCheck(
+      OPENCLAW_PAIRING_CHECK_IDS.bridgeAuth,
+      bridgeAuthState,
+      bridgeAuthReason,
+      bridgeAuthDetail
+    )
+  );
+
+  const commandAuthConfigured = Boolean(openclaw.petCommandSharedSecretConfigured);
+  checks.push(
+    !openclawEnabled
+      ? buildPairingCheck(
+          OPENCLAW_PAIRING_CHECK_IDS.commandAuth,
+          OPENCLAW_PAIRING_CHECK_STATES.fail,
+          "openclaw_disabled",
+          "OpenClaw is disabled."
+        )
+      : commandAuthConfigured
+        ? buildPairingCheck(
+            OPENCLAW_PAIRING_CHECK_IDS.commandAuth,
+            OPENCLAW_PAIRING_CHECK_STATES.pass,
+            "command_auth_ready",
+            "Pet command shared-secret ref is configured."
+          )
+        : buildPairingCheck(
+            OPENCLAW_PAIRING_CHECK_IDS.commandAuth,
+            OPENCLAW_PAIRING_CHECK_STATES.fail,
+            "command_auth_missing",
+            "Set pet-command shared-secret ref in Settings."
+          )
+  );
+
+  if (!openclawEnabled) {
+    checks.push(
+      buildPairingCheck(
+        OPENCLAW_PAIRING_CHECK_IDS.pluginLaneStatus,
+        OPENCLAW_PAIRING_CHECK_STATES.fail,
+        "openclaw_disabled",
+        "OpenClaw is disabled."
+      )
+    );
+  } else if (
+    !openclawPluginSkillLane ||
+    typeof openclawPluginSkillLane.processCall !== "function"
+  ) {
+    checks.push(
+      buildPairingCheck(
+        OPENCLAW_PAIRING_CHECK_IDS.pluginLaneStatus,
+        OPENCLAW_PAIRING_CHECK_STATES.fail,
+        "plugin_lane_unavailable",
+        "Plugin lane runtime is unavailable."
+      )
+    );
+  } else {
+    const correlationId = `pair-plugin-${Date.now().toString(36)}`;
+    const laneOutcome = await openclawPluginSkillLane.processCall(
+      {
+        contractVersion: OPENCLAW_PLUGIN_SKILL_CONTRACT_VERSION,
+        call: OPENCLAW_PLUGIN_SKILL_CALL_IDS.statusRead,
+        correlationId,
+        payload: {
+          scope: OPENCLAW_PLUGIN_SKILL_STATUS_SCOPES.bridgeSummary,
+        },
+      },
+      { correlationId }
+    );
+    const laneOk = Boolean(laneOutcome?.ok);
+    checks.push(
+      buildPairingCheck(
+        OPENCLAW_PAIRING_CHECK_IDS.pluginLaneStatus,
+        laneOk ? OPENCLAW_PAIRING_CHECK_STATES.pass : OPENCLAW_PAIRING_CHECK_STATES.fail,
+        laneOk ? "plugin_lane_ready" : asOptionalString(laneOutcome?.reason, "plugin_lane_rejected") || "plugin_lane_rejected",
+        laneOk
+          ? "Plugin lane status-read call succeeded."
+          : asOptionalString(laneOutcome?.detail, "Plugin lane status-read call failed.") ||
+              "Plugin lane status-read call failed."
+      )
+    );
+  }
+
+  const probe = {
+    kind: "openclawPairingSnapshot",
+    ts: Date.now(),
+    overallState: derivePairingProbeOverallState(openclawEnabled, checks),
+    checks,
+  };
+
+  if (
+    openclawPairingGuidance &&
+    typeof openclawPairingGuidance.markProbeOutcome === "function"
+  ) {
+    openclawPairingGuidance.markProbeOutcome(probe);
+  }
+  return probe;
+}
+
 function buildCurrentObservabilitySnapshot() {
   const capabilitySnapshot =
     latestCapabilitySnapshot ||
@@ -2082,7 +2373,7 @@ function buildCurrentObservabilitySnapshot() {
       : capabilitySnapshot?.capabilities?.find(
           (entry) => entry?.capabilityId === CAPABILITY_IDS.openclawBridge
         ) || null;
-  return buildObservabilitySnapshot({
+  const snapshot = buildObservabilitySnapshot({
     capabilitySnapshot,
     openclawCapabilityState,
     memorySnapshot:
@@ -2099,6 +2390,16 @@ function buildCurrentObservabilitySnapshot() {
     trayAvailable: Boolean(shellTray),
     ts: Date.now(),
   });
+  const pairingSnapshot = getOpenClawPairingSnapshot();
+  if (
+    pairingSnapshot &&
+    snapshot?.rows &&
+    snapshot.rows.bridge &&
+    typeof snapshot.rows.bridge === "object"
+  ) {
+    snapshot.rows.bridge.pairing = pairingSnapshot;
+  }
+  return snapshot;
 }
 
 function buildCurrentSetupBootstrapSnapshot() {
@@ -2176,6 +2477,7 @@ function buildObservabilityDetailClipboardText(detail) {
   const summary = detail?.summary || {};
   const provenance = Array.isArray(detail?.provenance) ? detail.provenance : [];
   const suggestedSteps = Array.isArray(detail?.suggestedSteps) ? detail.suggestedSteps : [];
+  const pairing = detail?.pairing && typeof detail.pairing === "object" ? detail.pairing : null;
   const lines = [
     `${subject.label || "Observability Detail"}`,
     `State: ${subject.state || "unknown"}`,
@@ -2190,6 +2492,26 @@ function buildObservabilityDetailClipboardText(detail) {
     lines.push("", "Provenance:");
     for (const entry of provenance) {
       lines.push(`- ${entry.label || "Detail"}: ${entry.value || "unknown"}`);
+    }
+  }
+  if (pairing) {
+    lines.push(
+      "",
+      "Pairing:",
+      `- Pairing State: ${pairing.pairingState || "unknown"}`,
+      `- Last Method: ${pairing.lastMethod || "none"}`
+    );
+    if (pairing.challenge && typeof pairing.challenge === "object") {
+      lines.push(
+        `- Pairing Id: ${pairing.challenge.pairingId || "unknown"}`,
+        `- Challenge Expires: ${
+          Number.isFinite(Number(pairing.challenge.expiresAtMs))
+            ? Math.round(Number(pairing.challenge.expiresAtMs))
+            : "unknown"
+        }`,
+        `- QR Payload: ${pairing.challenge.qrPayload || "none"}`,
+        `- Pairing Code: ${pairing.challenge.code || "none"}`
+      );
     }
   }
   if (suggestedSteps.length > 0) {
@@ -2271,6 +2593,165 @@ async function runObservabilityAction(actionId, subjectId) {
       snapshot: refreshedSnapshot,
       detail: refreshedDetail,
       shellState: shellResult?.shellState || latestShellState || buildShellStateSnapshot(),
+    };
+  }
+
+  if (normalizedActionId === OBSERVABILITY_DETAIL_ACTION_IDS.openSettings) {
+    const shellResult = await runShellAction(SHELL_ACTIONS.openSettings);
+    if (!shellResult?.ok) {
+      return {
+        ...shellResult,
+        actionId: normalizedActionId,
+        subjectId: detail?.subject?.subjectId || DEFAULT_OBSERVABILITY_SUBJECT_ID,
+        snapshot,
+        detail,
+      };
+    }
+    const refreshedSnapshot = buildCurrentObservabilitySnapshot();
+    const refreshedDetail = buildCurrentObservabilityDetail(
+      detail?.subject?.subjectId || DEFAULT_OBSERVABILITY_SUBJECT_ID,
+      refreshedSnapshot
+    );
+    return {
+      ok: true,
+      actionId: normalizedActionId,
+      subjectId: refreshedDetail?.subject?.subjectId || DEFAULT_OBSERVABILITY_SUBJECT_ID,
+      snapshot: refreshedSnapshot,
+      detail: refreshedDetail,
+      shellState: shellResult?.shellState || latestShellState || buildShellStateSnapshot(),
+    };
+  }
+
+  if (normalizedActionId === OBSERVABILITY_DETAIL_ACTION_IDS.startPairingQr) {
+    if (
+      !openclawPairingGuidance ||
+      typeof openclawPairingGuidance.startChallenge !== "function"
+    ) {
+      return {
+        ok: false,
+        error: "pairing_guidance_unavailable",
+        actionId: normalizedActionId,
+        subjectId: detail?.subject?.subjectId || DEFAULT_OBSERVABILITY_SUBJECT_ID,
+        snapshot,
+        detail,
+      };
+    }
+    const pairingSnapshot = openclawPairingGuidance.startChallenge("qr");
+    const refreshedSnapshot = buildCurrentObservabilitySnapshot();
+    const refreshedDetail = buildCurrentObservabilityDetail(
+      detail?.subject?.subjectId || DEFAULT_OBSERVABILITY_SUBJECT_ID,
+      refreshedSnapshot
+    );
+    return {
+      ok: true,
+      actionId: normalizedActionId,
+      pairingChallenge:
+        pairingSnapshot?.challenge && typeof pairingSnapshot.challenge === "object"
+          ? pairingSnapshot.challenge
+          : null,
+      subjectId: refreshedDetail?.subject?.subjectId || DEFAULT_OBSERVABILITY_SUBJECT_ID,
+      snapshot: refreshedSnapshot,
+      detail: refreshedDetail,
+      shellState: latestShellState || buildShellStateSnapshot(),
+    };
+  }
+
+  if (normalizedActionId === OBSERVABILITY_DETAIL_ACTION_IDS.copyPairingCode) {
+    if (
+      !openclawPairingGuidance ||
+      typeof openclawPairingGuidance.ensureChallenge !== "function"
+    ) {
+      return {
+        ok: false,
+        error: "pairing_guidance_unavailable",
+        actionId: normalizedActionId,
+        subjectId: detail?.subject?.subjectId || DEFAULT_OBSERVABILITY_SUBJECT_ID,
+        snapshot,
+        detail,
+      };
+    }
+    const pairingSnapshot = openclawPairingGuidance.ensureChallenge("code");
+    const pairingCode = asOptionalString(pairingSnapshot?.challenge?.code, null);
+    if (!pairingCode) {
+      return {
+        ok: false,
+        error: "pairing_code_unavailable",
+        actionId: normalizedActionId,
+        subjectId: detail?.subject?.subjectId || DEFAULT_OBSERVABILITY_SUBJECT_ID,
+        snapshot,
+        detail,
+      };
+    }
+    clipboard.writeText(pairingCode);
+    const refreshedSnapshot = buildCurrentObservabilitySnapshot();
+    const refreshedDetail = buildCurrentObservabilityDetail(
+      detail?.subject?.subjectId || DEFAULT_OBSERVABILITY_SUBJECT_ID,
+      refreshedSnapshot
+    );
+    return {
+      ok: true,
+      actionId: normalizedActionId,
+      copiedText: pairingCode,
+      pairingChallenge:
+        pairingSnapshot?.challenge && typeof pairingSnapshot.challenge === "object"
+          ? pairingSnapshot.challenge
+          : null,
+      subjectId: refreshedDetail?.subject?.subjectId || DEFAULT_OBSERVABILITY_SUBJECT_ID,
+      snapshot: refreshedSnapshot,
+      detail: refreshedDetail,
+      shellState: latestShellState || buildShellStateSnapshot(),
+    };
+  }
+
+  if (normalizedActionId === OBSERVABILITY_DETAIL_ACTION_IDS.retryPairing) {
+    if (
+      !openclawPairingGuidance ||
+      typeof openclawPairingGuidance.retryChallenge !== "function"
+    ) {
+      return {
+        ok: false,
+        error: "pairing_guidance_unavailable",
+        actionId: normalizedActionId,
+        subjectId: detail?.subject?.subjectId || DEFAULT_OBSERVABILITY_SUBJECT_ID,
+        snapshot,
+        detail,
+      };
+    }
+    const pairingSnapshot = openclawPairingGuidance.retryChallenge();
+    const refreshedSnapshot = buildCurrentObservabilitySnapshot();
+    const refreshedDetail = buildCurrentObservabilityDetail(
+      detail?.subject?.subjectId || DEFAULT_OBSERVABILITY_SUBJECT_ID,
+      refreshedSnapshot
+    );
+    return {
+      ok: true,
+      actionId: normalizedActionId,
+      pairingChallenge:
+        pairingSnapshot?.challenge && typeof pairingSnapshot.challenge === "object"
+          ? pairingSnapshot.challenge
+          : null,
+      subjectId: refreshedDetail?.subject?.subjectId || DEFAULT_OBSERVABILITY_SUBJECT_ID,
+      snapshot: refreshedSnapshot,
+      detail: refreshedDetail,
+      shellState: latestShellState || buildShellStateSnapshot(),
+    };
+  }
+
+  if (normalizedActionId === OBSERVABILITY_DETAIL_ACTION_IDS.runPairingProbe) {
+    const pairingProbe = await runOpenClawPairingProbe();
+    const refreshedSnapshot = buildCurrentObservabilitySnapshot();
+    const refreshedDetail = buildCurrentObservabilityDetail(
+      detail?.subject?.subjectId || DEFAULT_OBSERVABILITY_SUBJECT_ID,
+      refreshedSnapshot
+    );
+    return {
+      ok: true,
+      actionId: normalizedActionId,
+      pairingProbe,
+      subjectId: refreshedDetail?.subject?.subjectId || DEFAULT_OBSERVABILITY_SUBJECT_ID,
+      snapshot: refreshedSnapshot,
+      detail: refreshedDetail,
+      shellState: latestShellState || buildShellStateSnapshot(),
     };
   }
 

@@ -36,6 +36,8 @@ This workflow is not intended to retrofit the historical v1 deliverable files.
    - Prefer `11a`, `11b`, `11c` style slices over one large feature bundle.
 5. Operator acceptance decides closure
    - A slice is not closed when it compiles. It is closed when the operator-visible demo passes and the docs are synced.
+6. Test scripts must be runnable by a tired human
+   - Verification steps should be plain-language, click-by-click, and include exact visible pass signals.
 
 ## Naming Rules
 Future deliverables use a family-plus-slice format:
@@ -100,6 +102,8 @@ Every new post-v1 deliverable file must include:
 - `Showcase Promise (Mandatory)`
 - `Operator Demo Script (Mandatory)`
 - `Failure / Recovery Script (Mandatory)`
+- `Quick Operator Test Card (Mandatory)`
+- `Acceptance Evidence Checklist (Mandatory)`
 - `Implementation Slice (Mandatory)`
 - `Visible App Outcome`
 - `Acceptance Notes`
@@ -125,6 +129,7 @@ Good demo script properties:
 - short enough to run in a few minutes
 - specific enough that two people would evaluate it the same way
 - tied to one visible surface
+- uses plain operator wording (for example: "click Status, then click Refresh")
 
 ## Writing The Failure / Recovery Script
 Every slice must define at least one degraded or recovery scenario.
@@ -134,6 +139,33 @@ The script should answer:
 - what the user should still see
 - what fallback label/message/status should be visible
 - how the system should recover, if recovery is part of the slice
+
+## Operator-Simple Test Card (Mandatory)
+Every future deliverable must include a short "Quick Operator Test Card" so manual validation does not require decoding implementation details.
+
+Required format:
+1. `Preflight (2 min max)`
+   - exact app start command
+   - exact screen/tab to open
+   - exact one-line "known good start" signal
+2. `Happy Path (5 min max)`
+   - 3-7 numbered click/action steps
+   - each step has an explicit expected visible signal (exact label, status text, or chip/state)
+3. `Failure + Recovery (5 min max)`
+   - one explicit break action
+   - one explicit degraded signal
+   - one explicit recovery action
+   - one explicit recovered signal
+4. `Pass/Fail Checklist`
+   - checkbox style `[ ]` lines for each expected signal
+5. `Evidence`
+   - what to paste in notes (`status text`, `probe result`, command output line, screenshot path, etc.)
+
+Rules:
+- avoid internal-only terms unless they are directly visible in UI/log output.
+- include exact button labels and tab names as they appear in app.
+- if a step requires terminal work, include exact command text.
+- if the slice has multiple modes (for example QR and code fallback), include one mini-path per mode.
 
 ## Logging Operator Feedback
 When operator feedback changes the deliverable outcome:
@@ -170,7 +202,7 @@ then do not start coding immediately.
 Instead:
 1. copy [`templates/deliverable-template.md`](./templates/deliverable-template.md) to a new `docs/plan/<family><slice>-...md` file
 2. set the new deliverable status to `specifying`
-3. write the showcase promise, demo script, and failure/recovery script
+3. write the showcase promise, demo script, failure/recovery script, quick operator test card, and evidence checklist
 4. update the tracker and `AGENTS.md`
 5. pass `Spec Gate`
 6. only then start implementation

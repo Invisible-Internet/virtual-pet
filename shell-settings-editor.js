@@ -18,6 +18,61 @@ const SHELL_SETTINGS_FIELDS = Object.freeze([
     defaultValue: true,
   }),
   Object.freeze({
+    key: "openclaw.transport",
+    label: "OpenClaw Transport",
+    description: "Choose bridge transport mode.",
+    kind: "enum",
+    options: Object.freeze(["ws", "http", "stub"]),
+    defaultValue: "ws",
+  }),
+  Object.freeze({
+    key: "openclaw.baseUrl",
+    label: "OpenClaw Base URL",
+    description: "Bridge endpoint URL for OpenClaw gateway.",
+    kind: "text",
+    allowEmpty: false,
+    format: "url",
+    maxLength: 512,
+    defaultValue: "ws://127.0.0.1:18789",
+  }),
+  Object.freeze({
+    key: "openclaw.allowNonLoopback",
+    label: "Allow Non-Loopback Endpoint",
+    description: "Allow remote/VPS OpenClaw endpoint hosts.",
+    kind: "boolean",
+    defaultValue: false,
+  }),
+  Object.freeze({
+    key: "openclaw.authTokenRef",
+    label: "OpenClaw Auth Token Ref",
+    description: "Environment variable name that stores the OpenClaw auth token.",
+    kind: "text",
+    allowEmpty: true,
+    format: "env_ref",
+    maxLength: 128,
+    defaultValue: "PET_OPENCLAW_AUTH_TOKEN",
+  }),
+  Object.freeze({
+    key: "openclaw.petCommandSharedSecretRef",
+    label: "Pet Command Secret Ref",
+    description: "Environment variable name for the pet-command shared secret.",
+    kind: "text",
+    allowEmpty: true,
+    format: "env_ref",
+    maxLength: 128,
+    defaultValue: "PET_OPENCLAW_PET_COMMAND_SECRET",
+  }),
+  Object.freeze({
+    key: "openclaw.petCommandKeyId",
+    label: "Pet Command Key ID",
+    description: "Key identifier used for signed pet command requests.",
+    kind: "text",
+    allowEmpty: false,
+    format: "token_id",
+    maxLength: 64,
+    defaultValue: "local-default",
+  }),
+  Object.freeze({
     key: "integrations.spotify.enabled",
     label: "Spotify Integration",
     description: "Allow Spotify integration checks and responses.",
@@ -193,6 +248,106 @@ function parseInteger(value) {
   return { ok: false, reason: "invalid_integer" };
 }
 
+function parseText(value) {
+  if (typeof value === "string") {
+    return { ok: true, value: value.trim() };
+  }
+  if (typeof value === "number" || typeof value === "boolean") {
+    return { ok: true, value: String(value).trim() };
+  }
+  return { ok: false, reason: "invalid_text" };
+}
+
+function parseEnum(field, value) {
+  const text = parseText(value);
+  if (!text.ok) return { ok: false, reason: "invalid_enum_value" };
+  const options = Array.isArray(field?.options) ? field.options : [];
+  if (options.includes(text.value)) {
+    return { ok: true, value: text.value };
+  }
+  return { ok: false, reason: "invalid_enum_value" };
+}
+
+function validateTextFormat(field, value) {
+  const maxLength = Number.isFinite(Number(field?.maxLength))
+    ? Math.max(1, Math.round(Number(field.maxLength)))
+    : 256;
+  if (value.length > maxLength) {
+    return {
+      ok: false,
+      reason: "text_too_long",
+      maxLength,
+    };
+  }
+  const allowEmpty = field?.allowEmpty === true;
+  if (!allowEmpty && value.length <= 0) {
+    return {
+      ok: false,
+      reason: "text_required",
+    };
+  }
+  const format = toOptionalString(field?.format, null);
+  if (!format || value.length <= 0) {
+    return {
+      ok: true,
+      value,
+      maxLength,
+      format,
+    };
+  }
+  if (format === "url") {
+    try {
+      // eslint-disable-next-line no-new
+      new URL(value);
+    } catch {
+      return {
+        ok: false,
+        reason: "invalid_url",
+      };
+    }
+    return {
+      ok: true,
+      value,
+      maxLength,
+      format,
+    };
+  }
+  if (format === "env_ref") {
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(value)) {
+      return {
+        ok: false,
+        reason: "invalid_env_ref",
+      };
+    }
+    return {
+      ok: true,
+      value,
+      maxLength,
+      format,
+    };
+  }
+  if (format === "token_id") {
+    if (!/^[A-Za-z0-9._-]+$/.test(value)) {
+      return {
+        ok: false,
+        reason: "invalid_token_id",
+      };
+    }
+    return {
+      ok: true,
+      value,
+      maxLength,
+      format,
+    };
+  }
+  return {
+    ok: true,
+    value,
+    maxLength,
+    format,
+  };
+}
+
 function normalizeFieldValue(field, rawValue) {
   if (field.kind === "boolean") {
     const parsed = parseBoolean(rawValue);
@@ -203,6 +358,18 @@ function normalizeFieldValue(field, rawValue) {
     const parsed = parseInteger(rawValue);
     if (!parsed.ok) return Number(field.defaultValue);
     return Math.min(field.max, Math.max(field.min, parsed.value));
+  }
+  if (field.kind === "text") {
+    const parsed = parseText(rawValue);
+    const candidate = parsed.ok ? parsed.value : toOptionalString(field.defaultValue, "");
+    const validated = validateTextFormat(field, candidate);
+    if (validated.ok) return validated.value;
+    return toOptionalString(field.defaultValue, "");
+  }
+  if (field.kind === "enum") {
+    const parsed = parseEnum(field, rawValue);
+    if (parsed.ok) return parsed.value;
+    return toOptionalString(field.defaultValue, "");
   }
   return rawValue;
 }
@@ -235,6 +402,40 @@ function validateFieldValue(field, rawValue) {
         reason: "out_of_range",
         min: field.min,
         max: field.max,
+      };
+    }
+    return {
+      ok: true,
+      value: parsed.value,
+    };
+  }
+  if (field.kind === "text") {
+    const parsed = parseText(rawValue);
+    if (!parsed.ok) {
+      return {
+        ok: false,
+        reason: parsed.reason || "invalid_text",
+      };
+    }
+    const validated = validateTextFormat(field, parsed.value);
+    if (!validated.ok) {
+      return {
+        ok: false,
+        reason: validated.reason || "invalid_text",
+        maxLength: validated.maxLength,
+      };
+    }
+    return {
+      ok: true,
+      value: validated.value,
+    };
+  }
+  if (field.kind === "enum") {
+    const parsed = parseEnum(field, rawValue);
+    if (!parsed.ok) {
+      return {
+        ok: false,
+        reason: parsed.reason || "invalid_enum_value",
       };
     }
     return {
@@ -331,9 +532,22 @@ function buildShellSettingsSnapshot({
               min: field.min,
               max: field.max,
             }
-          : {
-              kind: "boolean",
-            },
+          : field.kind === "enum"
+            ? {
+                kind: "enum",
+                options: Array.isArray(field.options) ? [...field.options] : [],
+              }
+            : field.kind === "text"
+              ? {
+                  kind: "text",
+                  maxLength: Number.isFinite(Number(field.maxLength))
+                    ? Math.max(1, Math.round(Number(field.maxLength)))
+                    : 256,
+                  format: toOptionalString(field.format, null),
+                }
+              : {
+                  kind: "boolean",
+                },
     };
   });
 

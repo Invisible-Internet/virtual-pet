@@ -48,6 +48,12 @@ async function run() {
     },
     openclaw: {
       enabled: true,
+      transport: "ws",
+      baseUrl: "ws://127.0.0.1:18789",
+      allowNonLoopback: false,
+      authTokenRef: "PET_OPENCLAW_AUTH_TOKEN",
+      petCommandSharedSecretRef: "PET_OPENCLAW_PET_COMMAND_SECRET",
+      petCommandKeyId: "local-default",
     },
     ui: {
       diagnosticsEnabled: false,
@@ -99,16 +105,23 @@ async function run() {
   const validation = validateShellSettingsPatch({
     patch: {
       "openclaw.enabled": false,
+      "openclaw.transport": "http",
+      "openclaw.baseUrl": "https://example.openclaw.dev",
       "ui.characterScalePercent": 118,
       "ui.characterHitboxScalePercent": 200,
+      "openclaw.authTokenRef": "not valid ref",
       "paths.localWorkspaceRoot": "W:/not-allowed",
     },
   });
-  assert(validation.accepted.length === 2, "two patch keys should be accepted");
-  assert(validation.rejected.length === 2, "two patch keys should be rejected");
+  assert(validation.accepted.length === 4, "four patch keys should be accepted");
+  assert(validation.rejected.length === 3, "three patch keys should be rejected");
   assert(
     validation.rejected.some((entry) => entry.key === "ui.characterHitboxScalePercent" && entry.reason === "blocked_key"),
     "hitbox percent should be blocked from settings editor writes"
+  );
+  assert(
+    validation.rejected.some((entry) => entry.key === "openclaw.authTokenRef" && entry.reason === "invalid_env_ref"),
+    "invalid auth token ref should be rejected"
   );
   assert(
     validation.rejected.some((entry) => entry.key === "paths.localWorkspaceRoot" && entry.reason === "blocked_key"),
@@ -130,6 +143,14 @@ async function run() {
   assert(
     reloaded.settings.ui.characterScalePercent === 118,
     "accepted characterScalePercent patch should persist"
+  );
+  assert(
+    reloaded.settings.openclaw.transport === "http",
+    "accepted openclaw.transport patch should persist"
+  );
+  assert(
+    reloaded.settings.openclaw.baseUrl === "https://example.openclaw.dev",
+    "accepted openclaw.baseUrl patch should persist"
   );
 
   const persistedSnapshot = buildShellSettingsSnapshot({

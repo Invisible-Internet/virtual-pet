@@ -118,24 +118,27 @@ Historical v1 deliverables keep their original status wording and are not retrof
   - `Showcase Promise (Mandatory)`
   - `Operator Demo Script (Mandatory)`
   - `Failure / Recovery Script (Mandatory)`
+- Every new deliverable must include an operator-simple test card:
+  - exact click path and exact visible signals
+  - short pass/fail checklist with evidence capture items
 - If a slice touches multiple systems, the deliverable is owned by the surface that best demonstrates the outcome.
 - Do not start implementation before `Spec Gate=passed`.
 - Failed operator feedback moves the slice to `iterating`, not `accepted`.
 - `accepted` is the only terminal state for future post-v1 deliverables.
 
 ### Current Workflow Snapshot
-- Current Deliverable: `12e-guided-openclaw-connectivity-and-pairing`
-- Workflow State: `specifying`
-- Current Status: `specifying`
-- Last Completed Deliverable: `12d-openclaw-plugin-and-skill-virtual-pet-lane`
-- Next Detailed Target: `12e-guided-openclaw-connectivity-and-pairing`
-- Next Queued Target: `13a-runtime-memory-retrieval-and-evidence-tags`
+- Current Deliverable: `none`
+- Workflow State: `idle`
+- Current Status: `accepted`
+- Last Completed Deliverable: `12e-guided-openclaw-connectivity-and-pairing`
+- Next Detailed Target: `13a-runtime-memory-retrieval-and-evidence-tags`
+- Next Queued Target: `13b-persona-snapshot-synthesis-and-provenance`
 - Current Gate State:
-  - `Spec Gate`: `passed` (`2026-03-06`)
-  - `Build Gate`: `not_started`
-  - `Acceptance Gate`: `not_started`
+  - `Spec Gate`: `n/a`
+  - `Build Gate`: `n/a`
+  - `Acceptance Gate`: `n/a`
 - Current Session Shipped Outcome:
-  - `no visible app change` (session focused on creating/specifying `12e` and passing `Spec Gate` before implementation)
+  - `no visible app change` (session focused on operator evidence capture and acceptance closure for already-shipped `12e` runtime behavior)
 - Historical Note:
   - D01-D10 are complete historical v1 records.
   - Detailed v1 session history lives in `docs/plan/archive/00-progress-tracker-v1-history.md`.
@@ -145,11 +148,44 @@ Historical v1 deliverables keep their original status wording and are not retrof
   - `12e` pairing methods are now explicitly dual-path:
     - `QR approval`
     - `copy-code fallback`
+  - First implementation slice is now shipped:
+    - pairing runtime module + challenge state machine
+    - bridge detail pairing actions + deterministic pairing probe checks
+    - bounded pairing settings-editor keys
+    - deterministic check `D12e-guided-openclaw-pairing`
+  - QR UX iteration is now shipped:
+    - `Show QR` now renders a scannable in-app image (generated from pairing payload)
+    - local QR utility + contract coverage added:
+      - `openclaw-pairing-qr.js`
+      - `scripts/check-openclaw-pairing-qr.js`
+  - Operator testing format has been simplified for future slices:
+    - post-v1 workflow now requires `Quick Operator Test Card` and `Acceptance Evidence Checklist`
+    - deliverable template now includes concrete preflight/happy/failure steps and pass/fail checkboxes
+  - Verification rerun after implementation request remained green:
+    - `npm run check:syntax`
+    - `npm run check:contracts`
+    - `npm run check:acceptance` -> `22/22`
+  - Operator acceptance evidence captured:
+    - degraded/disabled run:
+      - `Openclaw disabled`
+      - bridge row `DISABLED`
+      - `Pairing State: Not started`
+      - `Last Probe: Disabled`
+    - recovered/healthy run:
+      - `Request Success`
+      - bridge row `HEALTHY`
+      - `Pairing State: Paired`
+      - `Last Probe: Ready`
+      - pass checks:
+        - `Bridge auth`
+        - `Command auth`
+        - `Plugin lane status`
+    - operator also confirmed in-app QR visibility and copyable pairing payload/copy-code fallback observation.
   - Gate outcome:
     - `Spec Gate` passed on `2026-03-06`
-    - `Build Gate` not started
-    - `Acceptance Gate` not started
-  - Shipped outcome: `no visible app change` (spec-only session by workflow rule).
+    - `Build Gate` passed on `2026-03-06`
+    - `Acceptance Gate` passed on `2026-03-06` (operator-accepted closure)
+  - Shipped outcome: visible app/runtime change delivered and accepted; `12e` guided pairing/connectivity flow is now closed with deterministic degraded/recovery evidence.
 - Last completed `12d` outcome:
   - OpenClaw plugin package now follows native structure (`openclaw.plugin.json`, extension entry module, plugin-shipped skill).
   - Versioned lane contract is live for:
@@ -306,7 +342,7 @@ Historical v1 deliverables keep their original status wording and are not retrof
   - `12b-chat-shell-and-conversation-presence` is accepted and closed (`Spec/Build/Acceptance Gates passed`).
   - `12c-guarded-openclaw-pet-command-lane` is accepted and closed (`Spec/Build/Acceptance Gates passed`).
   - `12d-openclaw-plugin-and-skill-virtual-pet-lane` is accepted and closed (`Spec/Build/Acceptance Gates passed`; Acceptance on `2026-03-06`).
-  - `12e-guided-openclaw-connectivity-and-pairing` is active in `specifying` (`Spec Gate` passed on `2026-03-06`).
+  - `12e-guided-openclaw-connectivity-and-pairing` is accepted and closed (`Spec/Build/Acceptance Gates passed`; Acceptance on `2026-03-06`).
   - Families `13` through `15` now use the cohesive `12c` through `15c` sequence in rough-in.
   - Family `14` decisions are locked for downstream slices:
     - `Utility scoring -> FSM arbitration -> per-state micro BT`

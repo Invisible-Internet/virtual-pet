@@ -25,6 +25,11 @@ const OBSERVABILITY_SUBJECT_IDS = Object.freeze({
 const OBSERVABILITY_ACTION_IDS = Object.freeze({
   refreshStatus: "refresh_status",
   openSetup: "open_setup",
+  openSettings: "open_settings",
+  startPairingQr: "start_pairing_qr",
+  copyPairingCode: "copy_pairing_code",
+  retryPairing: "retry_pairing",
+  runPairingProbe: "run_pairing_probe",
   copyPath: "copy_path",
   copyDetails: "copy_details",
 });
@@ -400,6 +405,76 @@ function formatStatusDetailValue(value) {
   return formatReason(value);
 }
 
+function formatPairingStateLabel(value) {
+  const normalized = formatText(value, "").toLowerCase();
+  if (normalized === "not_started") return "Not started";
+  if (normalized === "challenge_ready") return "Challenge ready";
+  if (normalized === "pending_approval") return "Pending approval";
+  if (normalized === "paired") return "Paired";
+  if (normalized === "challenge_expired") return "Challenge expired";
+  if (normalized === "failed") return "Failed";
+  return formatReason(value);
+}
+
+function formatPairingExpiry(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return "Unavailable";
+  const date = new Date(Math.round(numeric));
+  return date.toLocaleString();
+}
+
+function buildPairingSectionMarkup(pairingInput) {
+  const pairing = pairingInput && typeof pairingInput === "object" ? pairingInput : null;
+  if (!pairing) return "";
+  const challenge = pairing.challenge && typeof pairing.challenge === "object" ? pairing.challenge : null;
+  const methodAvailability =
+    pairing.methodAvailability && typeof pairing.methodAvailability === "object"
+      ? pairing.methodAvailability
+      : {};
+  const probe = pairing.lastProbe && typeof pairing.lastProbe === "object" ? pairing.lastProbe : null;
+  const checks = Array.isArray(probe?.checks) ? probe.checks : [];
+  const checkMarkup = checks
+    .map(
+      (check) =>
+        `<li><strong>${escapeHtml(formatReason(check.id || "check"))}:</strong> ${escapeHtml(
+          formatReason(check.state || "unknown")
+        )} (${escapeHtml(formatReason(check.reason || "unknown"))})</li>`
+    )
+    .join("");
+  const qrImageDataUrl = formatText(challenge?.qrImageDataUrl, "");
+  const qrImageMarkup = qrImageDataUrl
+    ? `<div class="pairing-qr-panel"><img class="pairing-qr-image" src="${escapeHtml(
+        qrImageDataUrl
+      )}" alt="Pairing QR code" /></div>`
+    : "";
+  const challengeMarkup = challenge
+    ? `${qrImageMarkup}<div class="settings-detail-list">${buildDetailRow(
+        "Pairing Id",
+        formatText(challenge.pairingId, "Unavailable")
+      )}${buildDetailRow("Expires", formatPairingExpiry(challenge.expiresAtMs))}${buildDetailRow(
+        "QR Payload",
+        formatText(challenge.qrPayload, "Unavailable")
+      )}${buildDetailRow("Pairing Code", formatText(challenge.code, "Unavailable"))}</div>`
+    : '<span class="setup-card-copy">No active pairing challenge.</span>';
+  const probeMarkup = probe
+    ? `<p class="setup-card-copy"><strong>Last Probe:</strong> ${escapeHtml(
+        formatReason(probe.overallState || "unknown")
+      )}</p>${checkMarkup ? `<ul class="detail-list">${checkMarkup}</ul>` : ""}`
+    : '<span class="setup-card-copy">No probe run yet.</span>';
+  return [
+    "<h4>Pairing</h4>",
+    `<div class="settings-detail-list">${buildDetailRow(
+      "Pairing State",
+      formatPairingStateLabel(pairing.pairingState)
+    )}${buildDetailRow("QR Method", methodAvailability.qr === false ? "Unavailable" : "Available")}${buildDetailRow(
+      "Code Method",
+      methodAvailability.code === false ? "Unavailable" : "Available"
+    )}${buildDetailRow("Last Method", formatText(pairing.lastMethod, "none"))}</div>`,
+    challengeMarkup,
+    probeMarkup,
+  ].join("");
+}
+
 function normalizeShellSettingsSnapshot(payload = {}) {
   const rawFields = Array.isArray(payload?.fields) ? payload.fields : [];
   const fields = rawFields
@@ -407,31 +482,59 @@ function normalizeShellSettingsSnapshot(payload = {}) {
       if (!field || typeof field !== "object") return null;
       const key = formatText(field.key, "");
       const kind = formatText(field.kind, "");
-      if (!key || (kind !== "boolean" && kind !== "integer")) return null;
-      const validation =
-        kind === "integer"
-          ? {
-              kind: "integer",
-              min: Number.isFinite(Number(field?.validation?.min))
-                ? Math.round(Number(field.validation.min))
-                : 0,
-              max: Number.isFinite(Number(field?.validation?.max))
-                ? Math.round(Number(field.validation.max))
-                : 100,
-            }
-          : { kind: "boolean" };
-      const value =
-        kind === "boolean"
-          ? field.value === true
-          : Number.isFinite(Number(field.value))
-            ? Math.round(Number(field.value))
-            : 0;
-      const effectiveValue =
-        kind === "boolean"
-          ? field.effectiveValue === true
-          : Number.isFinite(Number(field.effectiveValue))
+      if (!key || (kind !== "boolean" && kind !== "integer" && kind !== "text" && kind !== "enum")) {
+        return null;
+      }
+      const validation = (() => {
+        if (kind === "integer") {
+          return {
+            kind: "integer",
+            min: Number.isFinite(Number(field?.validation?.min))
+              ? Math.round(Number(field.validation.min))
+              : 0,
+            max: Number.isFinite(Number(field?.validation?.max))
+              ? Math.round(Number(field.validation.max))
+              : 100,
+          };
+        }
+        if (kind === "enum") {
+          const options = Array.isArray(field?.validation?.options)
+            ? field.validation.options
+                .map((entry) => formatText(entry, ""))
+                .filter(Boolean)
+            : [];
+          return {
+            kind: "enum",
+            options,
+          };
+        }
+        if (kind === "text") {
+          return {
+            kind: "text",
+            maxLength: Number.isFinite(Number(field?.validation?.maxLength))
+              ? Math.max(1, Math.round(Number(field.validation.maxLength)))
+              : 256,
+          };
+        }
+        return { kind: "boolean" };
+      })();
+      const value = (() => {
+        if (kind === "boolean") return field.value === true;
+        if (kind === "integer") {
+          return Number.isFinite(Number(field.value)) ? Math.round(Number(field.value)) : 0;
+        }
+        return formatText(field.value, "");
+      })();
+      const effectiveValue = (() => {
+        if (kind === "boolean") return field.effectiveValue === true;
+        if (kind === "integer") {
+          return Number.isFinite(Number(field.effectiveValue))
             ? Math.round(Number(field.effectiveValue))
             : value;
+        }
+        const normalized = formatText(field.effectiveValue, "");
+        return normalized || value;
+      })();
       return {
         key,
         label: formatText(field.label, key),
@@ -494,6 +597,14 @@ function coerceShellSettingsFieldValue(field, rawValue) {
     if (!Number.isFinite(numeric)) return field.value;
     return Math.round(numeric);
   }
+  if (field.kind === "enum") {
+    const normalized = formatText(rawValue, "");
+    const allowed = Array.isArray(field.validation?.options) ? field.validation.options : [];
+    return allowed.includes(normalized) ? normalized : field.value;
+  }
+  if (field.kind === "text") {
+    return formatText(rawValue, "");
+  }
   return rawValue;
 }
 
@@ -524,61 +635,93 @@ function renderShellSettingsEditor() {
       const draftValue = Object.prototype.hasOwnProperty.call(shellSettingsDraft, field.key)
         ? shellSettingsDraft[field.key]
         : field.value;
-      const controlMarkup =
-        field.kind === "boolean"
-          ? `<select class="setup-select" data-shell-setting-key="${escapeHtml(field.key)}" ${
-              field.editable ? "" : "disabled"
-            }>
-              <option value="true" ${draftValue === true ? "selected" : ""}>Enabled</option>
-              <option value="false" ${draftValue === false ? "selected" : ""}>Disabled</option>
-            </select>`
-          : field.key === CHARACTER_SCALE_FIELD_KEY
-            ? `<div class="setup-slider-wrap">
-                <input class="setup-slider" type="range" step="${CHARACTER_SCALE_SLIDER_STEP}" data-shell-setting-key="${escapeHtml(
-                  field.key
-                )}" min="${CHARACTER_SCALE_SLIDER_MIN}" max="${CHARACTER_SCALE_SLIDER_MAX}" list="character-scale-ticks" value="${Math.round(
-                  characterScalePercentToNormalized(draftValue) * 100
-                ) / 100}" ${field.editable ? "" : "disabled"} />
-                <datalist id="character-scale-ticks">
-                  <option value="0" label="0"></option>
-                  <option value="0.25" label="25"></option>
-                  <option value="0.5" label="50"></option>
-                  <option value="0.75" label="75"></option>
-                  <option value="1" label="100"></option>
-                </datalist>
-                <div class="setup-slider-ticks" aria-hidden="true">
-                  <span>0</span>
-                  <span>25</span>
-                  <span>50</span>
-                  <span>75</span>
-                  <span>100</span>
-                </div>
-                <span class="setup-card-copy" data-shell-setting-readout="${escapeHtml(
-                  field.key
-                )}">${escapeHtml(buildCharacterScaleReadout(characterScalePercentToNormalized(draftValue)))}</span>
-              </div>`
-            : `<input class="setup-input" type="number" step="1" data-shell-setting-key="${escapeHtml(
+      const controlMarkup = (() => {
+        if (field.kind === "boolean") {
+          return `<select class="setup-select" data-shell-setting-key="${escapeHtml(field.key)}" ${
+            field.editable ? "" : "disabled"
+          }>
+            <option value="true" ${draftValue === true ? "selected" : ""}>Enabled</option>
+            <option value="false" ${draftValue === false ? "selected" : ""}>Disabled</option>
+          </select>`;
+        }
+        if (field.kind === "enum") {
+          const options = Array.isArray(field.validation?.options) ? field.validation.options : [];
+          const optionMarkup = options
+            .map(
+              (option) =>
+                `<option value="${escapeHtml(option)}" ${draftValue === option ? "selected" : ""}>${escapeHtml(
+                  option
+                )}</option>`
+            )
+            .join("");
+          return `<select class="setup-select" data-shell-setting-key="${escapeHtml(field.key)}" ${
+            field.editable ? "" : "disabled"
+          }>${optionMarkup}</select>`;
+        }
+        if (field.kind === "text") {
+          return `<input class="setup-input" type="text" data-shell-setting-key="${escapeHtml(
+            field.key
+          )}" maxlength="${escapeHtml(field.validation?.maxLength || 256)}" value="${escapeHtml(
+            draftValue
+          )}" ${field.editable ? "" : "disabled"} />`;
+        }
+        if (field.key === CHARACTER_SCALE_FIELD_KEY) {
+          return `<div class="setup-slider-wrap">
+              <input class="setup-slider" type="range" step="${CHARACTER_SCALE_SLIDER_STEP}" data-shell-setting-key="${escapeHtml(
                 field.key
-              )}" min="${escapeHtml(field.validation.min)}" max="${escapeHtml(
-                field.validation.max
-              )}" value="${escapeHtml(draftValue)}" ${field.editable ? "" : "disabled"} />`;
+              )}" min="${CHARACTER_SCALE_SLIDER_MIN}" max="${CHARACTER_SCALE_SLIDER_MAX}" list="character-scale-ticks" value="${Math.round(
+                characterScalePercentToNormalized(draftValue) * 100
+              ) / 100}" ${field.editable ? "" : "disabled"} />
+              <datalist id="character-scale-ticks">
+                <option value="0" label="0"></option>
+                <option value="0.25" label="25"></option>
+                <option value="0.5" label="50"></option>
+                <option value="0.75" label="75"></option>
+                <option value="1" label="100"></option>
+              </datalist>
+              <div class="setup-slider-ticks" aria-hidden="true">
+                <span>0</span>
+                <span>25</span>
+                <span>50</span>
+                <span>75</span>
+                <span>100</span>
+              </div>
+              <span class="setup-card-copy" data-shell-setting-readout="${escapeHtml(
+                field.key
+              )}">${escapeHtml(buildCharacterScaleReadout(characterScalePercentToNormalized(draftValue)))}</span>
+            </div>`;
+        }
+        return `<input class="setup-input" type="number" step="1" data-shell-setting-key="${escapeHtml(
+          field.key
+        )}" min="${escapeHtml(field.validation.min)}" max="${escapeHtml(
+          field.validation.max
+        )}" value="${escapeHtml(draftValue)}" ${field.editable ? "" : "disabled"} />`;
+      })();
       const sourceLabel = formatSettingsSource(field.source);
-      const effectiveValueLabel =
-        field.kind === "boolean"
-          ? field.effectiveValue === true
-            ? "Enabled"
-            : "Disabled"
-          : field.key === CHARACTER_SCALE_FIELD_KEY
-            ? formatCharacterScaleValue(field.effectiveValue)
-            : `${field.effectiveValue}%`;
-      const savedValueLabel =
-        field.kind === "boolean"
-          ? field.value === true
-            ? "Enabled"
-            : "Disabled"
-          : field.key === CHARACTER_SCALE_FIELD_KEY
-            ? formatCharacterScaleValue(field.value)
-            : `${field.value}%`;
+      const effectiveValueLabel = (() => {
+        if (field.kind === "boolean") {
+          return field.effectiveValue === true ? "Enabled" : "Disabled";
+        }
+        if (field.kind === "text" || field.kind === "enum") {
+          return formatText(field.effectiveValue, "Not set");
+        }
+        if (field.key === CHARACTER_SCALE_FIELD_KEY) {
+          return formatCharacterScaleValue(field.effectiveValue);
+        }
+        return String(field.effectiveValue);
+      })();
+      const savedValueLabel = (() => {
+        if (field.kind === "boolean") {
+          return field.value === true ? "Enabled" : "Disabled";
+        }
+        if (field.kind === "text" || field.kind === "enum") {
+          return formatText(field.value, "Not set");
+        }
+        if (field.key === CHARACTER_SCALE_FIELD_KEY) {
+          return formatCharacterScaleValue(field.value);
+        }
+        return String(field.value);
+      })();
       const descriptionMarkup =
         field.key === CHARACTER_SCALE_FIELD_KEY || !field.description
           ? ""
@@ -1070,6 +1213,7 @@ function renderObservabilityDetail() {
   const provenance = Array.isArray(detail.provenance) ? detail.provenance : [];
   const steps = Array.isArray(detail.suggestedSteps) ? detail.suggestedSteps : [];
   const actions = Array.isArray(detail.actions) ? detail.actions : [];
+  const pairingMarkup = buildPairingSectionMarkup(detail.pairing);
   const provenanceMarkup = provenance
     .map(
       (entry) =>
@@ -1092,6 +1236,7 @@ function renderObservabilityDetail() {
     `<div class="settings-detail-list">${buildDetailRow("Who Owns This", formatOwnershipLabel(detail.summary?.ownership))}${buildDetailRow("How To Fix", formatRepairabilityLabel(detail.summary?.repairability))}</div>`,
     `<h4>Where This Info Came From</h4>`,
     provenanceMarkup ? `<ul class="detail-list">${provenanceMarkup}</ul>` : '<span class="setup-card-copy">No source details yet.</span>',
+    pairingMarkup,
     `<h4>Suggested Steps</h4>`,
     stepsMarkup ? `<ul class="detail-list detail-list--steps">${stepsMarkup}</ul>` : '<span class="setup-card-copy">No suggested steps available.</span>',
     `<div class="setup-actions">${actionsMarkup}</div>`,
@@ -1145,6 +1290,18 @@ async function runObservabilityDetailAction(actionId) {
       setStatus("Details copied to clipboard.", "ok");
     } else if (result.actionId === OBSERVABILITY_ACTION_IDS.openSetup) {
       setStatus("Setup opened from status details.", "ok");
+    } else if (result.actionId === OBSERVABILITY_ACTION_IDS.openSettings) {
+      setStatus("Advanced Settings opened from status details.", "ok");
+    } else if (result.actionId === OBSERVABILITY_ACTION_IDS.startPairingQr) {
+      setStatus("Pairing challenge generated. Scan the QR image in the Pairing section.", "ok");
+    } else if (result.actionId === OBSERVABILITY_ACTION_IDS.copyPairingCode) {
+      setStatus("Pairing code copied to clipboard.", "ok");
+    } else if (result.actionId === OBSERVABILITY_ACTION_IDS.retryPairing) {
+      setStatus("Pairing challenge refreshed.", "ok");
+    } else if (result.actionId === OBSERVABILITY_ACTION_IDS.runPairingProbe) {
+      const overallState = formatText(result?.pairingProbe?.overallState, "unknown");
+      const tone = overallState === "ready" ? "ok" : overallState === "disabled" ? "muted" : "warning";
+      setStatus(`Pairing probe result: ${formatReason(overallState)}.`, tone);
     } else {
       setStatus("Status refreshed.", "ok");
     }

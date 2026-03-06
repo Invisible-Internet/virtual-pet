@@ -1,7 +1,7 @@
 # Deliverable 12e: Guided OpenClaw Connectivity and Pairing
 
 **Deliverable ID:** `12e-guided-openclaw-connectivity-and-pairing`  
-**Status:** `specifying`  
+**Status:** `accepted`  
 **Owner:** `Mic + Codex`  
 **Last Updated:** `2026-03-06`  
 **Depends On:** `04-openclaw-bridge-spec`, `11a-openclaw-memory-observability-surface`, `11c-repair-actions-and-provenance-visibility`, `11d-settings-editor-and-service-controls`, `12a-real-openclaw-dialog-parity`, `12c-guarded-openclaw-pet-command-lane`, `12d-openclaw-plugin-and-skill-virtual-pet-lane`  
@@ -67,6 +67,50 @@ The operator can open `Status`, initiate pairing using either `QR approval` or `
 5. Start QR pairing, let challenge expire, then rerun probe; confirm deterministic `pairing_challenge_expired` (or equivalent) and `Retry Pairing` guidance.
 6. Retry using copy-code flow and complete external pairing/auth requirement, then rerun probe.
 7. Confirm checklist moves to ready/healthy without app restart if runtime recovery supports it.
+
+## Quick Operator Test Card (Mandatory)
+### Preflight (2 min max)
+1. Run: `npm start`
+2. Open: tray `Status...` -> `OpenClaw Bridge` detail
+3. Confirm start signal:
+   - bridge card shows `HEALTHY` or `DEGRADED`
+   - `Run Pairing Probe` button is visible
+
+### Happy Path (5 min max)
+1. Click `Show QR`.
+   - Expect: pairing section shows a QR image and `Pairing Id`.
+2. Approve pairing externally (scan QR or use payload as required by operator environment).
+   - Expect: no app crash; pairing section remains visible.
+3. Click `Run Pairing Probe`.
+   - Expect: status line shows `Pairing probe result: Ready`.
+4. Click `Copy Pairing Code`, complete external approval path, then click `Run Pairing Probe` again.
+   - Expect: probe remains `Ready` and checks stay `Pass`.
+
+### Failure + Recovery (5 min max)
+1. Break it: set invalid `OpenClaw Base URL` in `Settings`, then run `Run Pairing Probe`.
+   - Expect degraded signal: `Bridge endpoint policy: Fail` and non-ready probe result.
+2. Recover it: restore valid endpoint, click `Retry Pairing`, complete pairing, then run `Run Pairing Probe`.
+   - Expect recovered signal: `Pairing probe result: Ready`.
+
+### Pass / Fail Checklist
+- [x] `Show QR` displays a visible QR image in-app.
+- [x] `Copy Pairing Code` copies a short challenge code (not auth secret/token).
+- [x] failure case shows deterministic non-ready check reason.
+- [x] recovery returns to `Pairing probe result: Ready`.
+
+## Acceptance Evidence Checklist (Mandatory)
+- [x] probe summary lines captured:
+  - `Last Probe: Disabled`
+  - `Last Probe: Ready`
+- [x] check rows captured:
+  - `Bridge auth: Pass (Bridge auth ok)`
+  - `Command auth: Pass (Command auth ready)`
+  - `Plugin lane status: Pass (Plugin lane ready)`
+- [x] pairing-state lines captured:
+  - `Pairing State: Not started` (degraded/disabled run)
+  - `Pairing State: Paired` (recovered run)
+- [x] QR evidence captured:
+  - operator confirmed in-app QR was visible and payload URL was copyable
 
 ## Public Interfaces / Touchpoints
 - Deliverable doc:
@@ -195,35 +239,126 @@ Rules:
   - pairing flow bypasses existing app authority boundaries.
 
 ## Implementation Slice (Mandatory)
-- No implementation yet in this session.
-- First planned vertical slice:
-  - add bridge-detail pairing checklist + QR/copy-code method affordances + `open_settings`/`run_pairing_probe` actions,
-  - add bounded pairing challenge state handling (`challenge_ready`, `pending_approval`, `challenge_expired`, `paired`),
-  - add bounded pairing settings keys to shell settings editor,
-  - add deterministic check `scripts/check-openclaw-pairing-guidance.js` and acceptance row `D12e-guided-openclaw-pairing`.
+- First implementation slice shipped:
+  - added new pairing guidance runtime module:
+    - `openclaw-pairing-guidance.js`
+    - deterministic pairing challenge lifecycle:
+      - `not_started`
+      - `challenge_ready`
+      - `pending_approval`
+      - `paired`
+      - `challenge_expired`
+      - `failed`
+  - extended shared-shell `Status` bridge detail with bounded pairing actions:
+    - `open_settings`
+    - `start_pairing_qr`
+    - `copy_pairing_code`
+    - `retry_pairing`
+    - `run_pairing_probe`
+  - wired `main.js` observability action handling for pairing actions:
+    - QR/code challenge mint + retry
+    - pairing-code clipboard copy
+    - deterministic pairing probe checks:
+      - `bridge_enabled`
+      - `bridge_endpoint_policy`
+      - `bridge_auth`
+      - `command_auth`
+      - `plugin_lane_status`
+    - probe overall states:
+      - `ready`
+      - `degraded`
+      - `failed`
+      - `disabled`
+  - bridged pairing snapshot into observability payload so bridge detail shows:
+    - current pairing state
+    - challenge metadata (`pairingId`, expiry, qr payload, code)
+    - last probe summary/checks
+  - iterated QR UX to render a real in-app scannable image from challenge payload:
+    - added local QR generator utility:
+      - `openclaw-pairing-qr.js`
+    - bridge pairing snapshot now includes challenge `qrImageDataUrl` for renderer-safe display
+    - `Status` detail pairing card now renders QR image (while retaining payload + copy-code fallback)
+  - expanded bounded shell settings editor contract for pairing-related keys:
+    - `openclaw.transport`
+    - `openclaw.baseUrl`
+    - `openclaw.allowNonLoopback`
+    - `openclaw.authTokenRef`
+    - `openclaw.petCommandSharedSecretRef`
+    - `openclaw.petCommandKeyId`
+    - kept raw secret/token values blocked
+  - added deterministic coverage:
+    - `scripts/check-openclaw-pairing-guidance.js`
+    - `scripts/check-openclaw-pairing-qr.js`
+    - acceptance matrix row `D12e-guided-openclaw-pairing`
+  - verification run:
+    - `npm run check:syntax`
+    - `npm run check:contracts`
+    - `npm run check:acceptance` -> `22/22 automated checks passed`
 
 ## Visible App Outcome
-- No visible app/runtime change yet.
-- This session locks the `12e` operator-facing pairing contract so implementation can start without redefining UX or safety boundaries.
+- Visible app/runtime change delivered:
+  - `Status` -> `OpenClaw Bridge` detail now includes guided pairing actions and state.
+  - Operators can initiate pairing challenge from the app via QR or copy-code fallback and run a bounded pairing probe.
+  - `Show QR` now renders a scannable in-app QR image for the challenge payload (not payload text only).
+  - Pairing probe now reports deterministic per-check reasons for degraded/failed/ready states.
+  - `Settings` editor now supports bounded pairing-related OpenClaw connectivity fields while keeping raw secrets blocked.
 
 ## Acceptance Notes
 - `2026-03-06`: File created from the post-v1 deliverable template for `12e`.
 - `2026-03-06`: Spec locked for pairing checklist, probe actions, pairing-safe settings boundaries, and deterministic test hooks.
 - `2026-03-06`: Spec iterated to lock dual pairing methods (`QR approval` + `copy-code fallback`) with shared deterministic readiness/probe contracts.
-- `2026-03-06`: Implementation intentionally not started; this is a spec-only session.
+- `2026-03-06`: First `12e` implementation slice landed across pairing runtime, bridge-detail actions, and settings-editor bounded keys.
+- `2026-03-06`: Build verification run passed:
+  - `npm run check:syntax`
+  - `npm run check:contracts`
+  - `npm run check:acceptance` -> `22/22`
+- `2026-03-06`: Post-implementation verification rerun stayed green:
+  - `npm run check:syntax`
+  - `npm run check:contracts`
+  - `npm run check:acceptance` -> `22/22`
+- `2026-03-06`: QR iteration shipped for operator UX:
+  - in-app `Show QR` now displays a generated scannable QR image (`data:image/svg+xml`)
+  - added local QR contract check:
+    - `scripts/check-openclaw-pairing-qr.js`
+  - verification rerun stayed green:
+    - `npm run check:syntax`
+    - `npm run check:contracts`
+    - `npm run check:acceptance` -> `22/22`
+- `2026-03-06`: Operator acceptance evidence captured for closure:
+  - degraded/disabled evidence:
+    - `Openclaw disabled`
+    - bridge row state `DISABLED`
+    - `Pairing State: Not started`
+    - `Last Probe: Disabled`
+  - recovery evidence:
+    - `Request Success`
+    - bridge row state `HEALTHY`
+    - `Pairing State: Paired`
+    - `Last Probe: Ready`
+    - checks all pass (`Bridge auth`, `Command auth`, `Plugin lane status`)
+  - copy-code/QR path evidence:
+    - operator confirmed QR display and copyable payload URL
+    - operator confirmed copy-code fallback path was observed previously
 
 ## Iteration Log
 - `2026-03-06`: Initial `12e` spec drafted from template and aligned to accepted `12a`/`12c`/`12d` boundaries.
 - `2026-03-06`: Added explicit desktop-to-VPS pairing contract with QR challenge flow and manual code fallback flow.
+- `2026-03-06`: Implemented first vertical slice for guided pairing actions, pairing probe checks, and bounded settings support.
+- `2026-03-06`: Revalidated `12e` implementation on request; no additional runtime changes were required after checks.
+- `2026-03-06`: Implemented QR-image rendering in `Status` pairing details so operators can scan directly from the app.
+- `2026-03-06`: Acceptance evidence clarified env-override behavior (`SOURCE=Environment variable`, `ENV OVERRIDE=Active`) and completed operator failure/recovery verification using env-driven test mode.
 
 ## Gate Status
 - `Spec Gate`: `passed` (`2026-03-06`)
-- `Build Gate`: `not_started`
-- `Acceptance Gate`: `not_started`
-- `Overall`: `specifying`
+- `Build Gate`: `passed` (`2026-03-06`)
+- `Acceptance Gate`: `passed` (`2026-03-06`)
+- `Overall`: `accepted`
 
 ## Change Log
 - `2026-03-06`: File created from the post-v1 deliverable template.
 - `2026-03-06`: Added guided pairing checklist/probe contract, pairing-safe settings boundaries, and acceptance scripts.
 - `2026-03-06`: Expanded pairing spec to include QR pairing and copy-code fallback contracts with deterministic failure/retry states.
 - `2026-03-06`: Marked `Spec Gate` passed; implementation intentionally not started.
+- `2026-03-06`: Implemented first `12e` runtime/UI/settings slice, added deterministic `D12e` coverage, and passed `Build Gate`.
+- `2026-03-06`: Added local QR generation + in-app pairing QR rendering; checks remained green.
+- `2026-03-06`: Marked `Acceptance Gate` passed and closed `12e` as `accepted` after operator-verified degraded/recovery and dual pairing-path evidence.

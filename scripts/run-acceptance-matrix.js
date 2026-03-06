@@ -126,6 +126,13 @@ const CASES = Object.freeze([
     script: "scripts/check-openclaw-plugin-skill-lane.js",
   },
   {
+    id: "D12e-guided-openclaw-pairing",
+    deliverable: "12e-guided-openclaw-connectivity-and-pairing",
+    scenario:
+      "Guided pairing state machine supports QR and copy-code paths with deterministic probe and bridge-detail actions.",
+    script: "scripts/check-openclaw-pairing-guidance.js",
+  },
+  {
     id: "Layout-assets",
     deliverable: "core-renderer-assets",
     scenario: "Layout bounds and required sprite assets remain internally consistent.",

@@ -33,16 +33,16 @@ Historical v1 deliverables keep their original wording and remain archived histo
   - operator-visible demo passes and evidence is logged
 
 ## Current Deliverable
-- Current Deliverable: `12e-guided-openclaw-connectivity-and-pairing`
-- Workflow State: `specifying`
-- Current Status: `specifying`
-- Last Completed Deliverable: `12d-openclaw-plugin-and-skill-virtual-pet-lane`
-- Next Detailed Target: `12e-guided-openclaw-connectivity-and-pairing`
-- Next Queued Target: `13a-runtime-memory-retrieval-and-evidence-tags`
+- Current Deliverable: `none`
+- Workflow State: `idle`
+- Current Status: `accepted`
+- Last Completed Deliverable: `12e-guided-openclaw-connectivity-and-pairing`
+- Next Detailed Target: `13a-runtime-memory-retrieval-and-evidence-tags`
+- Next Queued Target: `13b-persona-snapshot-synthesis-and-provenance`
 - Current Gate State:
-  - `Spec Gate`: `passed` (`2026-03-06`)
-  - `Build Gate`: `not_started`
-  - `Acceptance Gate`: `not_started`
+  - `Spec Gate`: `n/a`
+  - `Build Gate`: `n/a`
+  - `Acceptance Gate`: `n/a`
 
 ## Post-v1 Family Rough-In
 Locked family order:
@@ -61,7 +61,7 @@ Planning state:
 - `12b-chat-shell-and-conversation-presence` is now accepted and closed (`Spec/Build/Acceptance Gates passed`).
 - `12c-guarded-openclaw-pet-command-lane` is accepted and closed (`Spec/Build/Acceptance Gates passed`).
 - `12d-openclaw-plugin-and-skill-virtual-pet-lane` is accepted and closed (`Spec/Build/Acceptance Gates passed`; Acceptance on `2026-03-06`).
-- `12e-guided-openclaw-connectivity-and-pairing` is now active in `specifying` (`Spec Gate` passed on `2026-03-06`).
+- `12e-guided-openclaw-connectivity-and-pairing` is accepted and closed (`Spec/Build/Acceptance Gates passed`; Acceptance on `2026-03-06`).
 - Families `13` through `15` now follow the cohesive `12c`-`15c` sequence in rough-in, with family-14 control/animation policy decisions locked.
 - Full family notes live in [`11-15-post-v1-roadmap-rough-in.md`](./11-15-post-v1-roadmap-rough-in.md).
 
@@ -69,19 +69,101 @@ Planning state:
 1. Read [`00-development-workflow.md`](./00-development-workflow.md).
 2. Copy [`templates/deliverable-template.md`](./templates/deliverable-template.md) to a new `docs/plan/<family><slice>-...md` file.
 3. Set the new deliverable status to `specifying`.
-4. Fill in the showcase promise, operator demo script, failure/recovery script, public interfaces/touchpoints, and acceptance bar.
+4. Fill in the showcase promise, operator demo script, failure/recovery script, quick operator test card, acceptance evidence checklist, public interfaces/touchpoints, and acceptance bar.
 5. Update this tracker and `AGENTS.md` to point to the new deliverable.
 6. Pass `Spec Gate` before implementation begins.
 
 ## Next 3 Actions
-1. Implement the first `12e` vertical slice for guided connectivity/pairing checks in shared-shell `Status`, including both QR pairing and copy-code fallback paths.
-2. Add deterministic coverage for `12e` (`scripts/check-openclaw-pairing-guidance.js` + acceptance matrix row).
-3. Run `12e` build checks and capture operator-visible demo/failure evidence for gate progression.
+1. Set `13a-runtime-memory-retrieval-and-evidence-tags` as the new active deliverable (`specifying`).
+2. Draft `13a` using template with the required quick operator test card + evidence checklist.
+3. Pass `13a` `Spec Gate` before implementation.
 
 ## Blockers
 - None currently.
 
 ## Last Session Summary
+- Closed `12e-guided-openclaw-connectivity-and-pairing` as `accepted`:
+  - operator-provided degraded evidence captured:
+    - `Openclaw disabled`
+    - bridge row `DISABLED`
+    - `Pairing State: Not started`
+    - `Last Probe: Disabled`
+  - operator-provided recovery evidence captured:
+    - `Request Success`
+    - bridge row `HEALTHY`
+    - `Pairing State: Paired`
+    - `Last Probe: Ready`
+    - checks pass:
+      - `Bridge auth`
+      - `Command auth`
+      - `Plugin lane status`
+  - operator confirmed QR display + copyable pairing payload and copy-code fallback observation.
+  - gate outcome:
+    - `Spec Gate`: passed (`2026-03-06`)
+    - `Build Gate`: passed (`2026-03-06`)
+    - `Acceptance Gate`: passed (`2026-03-06`)
+  - workflow moved to `idle` with `Current Deliverable: none`.
+  - shipped outcome note: no additional runtime code change in this closure step; session focused on operator evidence capture and documentation/gate closure for already-shipped `12e` behavior.
+- Updated post-v1 working method to make operator testing easier for all future deliverables:
+  - `docs/plan/00-development-workflow.md` now mandates a plain-language `Quick Operator Test Card` and `Acceptance Evidence Checklist`
+  - `docs/plan/templates/deliverable-template.md` now includes prefilled sections for:
+    - preflight
+    - happy path
+    - failure/recovery
+    - pass/fail checkboxes
+    - evidence capture checkboxes
+  - active `12e` deliverable now includes the same quick-test-card format for immediate use
+  - shipped outcome note: no runtime code change; workflow/test-documentation quality improvement for easier operator verification.
+- Iterated active `12e-guided-openclaw-connectivity-and-pairing` with in-app QR rendering:
+  - added local QR utility:
+    - `openclaw-pairing-qr.js`
+  - `Status` -> `OpenClaw Bridge` pairing detail now renders a scannable QR image for `Show QR` (not payload text only)
+  - retained copy-code fallback and existing bounded actions/probe behavior
+  - added deterministic QR contract check:
+    - `scripts/check-openclaw-pairing-qr.js`
+  - verification rerun:
+    - `npm run check:syntax`
+    - `npm run check:contracts`
+    - `npm run check:acceptance` -> `22/22 automated checks passed`
+  - shipped outcome note: visible app/runtime change delivered (operator can now scan pairing QR directly in-app).
+- Revalidated active `12e-guided-openclaw-connectivity-and-pairing` implementation on request:
+  - reran:
+    - `npm run check:syntax`
+    - `npm run check:contracts`
+    - `npm run check:acceptance` -> `22/22 automated checks passed`
+  - no additional runtime/code edits were required after verification
+  - shipped outcome note: visible app/runtime change remains delivered; `Acceptance Gate` is still pending operator demo + failure/recovery evidence.
+- Implemented first `12e-guided-openclaw-connectivity-and-pairing` runtime slice and passed `Build Gate`:
+  - added pairing runtime module:
+    - `openclaw-pairing-guidance.js`
+  - extended shared-shell bridge detail/actions for pairing:
+    - `open_settings`
+    - `start_pairing_qr`
+    - `copy_pairing_code`
+    - `retry_pairing`
+    - `run_pairing_probe`
+  - wired deterministic pairing probe checks and overall-state classification in main:
+    - `bridge_enabled`
+    - `bridge_endpoint_policy`
+    - `bridge_auth`
+    - `command_auth`
+    - `plugin_lane_status`
+  - bridged pairing challenge/probe state into observability detail payloads.
+  - extended bounded shell settings editor keys for pairing connectivity:
+    - `openclaw.transport`
+    - `openclaw.baseUrl`
+    - `openclaw.allowNonLoopback`
+    - `openclaw.authTokenRef`
+    - `openclaw.petCommandSharedSecretRef`
+    - `openclaw.petCommandKeyId`
+  - added deterministic coverage:
+    - `scripts/check-openclaw-pairing-guidance.js`
+    - acceptance row `D12e-guided-openclaw-pairing`
+  - verification run:
+    - `npm run check:syntax`
+    - `npm run check:contracts`
+    - `npm run check:acceptance` -> `22/22 automated checks passed`
+  - shipped outcome note: visible app/runtime change delivered (guided QR + copy-code pairing actions, deterministic probe visibility, and bounded pairing settings controls are now live).
 - Started `12e-guided-openclaw-connectivity-and-pairing` as the active deliverable:
   - created [`12e-guided-openclaw-connectivity-and-pairing.md`](./12e-guided-openclaw-connectivity-and-pairing.md) from the post-v1 template
   - set deliverable status to `specifying`
