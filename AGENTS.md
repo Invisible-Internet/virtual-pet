@@ -124,21 +124,32 @@ Historical v1 deliverables keep their original status wording and are not retrof
 - `accepted` is the only terminal state for future post-v1 deliverables.
 
 ### Current Workflow Snapshot
-- Current Deliverable: `none`
-- Workflow State: `idle`
-- Current Status: `accepted`
+- Current Deliverable: `12e-guided-openclaw-connectivity-and-pairing`
+- Workflow State: `specifying`
+- Current Status: `specifying`
 - Last Completed Deliverable: `12d-openclaw-plugin-and-skill-virtual-pet-lane`
 - Next Detailed Target: `12e-guided-openclaw-connectivity-and-pairing`
 - Next Queued Target: `13a-runtime-memory-retrieval-and-evidence-tags`
 - Current Gate State:
-  - `Spec Gate`: `n/a`
-  - `Build Gate`: `n/a`
-  - `Acceptance Gate`: `n/a`
+  - `Spec Gate`: `passed` (`2026-03-06`)
+  - `Build Gate`: `not_started`
+  - `Acceptance Gate`: `not_started`
 - Current Session Shipped Outcome:
-  - `no visible app change` (session focused on operator evidence capture + documentation/gate closure for already-shipped `12d` runtime behavior)
+  - `no visible app change` (session focused on creating/specifying `12e` and passing `Spec Gate` before implementation)
 - Historical Note:
   - D01-D10 are complete historical v1 records.
   - Detailed v1 session history lives in `docs/plan/archive/00-progress-tracker-v1-history.md`.
+- Active `12e` spec outcome:
+  - Created `docs/plan/12e-guided-openclaw-connectivity-and-pairing.md` from template.
+  - Locked showcase promise, operator demo script, failure/recovery script, pairing-safe settings boundary, and deterministic check targets.
+  - `12e` pairing methods are now explicitly dual-path:
+    - `QR approval`
+    - `copy-code fallback`
+  - Gate outcome:
+    - `Spec Gate` passed on `2026-03-06`
+    - `Build Gate` not started
+    - `Acceptance Gate` not started
+  - Shipped outcome: `no visible app change` (spec-only session by workflow rule).
 - Last completed `12d` outcome:
   - OpenClaw plugin package now follows native structure (`openclaw.plugin.json`, extension entry module, plugin-shipped skill).
   - Versioned lane contract is live for:
@@ -295,7 +306,7 @@ Historical v1 deliverables keep their original status wording and are not retrof
   - `12b-chat-shell-and-conversation-presence` is accepted and closed (`Spec/Build/Acceptance Gates passed`).
   - `12c-guarded-openclaw-pet-command-lane` is accepted and closed (`Spec/Build/Acceptance Gates passed`).
   - `12d-openclaw-plugin-and-skill-virtual-pet-lane` is accepted and closed (`Spec/Build/Acceptance Gates passed`; Acceptance on `2026-03-06`).
-  - `12e-guided-openclaw-connectivity-and-pairing` is the next detailed target.
+  - `12e-guided-openclaw-connectivity-and-pairing` is active in `specifying` (`Spec Gate` passed on `2026-03-06`).
   - Families `13` through `15` now use the cohesive `12c` through `15c` sequence in rough-in.
   - Family `14` decisions are locked for downstream slices:
     - `Utility scoring -> FSM arbitration -> per-state micro BT`

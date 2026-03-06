@@ -33,16 +33,16 @@ Historical v1 deliverables keep their original wording and remain archived histo
   - operator-visible demo passes and evidence is logged
 
 ## Current Deliverable
-- Current Deliverable: `none`
-- Workflow State: `idle`
-- Current Status: `accepted`
+- Current Deliverable: `12e-guided-openclaw-connectivity-and-pairing`
+- Workflow State: `specifying`
+- Current Status: `specifying`
 - Last Completed Deliverable: `12d-openclaw-plugin-and-skill-virtual-pet-lane`
 - Next Detailed Target: `12e-guided-openclaw-connectivity-and-pairing`
 - Next Queued Target: `13a-runtime-memory-retrieval-and-evidence-tags`
 - Current Gate State:
-  - `Spec Gate`: `n/a`
-  - `Build Gate`: `n/a`
-  - `Acceptance Gate`: `n/a`
+  - `Spec Gate`: `passed` (`2026-03-06`)
+  - `Build Gate`: `not_started`
+  - `Acceptance Gate`: `not_started`
 
 ## Post-v1 Family Rough-In
 Locked family order:
@@ -61,7 +61,7 @@ Planning state:
 - `12b-chat-shell-and-conversation-presence` is now accepted and closed (`Spec/Build/Acceptance Gates passed`).
 - `12c-guarded-openclaw-pet-command-lane` is accepted and closed (`Spec/Build/Acceptance Gates passed`).
 - `12d-openclaw-plugin-and-skill-virtual-pet-lane` is accepted and closed (`Spec/Build/Acceptance Gates passed`; Acceptance on `2026-03-06`).
-- `12e-guided-openclaw-connectivity-and-pairing` is now the next detailed target.
+- `12e-guided-openclaw-connectivity-and-pairing` is now active in `specifying` (`Spec Gate` passed on `2026-03-06`).
 - Families `13` through `15` now follow the cohesive `12c`-`15c` sequence in rough-in, with family-14 control/animation policy decisions locked.
 - Full family notes live in [`11-15-post-v1-roadmap-rough-in.md`](./11-15-post-v1-roadmap-rough-in.md).
 
@@ -74,14 +74,24 @@ Planning state:
 6. Pass `Spec Gate` before implementation begins.
 
 ## Next 3 Actions
-1. Create/spec `12e-guided-openclaw-connectivity-and-pairing` deliverable doc and pass `Spec Gate`.
-2. Implement the first `12e` vertical slice for guided connectivity/pairing checks.
-3. Run `12e` build checks and capture operator-visible demo/failure evidence.
+1. Implement the first `12e` vertical slice for guided connectivity/pairing checks in shared-shell `Status`, including both QR pairing and copy-code fallback paths.
+2. Add deterministic coverage for `12e` (`scripts/check-openclaw-pairing-guidance.js` + acceptance matrix row).
+3. Run `12e` build checks and capture operator-visible demo/failure evidence for gate progression.
 
 ## Blockers
 - None currently.
 
 ## Last Session Summary
+- Started `12e-guided-openclaw-connectivity-and-pairing` as the active deliverable:
+  - created [`12e-guided-openclaw-connectivity-and-pairing.md`](./12e-guided-openclaw-connectivity-and-pairing.md) from the post-v1 template
+  - set deliverable status to `specifying`
+  - locked pairing checklist/probe contract, bounded pairing settings surface, and deterministic check targets
+  - iterated the spec to require dual pairing methods:
+    - `QR approval`
+    - `copy-code fallback`
+  - passed `Spec Gate` on `2026-03-06`
+  - intentionally made no runtime implementation changes in this session
+  - shipped outcome note: `no visible app change` (spec-only session to satisfy post-v1 Spec Gate rule before implementation)
 - Closed `12d-openclaw-plugin-and-skill-virtual-pet-lane` as accepted after operator-run evidence:
   - operator demo script: `PASS`
   - failure/recovery script: `PASS`
