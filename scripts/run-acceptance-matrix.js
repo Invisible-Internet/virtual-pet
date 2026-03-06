@@ -119,6 +119,13 @@ const CASES = Object.freeze([
     script: "scripts/check-openclaw-pet-command-lane.js",
   },
   {
+    id: "D12d-openclaw-plugin-skill-lane",
+    deliverable: "12d-openclaw-plugin-and-skill-virtual-pet-lane",
+    scenario:
+      "Versioned plugin+skill lane routes command requests through guarded authority, returns bounded status reads, and defers memory intent deterministically.",
+    script: "scripts/check-openclaw-plugin-skill-lane.js",
+  },
+  {
     id: "Layout-assets",
     deliverable: "core-renderer-assets",
     scenario: "Layout bounds and required sprite assets remain internally consistent.",

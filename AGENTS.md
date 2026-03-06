@@ -127,16 +127,34 @@ Historical v1 deliverables keep their original status wording and are not retrof
 - Current Deliverable: `none`
 - Workflow State: `idle`
 - Current Status: `accepted`
-- Last Completed Deliverable: `12c-guarded-openclaw-pet-command-lane`
-- Next Detailed Target: `12d-openclaw-plugin-and-skill-virtual-pet-lane`
-- Next Queued Target: `12e-guided-openclaw-connectivity-and-pairing` (pairing UX follow-up)
+- Last Completed Deliverable: `12d-openclaw-plugin-and-skill-virtual-pet-lane`
+- Next Detailed Target: `12e-guided-openclaw-connectivity-and-pairing`
+- Next Queued Target: `13a-runtime-memory-retrieval-and-evidence-tags`
 - Current Gate State:
   - `Spec Gate`: `n/a`
   - `Build Gate`: `n/a`
   - `Acceptance Gate`: `n/a`
+- Current Session Shipped Outcome:
+  - `no visible app change` (session focused on operator evidence capture + documentation/gate closure for already-shipped `12d` runtime behavior)
 - Historical Note:
   - D01-D10 are complete historical v1 records.
   - Detailed v1 session history lives in `docs/plan/archive/00-progress-tracker-v1-history.md`.
+- Last completed `12d` outcome:
+  - OpenClaw plugin package now follows native structure (`openclaw.plugin.json`, extension entry module, plugin-shipped skill).
+  - Versioned lane contract is live for:
+    - `virtual_pet.status.read`
+    - `virtual_pet.command.request`
+    - `virtual_pet.memory.sync_intent`
+  - Runtime bridge proposed-actions now process `virtual_pet_lane_call` through guarded app authority.
+  - Deterministic and live checks are in place:
+    - `scripts/check-openclaw-plugin-skill-lane.js`
+    - `scripts/check-openclaw-plugin-skill-lane-live.js`
+    - acceptance row `D12d-openclaw-plugin-skill-lane`
+  - Gate outcome:
+    - `Spec Gate` passed on `2026-03-05`
+    - `Build Gate` passed on `2026-03-05`
+    - `Acceptance Gate` passed on `2026-03-06` (operator-accepted closure)
+  - Shipped outcome: visible app/runtime change delivered and accepted; OpenClaw plugin+skill lane contract is now versioned, discoverable, and operator-validated with deterministic failure/recovery behavior.
 - Last completed `12a` outcome:
   - Dialog bubble now reveals pet reply text one word at a time.
   - While revealing words, the app plays a short beep per word:
@@ -276,7 +294,8 @@ Historical v1 deliverables keep their original status wording and are not retrof
   - `12a-real-openclaw-dialog-parity` is accepted and closed (`Spec/Build/Acceptance Gates passed`).
   - `12b-chat-shell-and-conversation-presence` is accepted and closed (`Spec/Build/Acceptance Gates passed`).
   - `12c-guarded-openclaw-pet-command-lane` is accepted and closed (`Spec/Build/Acceptance Gates passed`).
-  - `12d-openclaw-plugin-and-skill-virtual-pet-lane` is the next detailed target.
+  - `12d-openclaw-plugin-and-skill-virtual-pet-lane` is accepted and closed (`Spec/Build/Acceptance Gates passed`; Acceptance on `2026-03-06`).
+  - `12e-guided-openclaw-connectivity-and-pairing` is the next detailed target.
   - Families `13` through `15` now use the cohesive `12c` through `15c` sequence in rough-in.
   - Family `14` decisions are locked for downstream slices:
     - `Utility scoring -> FSM arbitration -> per-state micro BT`

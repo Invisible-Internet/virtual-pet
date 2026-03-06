@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Virtual Pet Lane Tool Input",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "call",
+    "correlationId",
+    "payload"
+  ],
+  "properties": {
+    "call": {
+      "type": "string",
+      "enum": [
+        "virtual_pet.command.request",
+        "virtual_pet.status.read",
+        "virtual_pet.memory.sync_intent"
+      ]
+    },
+    "correlationId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "payload": {
+      "type": "object"
+    },
+    "contractVersion": {
+      "type": "string",
+      "enum": [
+        "vp-plugin-lane-v1"
+      ]
+    }
+  }
+}

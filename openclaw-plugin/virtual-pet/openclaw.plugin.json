@@ -1,0 +1,23 @@
+{
+  "id": "virtual-pet-lane",
+  "name": "Virtual Pet Lane",
+  "version": "0.1.0",
+  "description": "OpenClaw plugin + skill lane contract for guarded Virtual Pet actions.",
+  "entry": "./index.js",
+  "skills": [
+    "./skills"
+  ],
+  "tools": [
+    {
+      "id": "virtual_pet_lane",
+      "description": "Build virtual_pet_lane_call payloads for status read, guarded command request, and memory sync intent.",
+      "inputSchema": "./schemas/virtual-pet-lane.input.schema.json",
+      "outputSchema": "./schemas/virtual-pet-lane.output.schema.json"
+    }
+  ],
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  }
+}

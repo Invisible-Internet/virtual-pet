@@ -36,9 +36,9 @@ Historical v1 deliverables keep their original wording and remain archived histo
 - Current Deliverable: `none`
 - Workflow State: `idle`
 - Current Status: `accepted`
-- Last Completed Deliverable: `12c-guarded-openclaw-pet-command-lane`
-- Next Detailed Target: `12d-openclaw-plugin-and-skill-virtual-pet-lane`
-- Next Queued Target: `12e-guided-openclaw-connectivity-and-pairing` (pairing UX follow-up)
+- Last Completed Deliverable: `12d-openclaw-plugin-and-skill-virtual-pet-lane`
+- Next Detailed Target: `12e-guided-openclaw-connectivity-and-pairing`
+- Next Queued Target: `13a-runtime-memory-retrieval-and-evidence-tags`
 - Current Gate State:
   - `Spec Gate`: `n/a`
   - `Build Gate`: `n/a`
@@ -60,7 +60,8 @@ Planning state:
 - `12a-real-openclaw-dialog-parity` is now accepted and closed (`Spec/Build/Acceptance Gates passed`).
 - `12b-chat-shell-and-conversation-presence` is now accepted and closed (`Spec/Build/Acceptance Gates passed`).
 - `12c-guarded-openclaw-pet-command-lane` is accepted and closed (`Spec/Build/Acceptance Gates passed`).
-- `12d-openclaw-plugin-and-skill-virtual-pet-lane` is now the next detailed target.
+- `12d-openclaw-plugin-and-skill-virtual-pet-lane` is accepted and closed (`Spec/Build/Acceptance Gates passed`; Acceptance on `2026-03-06`).
+- `12e-guided-openclaw-connectivity-and-pairing` is now the next detailed target.
 - Families `13` through `15` now follow the cohesive `12c`-`15c` sequence in rough-in, with family-14 control/animation policy decisions locked.
 - Full family notes live in [`11-15-post-v1-roadmap-rough-in.md`](./11-15-post-v1-roadmap-rough-in.md).
 
@@ -73,14 +74,76 @@ Planning state:
 6. Pass `Spec Gate` before implementation begins.
 
 ## Next 3 Actions
-1. Create/spec `12d-openclaw-plugin-and-skill-virtual-pet-lane` deliverable file and pass `Spec Gate`.
-2. Start `12d` first implementation slice for separable plugin+skill command/status lane.
-3. Draft `12e-guided-openclaw-connectivity-and-pairing` spec so pairing UX can follow `12d` without rework.
+1. Create/spec `12e-guided-openclaw-connectivity-and-pairing` deliverable doc and pass `Spec Gate`.
+2. Implement the first `12e` vertical slice for guided connectivity/pairing checks.
+3. Run `12e` build checks and capture operator-visible demo/failure evidence.
 
 ## Blockers
 - None currently.
 
 ## Last Session Summary
+- Closed `12d-openclaw-plugin-and-skill-virtual-pet-lane` as accepted after operator-run evidence:
+  - operator demo script: `PASS`
+  - failure/recovery script: `PASS`
+  - gate outcome:
+    - `Spec Gate` passed on `2026-03-05`
+    - `Build Gate` passed on `2026-03-05`
+    - `Acceptance Gate` passed on `2026-03-06` (operator-accepted closure)
+  - shipped outcome note: `no visible app change` (session focused on operator verification and documentation/gate closure for already-shipped `12d` runtime behavior).
+- Iterated active `12d` to align with real OpenClaw plugin/skill packaging and added a live CLI-backed verification lane:
+  - refactored plugin scaffold to OpenClaw-native structure:
+    - `openclaw-plugin/virtual-pet/openclaw.plugin.json`
+    - `openclaw-plugin/virtual-pet/package.json`
+    - `openclaw-plugin/virtual-pet/index.js`
+    - `openclaw-plugin/virtual-pet/schemas/virtual-pet-lane.input.schema.json`
+    - `openclaw-plugin/virtual-pet/schemas/virtual-pet-lane.output.schema.json`
+    - `openclaw-plugin/virtual-pet/skills/virtual-pet-lane/SKILL.md`
+    - `openclaw-plugin/virtual-pet/skills/virtual-pet-lane/index.js`
+  - kept app-side authority unchanged:
+    - lane call execution still flows through `openclaw-plugin-skill-lane.js` + `main.js` guarded routing
+    - signed command execution still routes through accepted `12c` guardrails
+  - added live plugin/skill integration check:
+    - `scripts/check-openclaw-plugin-skill-lane-live.js`
+    - npm script: `npm run check:openclaw-plugin-live`
+    - verifies real OpenClaw plugin install/enable/info + skill discovery
+    - includes bounded gateway method probe with explicit skip message when gateway restart is still pending
+  - verification run:
+    - `npm run check:syntax`
+    - `npm run check:contracts`
+    - `npm run check:acceptance` -> `21/21 automated checks passed`
+    - `npm run check:openclaw-plugin-live` -> passed
+  - shipped outcome note: visible app/runtime change delivered (plugin package is now OpenClaw-conventioned and backed by a real CLI install/discovery check, not only in-memory harness validation).
+- Implemented first `12d-openclaw-plugin-and-skill-virtual-pet-lane` runtime slice and passed `Build Gate`:
+  - added `openclaw-plugin-skill-lane.js` for versioned lane contract (`vp-plugin-lane-v1`) with deterministic call/reject handling
+  - wired `main.js` to process `virtual_pet_lane_call` proposed-actions
+  - wired `virtual_pet.command.request` to the existing guarded `12c` command lane
+  - wired bounded `virtual_pet.status.read` scopes:
+    - `bridge_summary`
+    - `command_auth`
+    - `command_policy`
+  - wired `virtual_pet.memory.sync_intent` to deterministic defer path (`memory_sync_not_enabled`) until family-13 enablement
+  - added in-project plugin scaffold:
+    - `openclaw-plugin/virtual-pet/openclaw.plugin.json`
+    - `openclaw-plugin/virtual-pet/skills/virtual-pet-lane/index.js`
+    - `openclaw-plugin/virtual-pet/README.md`
+  - added deterministic coverage:
+    - `scripts/check-openclaw-plugin-skill-lane.js` (new)
+    - acceptance row `D12d-openclaw-plugin-skill-lane` (new)
+  - verification run:
+    - `npm run check:syntax`
+    - `npm run check:contracts`
+    - `npm run check:acceptance` -> `21/21 automated checks passed`
+  - shipped outcome note: visible app/runtime change delivered (versioned plugin+skill lane is now implemented and routed through guarded app authority).
+- Started `12d-openclaw-plugin-and-skill-virtual-pet-lane` as the active deliverable:
+  - created [`12d-openclaw-plugin-and-skill-virtual-pet-lane.md`](./12d-openclaw-plugin-and-skill-virtual-pet-lane.md) from the post-v1 template
+  - set deliverable status to `specifying`
+  - locked versioned first-slice contracts for:
+    - `virtual_pet.command.request`
+    - `virtual_pet.status.read`
+    - `virtual_pet.memory.sync_intent`
+  - passed `Spec Gate` on `2026-03-05`
+  - intentionally made no runtime implementation changes in this session
+  - shipped outcome note: `no visible app change` (spec-only session to satisfy post-v1 Spec Gate rule before implementation)
 - Closed `12c-guarded-openclaw-pet-command-lane` as accepted:
   - operator reviewed live runtime output and reported no blockers; requested closure to move forward
   - gate outcome:

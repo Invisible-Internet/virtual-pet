@@ -25,6 +25,7 @@ Planning status:
 - `12a-real-openclaw-dialog-parity` is accepted and closed.
 - `12b-chat-shell-and-conversation-presence` is accepted and closed.
 - `12c-guarded-openclaw-pet-command-lane` is accepted and closed (`Spec/Build/Acceptance Gates passed`).
+- `12d-openclaw-plugin-and-skill-virtual-pet-lane` is accepted and closed (`Spec/Build/Acceptance Gates passed`).
 - Families `13` through `15` now use one cohesive execution sequence (`12c` through `15c`) with locked control-model decisions for family `14`.
 - All future work follows the post-v1 workflow in [`00-development-workflow.md`](./00-development-workflow.md).
 
@@ -39,7 +40,7 @@ Planning status:
 | Family | Theme | Why It Exists | Current Planning State |
 | --- | --- | --- | --- |
 | `11` | Observability / Setup / Provenance | Make the current OpenClaw, model, memory, and fallback setup visible and understandable inside the app. | `11a`/`11b`/`11c`/`11d` accepted and closed |
-| `12` | Conversation / Bridge | Make pet chat feel like real OpenClaw conversation, not narrow status/introspection. | `12a`/`12b`/`12c` accepted; `12d` next detailed target |
+| `12` | Conversation / Bridge | Make pet chat feel like real OpenClaw conversation, not narrow status/introspection. | `12a`/`12b`/`12c`/`12d` accepted; `12e` next detailed target |
 | `13` | Memory / Persona Continuity | Make online and offline feel like the same pet with recall and stable personality. | Rough with tightened sequencing notes (`13a` -> `13b` -> `13c`) |
 | `14` | Embodiment / Autonomy | Make the pet move and react more deliberately, unobtrusively, and believably. | Rough only |
 | `15` | Extension Showcase | Prove the extension system with a real add-on and a polished end-to-end flow. | Rough only |
