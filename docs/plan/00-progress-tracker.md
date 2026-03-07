@@ -33,16 +33,16 @@ Historical v1 deliverables keep their original wording and remain archived histo
   - operator-visible demo passes and evidence is logged
 
 ## Current Deliverable
-- Current Deliverable: `none`
-- Workflow State: `idle`
-- Current Status: `accepted`
+- Current Deliverable: `13c-persona-aware-offline-dialog-and-proactive-behavior`
+- Workflow State: `specifying`
+- Current Status: `specifying`
 - Last Completed Deliverable: `13b-persona-snapshot-synthesis-and-provenance`
 - Next Detailed Target: `13c-persona-aware-offline-dialog-and-proactive-behavior`
 - Next Queued Target: `13d-online-reflection-and-runtime-sync`
 - Current Gate State:
-  - `Spec Gate`: `n/a`
-  - `Build Gate`: `n/a`
-  - `Acceptance Gate`: `n/a`
+  - `Spec Gate`: `passed` (`2026-03-07`)
+  - `Build Gate`: `not_started`
+  - `Acceptance Gate`: `not_started`
 
 ## Post-v1 Family Rough-In
 Locked family order:
@@ -76,14 +76,40 @@ Planning state:
 6. Pass `Spec Gate` before implementation begins.
 
 ## Next 3 Actions
-1. Start `13c-persona-aware-offline-dialog-and-proactive-behavior` in `specifying` from the deliverable template.
-2. Lock `13c` showcase promise, operator demo script, and failure/recovery script before implementation.
-3. Pass `13c` Spec Gate and update tracker/AGENTS pointers to the active deliverable.
+1. Implement deterministic offline persona shaping (`styleProfile` derivation, intent routing, frame/token composition, hash-stable variant selection, output bounds).
+2. Implement proactive robustness policy (suppression ordering, cooldown tiers/backoff, repeat guard, engagement reset, and status detail fields).
+3. Add deterministic checks and acceptance row `D13c-persona-aware-offline-proactive`, then run `npm run check:syntax`, `npm run check:contracts`, and `npm run check:acceptance`.
 
 ## Blockers
 - None currently.
 
 ## Last Session Summary
+- Iterated active `13c-persona-aware-offline-dialog-and-proactive-behavior` spec to make implementation targets complete and deterministic:
+  - expanded the deliverable with explicit mechanics for:
+    - style-profile derivation from `vp-persona-snapshot-v1`
+    - fixed-order offline intent routing
+    - frame/token library composition
+    - hash-stable variant selection
+    - output bounds and safety clipping
+    - proactive cooldown tiers, suppression ordering, repeat guard, and engagement reset
+  - added a full deterministic check plan for offline style determinism, proactive suppression/backoff semantics, repeat guard, and observability fields.
+  - workflow/gates remain unchanged:
+    - `Current Deliverable`: `13c-persona-aware-offline-dialog-and-proactive-behavior`
+    - `Spec Gate`: `passed` (`2026-03-07`)
+    - `Build Gate`: `not_started`
+    - `Acceptance Gate`: `not_started`
+  - shipped outcome note: `no visible app change` (spec-depth session; runtime implementation intentionally not started).
+- Started `13c-persona-aware-offline-dialog-and-proactive-behavior` as the active deliverable and passed `Spec Gate`:
+  - created [`13c-persona-aware-offline-dialog-and-proactive-behavior.md`](./13c-persona-aware-offline-dialog-and-proactive-behavior.md) from the post-v1 template
+  - set workflow to `specifying` with `Current Deliverable: 13c-persona-aware-offline-dialog-and-proactive-behavior`
+  - locked showcase promise, operator demo script, failure/recovery script, quick operator test card, acceptance evidence checklist, and first-slice contracts for:
+    - persona-aware offline dialog tone from `vp-persona-snapshot-v1`
+    - proactive suppression/backoff/repeat-guard behavior with status visibility
+  - gate outcome:
+    - `Spec Gate` passed on `2026-03-07`
+    - `Build Gate` not started
+    - `Acceptance Gate` not started
+  - shipped outcome note: `no visible app change` (spec-only session to satisfy post-v1 `Spec Gate` before implementation).
 - Closed `13b-persona-snapshot-synthesis-and-provenance` as `accepted` after operator-confirmed runtime behavior:
   - happy-path evidence confirmed:
     - `Persona Snapshot: ready`

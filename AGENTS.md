@@ -127,21 +127,35 @@ Historical v1 deliverables keep their original status wording and are not retrof
 - `accepted` is the only terminal state for future post-v1 deliverables.
 
 ### Current Workflow Snapshot
-- Current Deliverable: `none`
-- Workflow State: `idle`
-- Current Status: `accepted`
+- Current Deliverable: `13c-persona-aware-offline-dialog-and-proactive-behavior`
+- Workflow State: `specifying`
+- Current Status: `specifying`
 - Last Completed Deliverable: `13b-persona-snapshot-synthesis-and-provenance`
 - Next Detailed Target: `13c-persona-aware-offline-dialog-and-proactive-behavior`
 - Next Queued Target: `13d-online-reflection-and-runtime-sync`
 - Current Gate State:
-  - `Spec Gate`: `n/a`
-  - `Build Gate`: `n/a`
-  - `Acceptance Gate`: `n/a`
+  - `Spec Gate`: `passed` (`2026-03-07`)
+  - `Build Gate`: `not_started`
+  - `Acceptance Gate`: `not_started`
 - Current Session Shipped Outcome:
-  - `no visible app change` (session focused on operator acceptance evidence capture and documentation/gate closure for already-shipped `13b` runtime behavior)
+  - `no visible app change` (session focused on deepening `13c` deterministic offline persona/proactive specification before implementation)
 - Historical Note:
   - D01-D10 are complete historical v1 records.
   - Detailed v1 session history lives in `docs/plan/archive/00-progress-tracker-v1-history.md`.
+- Active `13c` specification outcome:
+  - Created `docs/plan/13c-persona-aware-offline-dialog-and-proactive-behavior.md` from template.
+  - Locked showcase promise, operator demo script, failure/recovery script, quick operator test card, acceptance evidence checklist, and first-slice contracts for persona-aware offline dialog and proactive robustness.
+  - Expanded `13c` with explicit deterministic mechanics for:
+    - style-profile derivation from `vp-persona-snapshot-v1`
+    - fixed-order intent routing and frame/token composition
+    - hash-stable variant selection and output-bounds clipping
+    - proactive suppression order, cooldown tiers/backoff, repeat guard, and engagement-reset semantics
+    - deterministic check-plan requirements for style/proactive/observability coverage
+  - Gate outcome:
+    - `Spec Gate` passed on `2026-03-07`
+    - `Build Gate` not started
+    - `Acceptance Gate` not started
+  - Shipped outcome: `no visible app change` (spec-only session; implementation intentionally not started).
 - Closed `13b` implementation outcome:
   - Created `docs/plan/13b-persona-snapshot-synthesis-and-provenance.md` from template and passed `Spec Gate`.
   - Implemented first runtime slice:
