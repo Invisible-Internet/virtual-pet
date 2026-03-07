@@ -127,32 +127,58 @@ Historical v1 deliverables keep their original status wording and are not retrof
 - `accepted` is the only terminal state for future post-v1 deliverables.
 
 ### Current Workflow Snapshot
-- Current Deliverable: `13a-offline-identity-and-recent-recall`
-- Workflow State: `specifying`
-- Current Status: `specifying`
-- Last Completed Deliverable: `12e-guided-openclaw-connectivity-and-pairing`
-- Next Detailed Target: `13a-offline-identity-and-recent-recall`
-- Next Queued Target: `13b-persona-snapshot-synthesis-and-provenance`
+- Current Deliverable: `none`
+- Workflow State: `idle`
+- Current Status: `accepted`
+- Last Completed Deliverable: `13a-offline-identity-and-recent-recall`
+- Next Detailed Target: `13b-persona-snapshot-synthesis-and-provenance`
+- Next Queued Target: `13c-persona-aware-offline-dialog-and-proactive-behavior`
 - Current Gate State:
-  - `Spec Gate`: `passed` (`2026-03-06`)
-  - `Build Gate`: `not_started`
-  - `Acceptance Gate`: `not_started`
+  - `Spec Gate`: `n/a`
+  - `Build Gate`: `n/a`
+  - `Acceptance Gate`: `n/a`
 - Current Session Shipped Outcome:
-  - `no visible app change` (session focused on `13a` spec authoring and gate pass; implementation intentionally deferred)
+  - `no visible app change` (session focused on operator acceptance evidence capture and documentation/gate closure for already-shipped `13a` runtime behavior)
 - Historical Note:
   - D01-D10 are complete historical v1 records.
   - Detailed v1 session history lives in `docs/plan/archive/00-progress-tracker-v1-history.md`.
-- Active `13a` spec outcome:
+- Closed `13a` implementation outcome:
   - Created `docs/plan/13a-offline-identity-and-recent-recall.md` from template.
   - Locked showcase promise, operator demo script, failure/recovery script, quick operator test card, and acceptance evidence checklist.
-  - Locked first-slice contracts for:
-    - offline identity recall (`name`, `birthday`)
-    - bounded recent-highlight recall with evidence tags and deterministic degraded reasons
+  - Implemented first slice:
+    - offline recall runtime helper (`offline-recall.js`)
+    - deterministic fallback recall intents for `name`, `birthday`, and bounded recent highlights
+    - bounded recall evidence metadata in memory snapshot + memory observability detail
+    - deterministic checks:
+      - `scripts/check-offline-recall.js`
+      - acceptance row `D13a-offline-identity-recall`
+  - Iteration slice from operator evidence:
+    - added deterministic nickname recall intent (`identity_nickname`)
+    - improved canonical identity parsing for richer markdown nickname extraction
+    - added bounded offline question no-match fallback copy (no state-only awkward response)
+    - bridge disabled-mode enforcement tightened:
+      - startup capability respects `openclaw.enabled=false`
+      - disabled guard prevents healthy/degraded resurfacing while service is off
+      - non-loopback bridge warnings suppressed when OpenClaw is disabled
+    - settings env-override hygiene additions:
+      - explicit env variable names in settings snapshot
+      - `Environment Overrides` + per-field `Env Variable`
+      - `Copy Clear Env Cmds` helper for PowerShell and Bash/WSL
+  - Verification run passed:
+    - `npm run check:syntax`
+    - `npm run check:contracts`
+    - `npm run check:acceptance` -> `23/23`
+  - Operator acceptance evidence captured:
+    - offline name/birthday/recent recall happy path passed
+    - `Status` -> `Memory Runtime` detail showed `Last Recall Type/Reason/Tags/At`
+    - degraded and recovery behavior passed for:
+      - `identity_unavailable`
+      - `memory_unavailable`
   - Gate outcome:
     - `Spec Gate` passed on `2026-03-06`
-    - `Build Gate` not started
-    - `Acceptance Gate` not started
-  - Shipped outcome: no visible app/runtime change; `13a` is spec-passed and ready for first implementation slice.
+    - `Build Gate` passed on `2026-03-06`
+    - `Acceptance Gate` passed on `2026-03-07` (operator-accepted closure)
+  - Shipped outcome: visible app/runtime change delivered and accepted; `13a` offline identity/recent-recall continuity is now closed with deterministic degraded/recovery evidence.
 - Closed `12e` spec outcome:
   - Created `docs/plan/12e-guided-openclaw-connectivity-and-pairing.md` from template.
   - Locked showcase promise, operator demo script, failure/recovery script, pairing-safe settings boundary, and deterministic check targets.
@@ -354,7 +380,7 @@ Historical v1 deliverables keep their original status wording and are not retrof
   - `12c-guarded-openclaw-pet-command-lane` is accepted and closed (`Spec/Build/Acceptance Gates passed`).
   - `12d-openclaw-plugin-and-skill-virtual-pet-lane` is accepted and closed (`Spec/Build/Acceptance Gates passed`; Acceptance on `2026-03-06`).
   - `12e-guided-openclaw-connectivity-and-pairing` is accepted and closed (`Spec/Build/Acceptance Gates passed`; Acceptance on `2026-03-06`).
-  - `13a-offline-identity-and-recent-recall` is active in `specifying` with `Spec Gate` passed (`2026-03-06`).
+  - `13a-offline-identity-and-recent-recall` is accepted and closed (`Spec/Build/Acceptance Gates passed`; Acceptance on `2026-03-07`).
   - Families `13` through `15` now use the cohesive `12c` through `15c` sequence in rough-in.
   - Family `14` decisions are locked for downstream slices:
     - `Utility scoring -> FSM arbitration -> per-state micro BT`

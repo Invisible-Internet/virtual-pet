@@ -613,6 +613,37 @@ class MemoryPipelineRuntime {
     };
   }
 
+  getRecentObservations({ limit = 24, observationTypes = null } = {}) {
+    const normalizedLimit = Number.isFinite(Number(limit))
+      ? Math.max(1, Math.min(MAX_OBSERVATION_HISTORY, Math.round(Number(limit))))
+      : 24;
+    const allowedTypes = Array.isArray(observationTypes)
+      ? new Set(
+          observationTypes
+            .map((entry) => asSafeString(entry, "").toLowerCase())
+            .filter(Boolean)
+        )
+      : null;
+    const filtered = this._observationHistory.filter((entry) => {
+      if (!allowedTypes || allowedTypes.size <= 0) return true;
+      const type = asSafeString(entry?.observationType, "").toLowerCase();
+      return allowedTypes.has(type);
+    });
+    return filtered
+      .slice(-normalizedLimit)
+      .reverse()
+      .map((entry) => ({
+        observationId: asSafeString(entry?.observationId, "unknown"),
+        ts: asSafeString(entry?.ts, ""),
+        tsMs: Number.isFinite(Number(entry?.tsMs)) ? Math.max(0, Math.round(Number(entry.tsMs))) : 0,
+        observationType: asSafeString(entry?.observationType, "unknown"),
+        source: asSafeString(entry?.source, "unknown"),
+        correlationId: asSafeString(entry?.correlationId, "n/a"),
+        evidenceTag: asSafeString(entry?.evidenceTag, "none"),
+        payload: asObject(entry?.payload),
+      }));
+  }
+
   async bootstrapOpenClawWorkspaceFiles() {
     if (!this._openclawEnabled) {
       return {

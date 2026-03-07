@@ -33,16 +33,16 @@ Historical v1 deliverables keep their original wording and remain archived histo
   - operator-visible demo passes and evidence is logged
 
 ## Current Deliverable
-- Current Deliverable: `13a-offline-identity-and-recent-recall`
-- Workflow State: `specifying`
-- Current Status: `specifying`
-- Last Completed Deliverable: `12e-guided-openclaw-connectivity-and-pairing`
-- Next Detailed Target: `13a-offline-identity-and-recent-recall`
-- Next Queued Target: `13b-persona-snapshot-synthesis-and-provenance`
+- Current Deliverable: `none`
+- Workflow State: `idle`
+- Current Status: `accepted`
+- Last Completed Deliverable: `13a-offline-identity-and-recent-recall`
+- Next Detailed Target: `13b-persona-snapshot-synthesis-and-provenance`
+- Next Queued Target: `13c-persona-aware-offline-dialog-and-proactive-behavior`
 - Current Gate State:
-  - `Spec Gate`: `passed` (`2026-03-06`)
-  - `Build Gate`: `not_started`
-  - `Acceptance Gate`: `not_started`
+  - `Spec Gate`: `n/a`
+  - `Build Gate`: `n/a`
+  - `Acceptance Gate`: `n/a`
 
 ## Post-v1 Family Rough-In
 Locked family order:
@@ -62,7 +62,7 @@ Planning state:
 - `12c-guarded-openclaw-pet-command-lane` is accepted and closed (`Spec/Build/Acceptance Gates passed`).
 - `12d-openclaw-plugin-and-skill-virtual-pet-lane` is accepted and closed (`Spec/Build/Acceptance Gates passed`; Acceptance on `2026-03-06`).
 - `12e-guided-openclaw-connectivity-and-pairing` is accepted and closed (`Spec/Build/Acceptance Gates passed`; Acceptance on `2026-03-06`).
-- `13a-offline-identity-and-recent-recall` is now active in `specifying` (`Spec Gate` passed on `2026-03-06`).
+- `13a-offline-identity-and-recent-recall` is accepted and closed (`Spec/Build/Acceptance Gates passed`; Acceptance on `2026-03-07`).
 - Families `13` through `15` now follow the cohesive `12c`-`15c` sequence in rough-in, with family-14 control/animation policy decisions locked.
 - Full family notes live in [`11-15-post-v1-roadmap-rough-in.md`](./11-15-post-v1-roadmap-rough-in.md).
 
@@ -75,14 +75,68 @@ Planning state:
 6. Pass `Spec Gate` before implementation begins.
 
 ## Next 3 Actions
-1. Start the first `13a` implementation slice (offline recall routing + bounded evidence tags) without expanding scope beyond the accepted spec.
-2. Add deterministic coverage for offline identity recall and recent-highlight retrieval (`D13a-offline-identity-recall`).
-3. Run `npm run check:syntax`, `npm run check:contracts`, and `npm run check:acceptance`, then capture operator demo and failure/recovery evidence.
+1. Start `13b-persona-snapshot-synthesis-and-provenance` in `specifying` from the deliverable template.
+2. Lock `13b` showcase promise, operator demo script, and failure/recovery script around bounded persona snapshot export + provenance.
+3. Pass `13b` `Spec Gate` before any implementation work.
 
 ## Blockers
 - None currently.
 
 ## Last Session Summary
+- Closed `13a-offline-identity-and-recent-recall` as `accepted` after operator-run demo + failure/recovery evidence:
+  - happy-path offline recall passed for name, birthday, and bounded recent highlights
+  - `Status` -> `Memory Runtime` detail confirmed recall provenance fields (`Last Recall Type/Reason/Tags/At`)
+  - degraded + recovery behavior confirmed for:
+    - `identity_unavailable` (empty local-root failure injection and restore)
+    - `memory_unavailable` (memory disabled and re-enabled)
+  - deterministic acceptance row remained green:
+    - `D13a-offline-identity-recall`
+  - gate outcome:
+    - `Spec Gate` passed on `2026-03-06`
+    - `Build Gate` passed on `2026-03-06`
+    - `Acceptance Gate` passed on `2026-03-07` (operator-accepted closure)
+  - workflow moved to `idle` with `Current Deliverable: none`
+  - shipped outcome note: no new runtime code changes in this closure step; session focused on operator acceptance evidence and documentation/gate closure for already-shipped `13a` behavior.
+- Iterated active `13a-offline-identity-and-recent-recall` behavior from operator runtime logs:
+  - added deterministic offline nickname recall intent:
+    - question forms like `Do you have a nickname?`
+    - canonical identity parsing now reads nickname candidates from managed key/value fields and richer identity markdown sections
+  - added offline question no-match fallback text so unknown offline questions no longer default to awkward state-only phrasing
+  - hardened disabled OpenClaw behavior:
+    - bridge capability start now respects `openclaw.enabled=false` as `disabledByConfig`
+    - capability update guard prevents disabled bridge from resurfacing as healthy/degraded
+    - non-loopback bridge warnings are now suppressed while OpenClaw service is disabled
+  - improved settings/env hygiene UX:
+    - settings snapshot now reports active env overrides with explicit env var names
+    - settings tab now shows `Environment Overrides` + per-field `Env Variable`
+    - added one-click `Copy Clear Env Cmds` helper for PowerShell and Bash/WSL
+  - verification run:
+    - `npm run check:syntax`
+    - `npm run check:contracts`
+    - `npm run check:acceptance` -> `23/23 automated checks passed`
+  - shipped outcome note: visible app/runtime change delivered (offline recall feels more natural for unmatched questions, nickname recall is available, and disabled OpenClaw state remains deterministic/diagnosable).
+- Implemented first `13a-offline-identity-and-recent-recall` runtime slice and passed `Build Gate`:
+  - added new offline recall runtime helper:
+    - `offline-recall.js`
+  - wired deterministic offline recall routing for:
+    - `identity_name`
+    - `identity_birthday`
+    - `recent_highlights`
+  - added bounded recent-highlight retrieval with source priority:
+    - runtime in-memory observations first
+    - markdown memory-log fallback second
+  - added bounded renderer-safe recall evidence metadata:
+    - bridge response metadata (`recallType`, degraded reason, evidence tags)
+    - memory snapshot `lastOfflineRecall`
+    - memory observability detail provenance rows for last recall fields
+  - added deterministic `13a` coverage:
+    - `scripts/check-offline-recall.js`
+    - acceptance row `D13a-offline-identity-recall`
+  - verification run:
+    - `npm run check:syntax`
+    - `npm run check:contracts`
+    - `npm run check:acceptance` -> `23/23 automated checks passed`
+  - shipped outcome note: visible app/runtime change delivered (offline identity and recent-recall responses are now deterministic with bounded evidence-tag provenance).
 - Started `13a-offline-identity-and-recent-recall` as the active deliverable:
   - created [`13a-offline-identity-and-recent-recall.md`](./13a-offline-identity-and-recent-recall.md) from the post-v1 template
   - set workflow to `specifying`

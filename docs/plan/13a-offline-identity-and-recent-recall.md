@@ -1,9 +1,9 @@
 # Deliverable 13a: Offline Identity and Recent Recall
 
 **Deliverable ID:** `13a-offline-identity-and-recent-recall`  
-**Status:** `specifying`  
+**Status:** `accepted`  
 **Owner:** `Mic + Codex`  
-**Last Updated:** `2026-03-06`  
+**Last Updated:** `2026-03-07`  
 **Depends On:** `05-memory-pipeline-and-obsidian-adapter`, `11b-guided-pet-setup-and-markdown-bootstrap`, `11c-repair-actions-and-provenance-visibility`, `12a-real-openclaw-dialog-parity`, `12e-guided-openclaw-connectivity-and-pairing`  
 **Blocks:** `13b-persona-snapshot-synthesis-and-provenance`, `13c-persona-aware-offline-dialog-and-proactive-behavior`
 
@@ -86,20 +86,20 @@ With OpenClaw offline or unavailable, the operator can ask the pet for its name,
    - Expect recovered signal: exact canonical name returns, and degraded reason clears.
 
 ### Pass / Fail Checklist
-- [ ] Offline name recall matches local canonical value.
-- [ ] Offline birthday recall matches local canonical value.
-- [ ] Recent recall output is bounded (max 3 highlights) and includes evidence tags.
-- [ ] Identity-unavailable degraded signal appears when canonical input is unavailable.
-- [ ] Recovery returns deterministic canonical recall without restart.
+- [x] Offline name recall matches local canonical value.
+- [x] Offline birthday recall matches local canonical value.
+- [x] Recent recall output is bounded (max 3 highlights) and includes evidence tags.
+- [x] Identity-unavailable degraded signal appears when canonical input is unavailable.
+- [x] Recovery returns deterministic canonical recall without restart.
 
 ## Acceptance Evidence Checklist (Mandatory)
-- [ ] Chat capture for name recall with exact returned value.
-- [ ] Chat capture for birthday recall with exact returned value.
-- [ ] Chat capture for recent-highlight recall including evidence-tag references.
-- [ ] `Status` memory detail capture showing recall provenance/evidence summary.
-- [ ] Degraded capture showing unavailable reason code/text.
-- [ ] Recovery capture showing canonical value restored.
-- [ ] Deterministic check output line captured for `D13a-offline-identity-recall`.
+- [x] Chat capture for name recall with exact returned value.
+- [x] Chat capture for birthday recall with exact returned value.
+- [x] Chat capture for recent-highlight recall including evidence-tag references.
+- [x] `Status` memory detail capture showing recall provenance/evidence summary.
+- [x] Degraded capture showing unavailable reason code/text.
+- [x] Recovery capture showing canonical value restored.
+- [x] Deterministic check output line captured for `D13a-offline-identity-recall`.
 
 ## Public Interfaces / Touchpoints
 - Runtime offline dialog routing:
@@ -166,32 +166,93 @@ Rules:
   - evidence metadata leaks raw secret/config values.
 
 ## Implementation Slice (Mandatory)
-- Not started (`spec-only` session).
-- First implementation slice planned:
-  - add offline recall intent routing in dialog fallback lane,
-  - add canonical identity read-model + recent-highlight retrieval helper,
-  - add memory-detail provenance fields for last recall evidence,
-  - add deterministic check and acceptance-matrix row for `13a`.
+- First implementation slice shipped:
+  - added offline recall runtime helper:
+    - `offline-recall.js`
+  - added deterministic offline recall intents in fallback lane:
+    - `identity_name`
+    - `identity_birthday`
+    - `recent_highlights`
+  - wired offline recall into dialog fallback routing in:
+    - `main.js`
+  - added bounded recent-highlight retrieval behavior:
+    - source priority:
+      1. runtime in-memory observations
+      2. latest markdown memory log fallback
+    - bounded to max `3` deduped highlights by evidence tag
+  - added renderer-safe recall metadata propagation:
+    - bridge dialog suggestion metadata (`recallType`, `recallDegradedReason`, `recallEvidenceTags`)
+    - memory snapshot `lastOfflineRecall`
+    - memory observability detail provenance rows:
+      - `Last Recall Type`
+      - `Last Recall Reason`
+      - `Last Recall Tags`
+      - `Last Recall At`
+  - added runtime memory access helper:
+    - `memory-pipeline.js` -> `getRecentObservations(...)`
+  - added deterministic `13a` contract coverage:
+    - `scripts/check-offline-recall.js`
+    - acceptance matrix row `D13a-offline-identity-recall`
+  - updated existing deterministic checks to assert recall metadata plumbing:
+    - `scripts/check-contract-router.js`
+    - `scripts/check-shell-observability.js`
+  - verification run:
+    - `npm run check:syntax`
+    - `npm run check:contracts`
+    - `npm run check:acceptance` -> `23/23 automated checks passed`
+- Iteration updates from operator/runtime evidence:
+  - offline recall intent now includes deterministic nickname questions (`identity_nickname`)
+  - canonical identity parsing now supports richer markdown name sections and nickname field extraction
+  - generic offline no-match questions now return bounded "offline memory does not have this yet" guidance instead of state-only fallback text
+  - OpenClaw disabled-mode enforcement tightened:
+    - bridge capability starts as `disabledByConfig` when service is off
+    - capability update guard prevents disabled bridge from resurfacing as healthy/degraded
+    - non-loopback endpoint warning is skipped while OpenClaw is disabled
+  - settings/env hygiene iteration:
+    - active env overrides now include explicit env variable names
+    - settings shows `Environment Overrides` and per-field `Env Variable`
+    - new `Copy Clear Env Cmds` action generates clear/unset commands for PowerShell + Bash/WSL
 
 ## Visible App Outcome
-- No visible app/runtime change yet.
-- This session locks the `13a` demo contract and acceptance criteria so implementation can start without reopening scope.
+- Visible app/runtime change delivered:
+  - Offline chat can now answer identity recall questions deterministically:
+    - `What is your name?`
+    - `When is your birthday?`
+  - Offline chat can now answer bounded recent-recall prompts:
+    - `What happened recently between us?`
+  - `Status` -> `Memory Runtime` detail now surfaces the latest recall provenance/evidence-tag summary.
+  - Degraded recall paths now return explicit deterministic reasons (`identity_unavailable`, `memory_unavailable`, `no_recent_highlights`) instead of fabricated facts.
 
 ## Acceptance Notes
 - `2026-03-06`: File created from post-v1 template for `13a`.
 - `2026-03-06`: Locked offline recall scope to deterministic identity + bounded recent-highlight evidence tags.
 - `2026-03-06`: Resolved deliverable naming to `13a-offline-identity-and-recent-recall` for implementation kickoff.
+- `2026-03-06`: Implemented first `13a` runtime slice across offline recall routing, bounded memory highlight retrieval, and observability provenance output.
+- `2026-03-06`: Build verification run passed:
+  - `npm run check:syntax`
+  - `npm run check:contracts`
+  - `npm run check:acceptance` -> `23/23`
+- `2026-03-06`: Iterated from operator logs with nickname recall, offline no-match fallback text, stricter disabled OpenClaw capability behavior, and settings env-override hygiene actions.
+- `2026-03-07`: Operator demo and failure/recovery scripts passed end-to-end:
+  - offline name/birthday/recent recall confirmed
+  - `Status` -> `Memory Runtime` detail showed recall provenance fields
+  - `identity_unavailable` and `memory_unavailable` degraded paths were confirmed, then recovery confirmed
+  - deterministic acceptance row remained green (`D13a-offline-identity-recall`)
 
 ## Iteration Log
 - `2026-03-06`: Initial `13a` spec drafted and aligned to accepted `11b` canonical-file setup and `12a/12e` offline dialog boundaries.
 
 ## Gate Status
 - `Spec Gate`: `passed` (`2026-03-06`)
-- `Build Gate`: `not_started`
-- `Acceptance Gate`: `not_started`
-- `Overall`: `specifying`
+- `Build Gate`: `passed` (`2026-03-06`)
+- `Acceptance Gate`: `passed` (`2026-03-07`)
+- `Overall`: `accepted`
 
 ## Change Log
 - `2026-03-06`: File created from the post-v1 deliverable template.
 - `2026-03-06`: Added offline recall intent contract, evidence-tag retrieval contract, and operator demo/failure scripts.
 - `2026-03-06`: Marked `Spec Gate` passed; implementation intentionally not started.
+- `2026-03-06`: Implemented first offline identity/recent-recall slice with bounded evidence metadata and deterministic `D13a` coverage.
+- `2026-03-06`: Marked `Build Gate` passed after green syntax/contracts/acceptance checks.
+- `2026-03-06`: Added offline nickname recall + no-match fallback improvements and tightened disabled OpenClaw/settings override diagnostics based on operator runtime evidence.
+- `2026-03-07`: Marked `Acceptance Gate` passed after operator demo + failure/recovery evidence; deliverable closed as `accepted`.

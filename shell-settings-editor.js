@@ -134,6 +134,23 @@ const SHELL_SETTINGS_FIELDS = Object.freeze([
 ]);
 
 const SHELL_SETTINGS_FIELD_MAP = new Map(SHELL_SETTINGS_FIELDS.map((field) => [field.key, field]));
+const FIELD_ENV_OVERRIDE_KEYS = Object.freeze({
+  "openclaw.enabled": "PET_OPENCLAW_ENABLED",
+  "openclaw.transport": "PET_OPENCLAW_TRANSPORT",
+  "openclaw.baseUrl": "PET_OPENCLAW_BASE_URL",
+  "openclaw.allowNonLoopback": "PET_OPENCLAW_ALLOW_NON_LOOPBACK",
+  "openclaw.authTokenRef": "PET_OPENCLAW_AUTH_TOKEN_REF",
+  "openclaw.petCommandSharedSecretRef": "PET_OPENCLAW_PET_COMMAND_SECRET_REF",
+  "openclaw.petCommandKeyId": "PET_OPENCLAW_PET_COMMAND_KEY_ID",
+  "integrations.spotify.enabled": "PET_SPOTIFY_ENABLED",
+  "integrations.spotify.backgroundEnrichmentEnabled": "PET_SPOTIFY_BACKGROUND_ENRICHMENT",
+  "integrations.freshRss.enabled": "PET_FRESHRSS_ENABLED",
+  "integrations.freshRss.backgroundEnrichmentEnabled": "PET_FRESHRSS_BACKGROUND_ENRICHMENT",
+  "sensors.media.enabled": "PET_LOCAL_MEDIA_ENABLED",
+  "ui.diagnosticsEnabled": "PET_UI_DIAGNOSTICS_ENABLED",
+  "dialog.alwaysShowBubble": "PET_DIALOG_ALWAYS_SHOW_BUBBLE",
+  "ui.characterScalePercent": "PET_UI_CHARACTER_SCALE_PERCENT",
+});
 
 function toOptionalString(value, fallback = null) {
   if (typeof value !== "string") return fallback;
@@ -525,6 +542,7 @@ function buildShellSettingsSnapshot({
       effectiveValue,
       source,
       envOverridden: source === "env",
+      envOverrideKey: source === "env" ? FIELD_ENV_OVERRIDE_KEYS[field.key] || null : null,
       validation:
         field.kind === "integer"
           ? {
@@ -551,11 +569,27 @@ function buildShellSettingsSnapshot({
     };
   });
 
+  const activeEnvOverrides = fields
+    .filter((field) => field.envOverridden)
+    .map((field) => ({
+      key: field.key,
+      envVar: toOptionalString(field.envOverrideKey, null),
+    }));
+  if (activeEnvOverrides.length > 0) {
+    const labels = activeEnvOverrides
+      .map((entry) => (entry.envVar ? `${entry.key} (${entry.envVar})` : entry.key))
+      .slice(0, 8)
+      .join(", ");
+    const suffix = activeEnvOverrides.length > 8 ? "..." : "";
+    warnings.push(`[settings-editor] environment overrides active: ${labels}${suffix}`);
+  }
+
   return {
     kind: "shellSettingsSnapshot",
     ts,
     overridePath,
     fields,
+    activeEnvOverrides,
     warnings,
   };
 }

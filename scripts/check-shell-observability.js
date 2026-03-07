@@ -5,6 +5,7 @@ const os = require("os");
 const path = require("path");
 const {
   SHELL_WINDOW_TABS,
+  buildObservabilityDetail,
   buildObservabilitySnapshot,
   resolveShellWindowTabForAction,
 } = require("../shell-observability");
@@ -46,6 +47,12 @@ function run() {
       requestedAdapterMode: "obsidian",
       activeAdapterMode: "obsidian",
       fallbackReason: "none",
+      lastOfflineRecall: {
+        ts: 1700000000999,
+        recallType: "identity_name",
+        degradedReason: "none",
+        evidenceTags: ["identity.name"],
+      },
     },
     settingsSummary: {
       memory: {
@@ -90,6 +97,11 @@ function run() {
   assertEqual(healthy.rows.bridge.state, "healthy", "bridge row should be healthy");
   assertEqual(healthy.rows.memory.state, "healthy", "memory row should be healthy");
   assertEqual(
+    healthy.rows.memory.lastOfflineRecall?.recallType,
+    "identity_name",
+    "memory row should include normalized last recall type"
+  );
+  assertEqual(
     healthy.rows.canonicalFiles.localWorkspace.readableCount,
     5,
     "local canonical files should be readable"
@@ -97,6 +109,17 @@ function run() {
   assert(
     healthy.rows.paths.activeLayers.includes("env"),
     "paths row should include env as an active layer"
+  );
+  const memoryDetail = buildObservabilityDetail({
+    snapshot: healthy,
+    subjectId: "memory",
+    settingsSourceMap: {},
+  });
+  assert(
+    memoryDetail.provenance.some(
+      (entry) => entry.label === "Last Recall Type" && entry.value === "identity name"
+    ),
+    "memory detail should include last recall provenance"
   );
 
   const degraded = buildObservabilitySnapshot({
@@ -163,6 +186,58 @@ function run() {
     "degraded",
     "path warnings should degrade the paths row"
   );
+
+  const disabled = buildObservabilitySnapshot({
+    capabilitySnapshot: {
+      runtimeState: "degraded",
+      capabilities: [],
+    },
+    openclawCapabilityState: {
+      state: "healthy",
+      reason: "requestSuccess",
+    },
+    memorySnapshot: {
+      requestedAdapterMode: "obsidian",
+      activeAdapterMode: "obsidian",
+      fallbackReason: "none",
+    },
+    settingsSummary: {
+      memory: {
+        enabled: true,
+        adapterMode: "obsidian",
+        writeLegacyJsonl: false,
+      },
+      openclaw: {
+        enabled: false,
+        transport: "ws",
+        mode: "online",
+        agentId: "main",
+        baseUrl: "ws://127.0.0.1:18789",
+        authTokenConfigured: false,
+      },
+      paths: {
+        localWorkspaceRoot: localRoot,
+        openClawWorkspaceRoot: null,
+        obsidianVaultRoot: "W:\\AI\\OpenClaw\\Memory\\Vault",
+      },
+    },
+    settingsSourceMap: {
+      baseConfig: "config/settings.json",
+    },
+    settingsFiles: {
+      baseConfigPath: "config/settings.json",
+    },
+    validationWarnings: [],
+    validationErrors: [],
+    resolvedPaths: {
+      localRoot,
+      openClawRoot: null,
+      obsidianRoot: "W:\\AI\\OpenClaw\\Memory\\Vault",
+    },
+    trayAvailable: true,
+  });
+  assertEqual(disabled.rows.bridge.state, "disabled", "bridge row should disable when openclaw is disabled");
+  assertEqual(disabled.rows.bridge.mode, "offline", "disabled bridge should always report offline mode");
 
   assertEqual(
     resolveShellWindowTabForAction("open-inventory", SHELL_WINDOW_TABS.status),

@@ -292,7 +292,7 @@ function buildBridgeRow({ settingsSummary, openclawCapabilityState }) {
       state: OBSERVABILITY_ROW_STATES.disabled,
       reason: "openclaw_disabled",
       transport,
-      mode: toOptionalString(openclaw.mode, "offline") || "offline",
+      mode: "offline",
       endpoint,
       endpointClass,
       authConfigured: Boolean(openclaw.authTokenConfigured),
@@ -370,6 +370,24 @@ function buildProviderRow({ settingsSummary, bridgeRow, ts }) {
   };
 }
 
+function normalizeOfflineRecall(value) {
+  if (!value || typeof value !== "object") return null;
+  const recallType = toOptionalString(value.recallType, null);
+  if (!recallType) return null;
+  const evidenceTags = Array.isArray(value.evidenceTags)
+    ? value.evidenceTags
+        .map((entry) => toOptionalString(entry, ""))
+        .filter(Boolean)
+        .slice(0, 6)
+    : [];
+  return {
+    ts: Number.isFinite(Number(value.ts)) ? Math.max(0, Math.round(Number(value.ts))) : 0,
+    recallType,
+    degradedReason: toOptionalString(value.degradedReason, "none") || "none",
+    evidenceTags,
+  };
+}
+
 function buildMemoryRow({ settingsSummary, memorySnapshot }) {
   const requestedAdapterMode =
     toOptionalString(memorySnapshot?.requestedAdapterMode, null) ||
@@ -387,6 +405,7 @@ function buildMemoryRow({ settingsSummary, memorySnapshot }) {
       activeAdapterMode,
       fallbackReason,
       writeLegacyJsonl: Boolean(settingsSummary?.memory?.writeLegacyJsonl),
+      lastOfflineRecall: normalizeOfflineRecall(memorySnapshot?.lastOfflineRecall),
     };
   }
   if (fallbackReason !== "none" || activeAdapterMode !== requestedAdapterMode) {
@@ -397,6 +416,7 @@ function buildMemoryRow({ settingsSummary, memorySnapshot }) {
       activeAdapterMode,
       fallbackReason,
       writeLegacyJsonl: Boolean(settingsSummary?.memory?.writeLegacyJsonl),
+      lastOfflineRecall: normalizeOfflineRecall(memorySnapshot?.lastOfflineRecall),
     };
   }
   return {
@@ -406,6 +426,7 @@ function buildMemoryRow({ settingsSummary, memorySnapshot }) {
     activeAdapterMode,
     fallbackReason,
     writeLegacyJsonl: Boolean(settingsSummary?.memory?.writeLegacyJsonl),
+    lastOfflineRecall: normalizeOfflineRecall(memorySnapshot?.lastOfflineRecall),
   };
 }
 
@@ -945,6 +966,10 @@ function buildRowDetail({
     label = "Memory Runtime";
     headline = `Memory runtime is ${normalizeStateLabel(state)}.`;
     impact = "Memory mode controls whether runtime writes stay in the requested adapter.";
+    const lastRecall =
+      row?.lastOfflineRecall && typeof row.lastOfflineRecall === "object"
+        ? row.lastOfflineRecall
+        : null;
     provenance.push(
       {
         label: "Requested Adapter",
@@ -959,6 +984,39 @@ function buildRowDetail({
       { label: "Fallback", kind: "runtime", value: toSentence(row?.fallbackReason, "none") },
       { label: "Reason", kind: "runtime", value: normalizeReasonLabel(row?.reason) }
     );
+    if (lastRecall) {
+      const recallTags = Array.isArray(lastRecall.evidenceTags) ? lastRecall.evidenceTags : [];
+      provenance.push(
+        {
+          label: "Last Recall Type",
+          kind: "runtime",
+          value: toSentence(lastRecall.recallType, "none"),
+        },
+        {
+          label: "Last Recall Reason",
+          kind: "runtime",
+          value: normalizeReasonLabel(lastRecall.degradedReason),
+        },
+        {
+          label: "Last Recall Tags",
+          kind: "runtime",
+          value: recallTags.length > 0 ? recallTags.join(", ") : "none",
+        }
+      );
+      if (Number.isFinite(Number(lastRecall.ts)) && Number(lastRecall.ts) > 0) {
+        provenance.push({
+          label: "Last Recall At",
+          kind: "runtime",
+          value: String(Math.round(Number(lastRecall.ts))),
+        });
+      }
+      if (lastRecall.degradedReason && lastRecall.degradedReason !== "none") {
+        suggestedSteps.length = 0;
+        suggestedSteps.push(
+          "Restore local identity/memory inputs, then ask the recall question again and refresh status."
+        );
+      }
+    }
   } else if (rowId === OBSERVABILITY_SUBJECT_IDS.paths) {
     label = "Paths / Sources";
     headline = `Path configuration is ${normalizeStateLabel(state)}.`;

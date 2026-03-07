@@ -133,6 +133,13 @@ const CASES = Object.freeze([
     script: "scripts/check-openclaw-pairing-guidance.js",
   },
   {
+    id: "D13a-offline-identity-recall",
+    deliverable: "13a-offline-identity-and-recent-recall",
+    scenario:
+      "Offline name/birthday recall and bounded recent highlights stay deterministic with evidence-tag metadata.",
+    script: "scripts/check-offline-recall.js",
+  },
+  {
     id: "Layout-assets",
     deliverable: "core-renderer-assets",
     scenario: "Layout bounds and required sprite assets remain internally consistent.",

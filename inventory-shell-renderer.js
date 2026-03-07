@@ -545,6 +545,7 @@ function normalizeShellSettingsSnapshot(payload = {}) {
         effectiveValue,
         source: formatText(field.source, "base"),
         envOverridden: field.envOverridden === true,
+        envOverrideKey: formatText(field.envOverrideKey, ""),
         validation,
       };
     })
@@ -556,8 +557,51 @@ function normalizeShellSettingsSnapshot(payload = {}) {
     warnings: Array.isArray(payload?.warnings)
       ? payload.warnings.map((entry) => formatText(entry, "")).filter(Boolean)
       : [],
+    activeEnvOverrides: Array.isArray(payload?.activeEnvOverrides)
+      ? payload.activeEnvOverrides
+          .filter((entry) => entry && typeof entry === "object")
+          .map((entry) => ({
+            key: formatText(entry.key, ""),
+            envVar: formatText(entry.envVar, ""),
+          }))
+          .filter((entry) => entry.key.length > 0)
+      : [],
     fields,
   };
+}
+
+function summarizeEnvOverrides(snapshot) {
+  const declared = Array.isArray(snapshot?.activeEnvOverrides)
+    ? snapshot.activeEnvOverrides
+        .map((entry) =>
+          entry?.envVar ? `${entry.key} (${entry.envVar})` : entry?.key || ""
+        )
+        .filter(Boolean)
+    : [];
+  if (declared.length > 0) return declared;
+  const fields = Array.isArray(snapshot?.fields) ? snapshot.fields : [];
+  return fields
+    .filter((field) => field?.envOverridden)
+    .map((field) => (field.envOverrideKey ? `${field.key} (${field.envOverrideKey})` : field.key));
+}
+
+function buildEnvOverrideClearCommands(snapshot) {
+  const declared = Array.isArray(snapshot?.activeEnvOverrides) ? snapshot.activeEnvOverrides : [];
+  const vars = [...new Set(
+    declared
+      .map((entry) => formatText(entry?.envVar, ""))
+      .filter(Boolean)
+  )];
+  if (vars.length <= 0) return "";
+  return [
+    "# PowerShell (current shell)",
+    ...vars.map((name) => `Remove-Item Env:${name} -ErrorAction SilentlyContinue`),
+    "",
+    "# Bash / WSL (current shell)",
+    `unset ${vars.join(" ")}`,
+    "",
+    "# Restart the app from the same shell after clearing.",
+  ].join("\n");
 }
 
 function coerceShellSettingsFieldValue(field, rawValue) {
@@ -738,12 +782,20 @@ function renderShellSettingsEditor() {
           ${valueRows}
           ${buildDetailRow("Source", sourceLabel)}
           ${buildDetailRow("Env Override", field.envOverridden ? "Active" : "None")}
+          ${field.envOverridden ? buildDetailRow("Env Variable", field.envOverrideKey || "Unknown") : ""}
         </div>
       </div>`;
     })
     .join("");
 
   const warnings = latestShellSettingsSnapshot.warnings || [];
+  const activeEnvOverrides = summarizeEnvOverrides(latestShellSettingsSnapshot);
+  const envOverrideMarkup =
+    activeEnvOverrides.length > 0
+      ? `<ul class="detail-list">${activeEnvOverrides
+          .map((entry) => `<li>${escapeHtml(entry)}</li>`)
+          .join("")}</ul>`
+      : '<span class="setup-card-copy">No active environment overrides.</span>';
   const warningMarkup =
     warnings.length > 0
       ? `<ul class="detail-list">${warnings
@@ -758,10 +810,15 @@ function renderShellSettingsEditor() {
       "Override File",
       formatText(latestShellSettingsSnapshot.overridePath, "Unavailable")
     )}</div>`,
+    "<h4>Environment Overrides</h4>",
+    envOverrideMarkup,
     `<div class="setup-form-grid">${fieldMarkup}</div>`,
     '<h4>Warnings</h4>',
     warningMarkup,
     `<div class="setup-actions">
+      <button class="setup-action-button" type="button" data-shell-settings-action="copy-clear-env" ${
+        shellSettingsLoading || shellSettingsSaving || activeEnvOverrides.length <= 0 ? "disabled" : ""
+      }>Copy Clear Env Cmds</button>
       <button class="setup-action-button" type="button" data-shell-settings-action="reload" ${
         shellSettingsLoading || shellSettingsSaving ? "disabled" : ""
       }>Reload Settings</button>
@@ -1502,7 +1559,15 @@ async function refreshShellSettingsSnapshot(successMessage = "Advanced settings 
     const snapshot = await window.inventoryAPI.getShellSettingsSnapshot();
     latestShellSettingsSnapshot = normalizeShellSettingsSnapshot(snapshot);
     syncShellSettingsDraftFromSnapshot();
-    setStatus(successMessage, "ok");
+    const activeEnvOverrides = summarizeEnvOverrides(latestShellSettingsSnapshot);
+    if (activeEnvOverrides.length > 0) {
+      setStatus(
+        `Advanced settings loaded. Env override active: ${activeEnvOverrides.join(", ")}.`,
+        "warning"
+      );
+    } else {
+      setStatus(successMessage, "ok");
+    }
   } catch (error) {
     setStatus(error?.message || "Advanced settings failed to load.", "warning");
   } finally {
@@ -1559,6 +1624,10 @@ async function applyShellSettings() {
     }
     const rejected = Array.isArray(result?.rejected) ? result.rejected : [];
     const envOverrides = Array.isArray(result?.envOverrides) ? result.envOverrides : [];
+    const envOverrideLabels = envOverrides.map((key) => {
+      const field = (latestShellSettingsSnapshot?.fields || []).find((entry) => entry.key === key);
+      return field?.envOverrideKey ? `${key} (${field.envOverrideKey})` : key;
+    });
     if (rejected.length > 0) {
       const rejectedMessage = rejected
         .map((entry) => `${entry.key}: ${formatReason(entry.reason || "rejected")}`)
@@ -1566,7 +1635,7 @@ async function applyShellSettings() {
       setStatus(`Some settings were rejected: ${rejectedMessage}`, "warning");
     } else if (envOverrides.length > 0) {
       setStatus(
-        `Settings saved. Environment overrides still control: ${envOverrides.join(", ")}.`,
+        `Settings saved. Environment overrides still control: ${envOverrideLabels.join(", ")}.`,
         "warning"
       );
     } else {
@@ -1927,6 +1996,22 @@ shellSettingsEditor?.addEventListener("click", (event) => {
   const button = event.target?.closest?.("[data-shell-settings-action]");
   if (!button) return;
   const action = button.dataset?.shellSettingsAction;
+  if (action === "copy-clear-env") {
+    const commands = buildEnvOverrideClearCommands(latestShellSettingsSnapshot);
+    if (!commands) {
+      setStatus("No active environment overrides to clear.", "muted");
+      return;
+    }
+    void navigator.clipboard
+      .writeText(commands)
+      .then(() => {
+        setStatus("Copied environment clear commands to clipboard.", "ok");
+      })
+      .catch(() => {
+        setStatus("Could not copy env clear commands. Clipboard access failed.", "warning");
+      });
+    return;
+  }
   if (action === "reload") {
     void refreshShellSettingsSnapshot("Advanced settings loaded.");
     return;

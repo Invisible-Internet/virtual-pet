@@ -435,8 +435,9 @@ function normalizeSettings(rawSettings, { projectRoot, env, warnings, errors }) 
   normalized.openclaw.nonLoopbackAuthSatisfied =
     loopback || Boolean(normalized.openclaw.authToken);
   if (
-    normalized.openclaw.transport === OPENCLAW_TRANSPORTS.http ||
-    normalized.openclaw.transport === OPENCLAW_TRANSPORTS.ws
+    normalized.openclaw.enabled &&
+    (normalized.openclaw.transport === OPENCLAW_TRANSPORTS.http ||
+      normalized.openclaw.transport === OPENCLAW_TRANSPORTS.ws)
   ) {
     try {
       void new URL(normalized.openclaw.baseUrl);

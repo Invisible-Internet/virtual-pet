@@ -405,12 +405,27 @@ class PetContractRouter {
       const bridgeDialogText =
         normalizeText(context.bridgeDialogText) || "Bridge unavailable. Local dialog fallback active.";
       const fallbackMode = normalizeText(context.bridgeFallbackMode) || "none";
+      const recallContext =
+        context.bridgeDialogRecall && typeof context.bridgeDialogRecall === "object"
+          ? context.bridgeDialogRecall
+          : null;
+      const recallType = normalizeText(recallContext?.recallType);
+      const recallDegradedReason = normalizeText(recallContext?.degradedReason) || "none";
+      const recallEvidenceTags = Array.isArray(recallContext?.evidenceTags)
+        ? recallContext.evidenceTags
+            .map((entry) => normalizeText(entry))
+            .filter(Boolean)
+            .slice(0, 6)
+        : [];
       return [
         {
           type: "PET_RESPONSE",
           mode: "text",
           source,
           fallbackMode,
+          recallType: recallType || null,
+          recallDegradedReason: recallType ? recallDegradedReason : "none",
+          recallEvidenceTags: recallType ? recallEvidenceTags : [],
           text: bridgeDialogText,
           correlationId: intent.correlationId,
           ts: this._now(),

@@ -101,6 +101,17 @@ async function run() {
     spotifyEnabledField.source === "env" && spotifyEnabledField.envOverridden === true,
     "spotify enabled field should show env source"
   );
+  assert(
+    spotifyEnabledField.envOverrideKey === "PET_SPOTIFY_ENABLED",
+    "spotify enabled field should expose env override key"
+  );
+  assert(
+    Array.isArray(envSnapshot.activeEnvOverrides) &&
+      envSnapshot.activeEnvOverrides.some(
+        (entry) => entry?.key === "integrations.spotify.enabled" && entry?.envVar === "PET_SPOTIFY_ENABLED"
+      ),
+    "snapshot should list active env overrides with env var names"
+  );
 
   const validation = validateShellSettingsPatch({
     patch: {

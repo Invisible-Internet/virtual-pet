@@ -377,6 +377,11 @@ function testUserMessageDialogFlow() {
       source: "offline",
       bridgeDialogText: "I'm in Idle. Local dialog fallback active.",
       bridgeFallbackMode: "dialog_offline_template",
+      bridgeDialogRecall: {
+        recallType: "identity_name",
+        degradedReason: "none",
+        evidenceTags: ["identity.name"],
+      },
     }
   );
 
@@ -390,6 +395,21 @@ function testUserMessageDialogFlow() {
     result.suggestions[0].fallbackMode,
     "dialog_offline_template",
     "user message fallback mode mismatch"
+  );
+  assertEqual(
+    result.suggestions[0].recallType,
+    "identity_name",
+    "user message recall type should pass through bridge context"
+  );
+  assertEqual(
+    result.suggestions[0].recallDegradedReason,
+    "none",
+    "user message recall reason should pass through bridge context"
+  );
+  assert(
+    Array.isArray(result.suggestions[0].recallEvidenceTags) &&
+      result.suggestions[0].recallEvidenceTags.includes("identity.name"),
+    "user message recall evidence tags should pass through bridge context"
   );
   assertIncludes(
     result.suggestions[0].text,

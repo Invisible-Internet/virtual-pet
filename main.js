@@ -33,6 +33,7 @@ const {
   createDefaultDialogTemplateCatalog,
   loadDialogTemplateCatalog,
 } = require("./dialog-runtime");
+const { buildOfflineRecallResult } = require("./offline-recall");
 const {
   DEFAULT_OPENCLAW_AGENT_ID,
   DEFAULT_OPENCLAW_AGENT_TIMEOUT_MS,
@@ -106,6 +107,7 @@ const {
   createOpenClawPairingGuidance,
 } = require("./openclaw-pairing-guidance");
 const { buildPairingQrDataUrl } = require("./openclaw-pairing-qr");
+const { evaluateOpenClawDialogGate } = require("./openclaw-runtime-gate");
 
 // Master diagnostics toggle: controls console logs, file logs, and renderer overlay.
 let DIAGNOSTICS_ENABLED = false;
@@ -315,6 +317,7 @@ let openclawPluginSkillAuditHistory = [];
 let openclawPairingGuidance = createOpenClawPairingGuidance();
 let memoryPipeline = null;
 let latestMemorySnapshot = null;
+let latestOfflineRecallSnapshot = null;
 let latestIntegrationEvent = null;
 let stateRuntime = null;
 let latestStateSnapshot = null;
@@ -1416,6 +1419,22 @@ function initializeCapabilityRegistry() {
       fallback: "offlineLocalFallback",
     },
     start: () => {
+      if (runtimeSettings?.openclaw?.enabled === false) {
+        const transport =
+          runtimeSettings?.openclaw?.transport === BRIDGE_TRANSPORTS.http
+            ? BRIDGE_TRANSPORTS.http
+            : runtimeSettings?.openclaw?.transport === BRIDGE_TRANSPORTS.ws
+              ? BRIDGE_TRANSPORTS.ws
+              : BRIDGE_TRANSPORTS.stub;
+        return {
+          state: CAPABILITY_STATES.disabled,
+          reason: "disabledByConfig",
+          details: {
+            mode: BRIDGE_MODES.offline,
+            transport,
+          },
+        };
+      }
       if (CAPABILITY_TEST_FLAGS.openclawFail) {
         throw new Error("Forced bridge startup failure (PET_FORCE_OPENCLAW_FAIL=1)");
       }
@@ -1523,16 +1542,43 @@ async function startCapabilityRegistry() {
   const snapshot = await capabilityRegistry.startAll(createCapabilityContext());
   emitCapabilitySnapshot(snapshot);
   logCapabilitySummary("startup-complete", snapshot);
+  syncOpenClawBridgeCapabilityState("startup");
   refreshIntegrationCapabilityStates();
   refreshExtensionCapabilityStates();
 }
 
 function updateCapabilityState(capabilityId, state, reason, details = {}) {
   if (!capabilityRegistry) return;
+  let nextState = state;
+  let nextReason = reason;
+  let nextDetails = details;
+
+  // Hard guard: OpenClaw bridge cannot surface healthy/degraded/failed while disabled by settings.
+  if (
+    capabilityId === CAPABILITY_IDS.openclawBridge &&
+    runtimeSettings?.openclaw?.enabled === false &&
+    state !== CAPABILITY_STATES.disabled
+  ) {
+    const transport =
+      runtimeSettings?.openclaw?.transport === BRIDGE_TRANSPORTS.http
+        ? BRIDGE_TRANSPORTS.http
+        : runtimeSettings?.openclaw?.transport === BRIDGE_TRANSPORTS.ws
+          ? BRIDGE_TRANSPORTS.ws
+          : BRIDGE_TRANSPORTS.stub;
+    nextState = CAPABILITY_STATES.disabled;
+    nextReason = "disabledByConfig";
+    nextDetails = {
+      ...(details && typeof details === "object" ? details : {}),
+      enforcedBy: "openclawDisabledGuard",
+      mode: BRIDGE_MODES.offline,
+      transport,
+    };
+  }
+
   capabilityRegistry.updateCapabilityState(capabilityId, {
-    state,
-    reason,
-    details,
+    state: nextState,
+    reason: nextReason,
+    details: nextDetails,
   });
 }
 
@@ -1785,6 +1831,7 @@ function buildRuntimeSettingsSummary() {
   const sensors = settings.sensors && typeof settings.sensors === "object" ? settings.sensors : {};
   const memory = settings.memory && typeof settings.memory === "object" ? settings.memory : {};
   const openclaw = settings.openclaw && typeof settings.openclaw === "object" ? settings.openclaw : {};
+  const openclawEnabled = Boolean(openclaw.enabled);
   const openclawPetCommandKeyId =
     typeof openclaw.petCommandKeyId === "string" && openclaw.petCommandKeyId.trim().length > 0
       ? openclaw.petCommandKeyId.trim()
@@ -1852,9 +1899,11 @@ function buildRuntimeSettingsSummary() {
       writeLegacyJsonl: Boolean(memory.writeLegacyJsonl),
     },
     openclaw: {
-      enabled: Boolean(openclaw.enabled),
+      enabled: openclawEnabled,
       transport: openclaw.transport || BRIDGE_TRANSPORTS.stub,
-      mode: openclaw.mode || BRIDGE_MODES.online,
+      mode: openclawEnabled
+        ? openclaw.mode || BRIDGE_MODES.online
+        : BRIDGE_MODES.offline,
       agentId: openclaw.agentId || DEFAULT_OPENCLAW_AGENT_ID,
       agentTimeoutMs: Number.isFinite(Number(openclaw.agentTimeoutMs))
         ? Math.max(1000, Math.round(Number(openclaw.agentTimeoutMs)))
@@ -2889,6 +2938,23 @@ function initializeRuntimeSettings(reason = "startup") {
     : [];
   runtimeSettingsResolvedPaths = loaded.resolvedPaths || null;
   runtimeSettingsFiles = loaded.files || null;
+
+  const activeEnvOverrideKeys = Object.entries(runtimeSettingsSourceMap)
+    .filter(
+      ([key, source]) =>
+        source === "env" &&
+        typeof key === "string" &&
+        key.includes(".")
+    )
+    .map(([key]) => key)
+    .sort();
+  if (activeEnvOverrideKeys.length > 0) {
+    console.warn(
+      `[settings] active environment overrides (${activeEnvOverrideKeys.length}): ${activeEnvOverrideKeys.join(
+        ", "
+      )}`
+    );
+  }
 
   if (runtimeSettingsValidationWarnings.length > 0) {
     for (const warning of runtimeSettingsValidationWarnings) {
@@ -4539,9 +4605,61 @@ function applyRuntimeSettingsPatch(patch, reason = "shell_settings_patch") {
   initializeRuntimeSettings(reason);
   if (touchedPaths.some((pathKey) => pathKey.startsWith("openclaw."))) {
     initializeOpenClawBridgeRuntime();
+    syncOpenClawBridgeCapabilityState("settings_patch");
+    refreshIntegrationCapabilityStates();
   }
   const snapshot = refreshShellTrayMenu();
   return snapshot;
+}
+
+function syncOpenClawBridgeCapabilityState(trigger = "runtime_refresh") {
+  if (!capabilityRegistry) return;
+  const openclawEnabled = Boolean(runtimeSettings?.openclaw?.enabled);
+  const transport =
+    runtimeSettings?.openclaw?.transport === BRIDGE_TRANSPORTS.http
+      ? BRIDGE_TRANSPORTS.http
+      : runtimeSettings?.openclaw?.transport === BRIDGE_TRANSPORTS.ws
+        ? BRIDGE_TRANSPORTS.ws
+        : BRIDGE_TRANSPORTS.stub;
+
+  if (!openclawEnabled) {
+    updateCapabilityState(
+      CAPABILITY_IDS.openclawBridge,
+      CAPABILITY_STATES.disabled,
+      "disabledByConfig",
+      {
+        trigger,
+        mode: BRIDGE_MODES.offline,
+        transport,
+      }
+    );
+    return;
+  }
+
+  if (!openclawBridge || typeof openclawBridge.getStartupState !== "function") {
+    updateCapabilityState(
+      CAPABILITY_IDS.openclawBridge,
+      CAPABILITY_STATES.failed,
+      "bridgeRuntimeUnavailable",
+      {
+        trigger,
+      }
+    );
+    return;
+  }
+
+  const startupState = openclawBridge.getStartupState();
+  updateCapabilityState(
+    CAPABILITY_IDS.openclawBridge,
+    startupState?.state || CAPABILITY_STATES.failed,
+    startupState?.reason || "bridgeRuntimeUnavailable",
+    {
+      trigger,
+      ...(startupState?.details && typeof startupState.details === "object"
+        ? startupState.details
+        : {}),
+    }
+  );
 }
 
 async function runShellAction(actionId) {
@@ -4931,12 +5049,65 @@ function refreshIntegrationCapabilityStates() {
 
 function emitMemorySnapshot(snapshot) {
   if (!snapshot || typeof snapshot !== "object") return;
-  latestMemorySnapshot = snapshot;
+  const mergedSnapshot = {
+    ...snapshot,
+  };
+  if (latestOfflineRecallSnapshot && typeof latestOfflineRecallSnapshot === "object") {
+    mergedSnapshot.lastOfflineRecall = latestOfflineRecallSnapshot;
+  }
+  latestMemorySnapshot = mergedSnapshot;
   emitToRenderer("pet:memory", {
     kind: "memorySnapshot",
-    snapshot,
+    snapshot: mergedSnapshot,
     ts: Date.now(),
   });
+}
+
+function normalizeOfflineRecallSnapshot(recallResult) {
+  if (!recallResult || typeof recallResult !== "object") return null;
+  if (typeof recallResult.recallType !== "string" || recallResult.recallType.trim().length <= 0) {
+    return null;
+  }
+  const evidenceTags = Array.isArray(recallResult.evidenceTags)
+    ? recallResult.evidenceTags
+        .map((entry) => (typeof entry === "string" ? entry.trim() : ""))
+        .filter((entry) => entry.length > 0)
+        .slice(0, 6)
+    : [];
+  const evidenceRefs = Array.isArray(recallResult.evidenceRefs)
+    ? recallResult.evidenceRefs
+        .filter((entry) => entry && typeof entry === "object")
+        .map((entry) => ({
+          kind: typeof entry.kind === "string" ? entry.kind : "runtime",
+          fileId: typeof entry.fileId === "string" ? entry.fileId : null,
+          field: typeof entry.field === "string" ? entry.field : null,
+          observationId: typeof entry.observationId === "string" ? entry.observationId : null,
+          observationType: typeof entry.observationType === "string" ? entry.observationType : null,
+          evidenceTag: typeof entry.evidenceTag === "string" ? entry.evidenceTag : null,
+        }))
+        .slice(0, 6)
+    : [];
+  return {
+    ts: Number.isFinite(Number(recallResult.ts))
+      ? Math.max(0, Math.round(Number(recallResult.ts)))
+      : Date.now(),
+    recallType: recallResult.recallType.trim(),
+    degradedReason:
+      typeof recallResult.degradedReason === "string" && recallResult.degradedReason.trim().length > 0
+        ? recallResult.degradedReason.trim()
+        : "none",
+    evidenceTags,
+    evidenceRefs,
+  };
+}
+
+function recordOfflineRecallSnapshot(recallResult) {
+  const normalized = normalizeOfflineRecallSnapshot(recallResult);
+  if (!normalized) return;
+  latestOfflineRecallSnapshot = normalized;
+  if (latestMemorySnapshot && typeof latestMemorySnapshot === "object") {
+    emitMemorySnapshot(latestMemorySnapshot);
+  }
 }
 
 function logMemoryEvent(kind, payload = {}) {
@@ -5128,6 +5299,9 @@ function extractUserInputText(payload) {
 }
 
 function deriveContractSource() {
+  if (!runtimeSettings?.openclaw?.enabled) {
+    return "offline";
+  }
   const bridgeState = capabilityRegistry?.getCapabilityState(CAPABILITY_IDS.openclawBridge);
   if (bridgeState?.state === CAPABILITY_STATES.healthy) {
     return "online";
@@ -5329,7 +5503,72 @@ function buildRecentHobbySummary() {
   return "no recent hobby updates";
 }
 
+function normalizeOfflineQuestionPrompt(value) {
+  if (typeof value !== "string") return "";
+  return value.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+function isOfflineQuestionNoMatchPrompt(promptText) {
+  const normalized = normalizeOfflineQuestionPrompt(promptText);
+  if (!normalized) return false;
+  if (normalized.includes("?")) return true;
+  return /^(who|what|when|where|why|how|do|does|did|is|are|am|can|could|would|should|will|have|has)\b/.test(
+    normalized
+  );
+}
+
+function buildOfflineQuestionNoMatchResponse(promptText, fallbackMode) {
+  const normalized = normalizeOfflineQuestionPrompt(promptText);
+  let seed = 0;
+  for (let index = 0; index < normalized.length; index += 1) {
+    seed = (seed * 31 + normalized.charCodeAt(index)) >>> 0;
+  }
+  const templates = [
+    "I couldn't find that answer in offline memory yet. Ask about my name, nickname, birthday, or what happened recently between us.",
+    "I don't have a local memory match for that yet. I can answer identity basics and recent highlights.",
+    "That isn't in my offline recall yet. Try asking for my name, birthday, nickname, or recent highlights.",
+  ];
+  return {
+    source: "offline",
+    text: templates[seed % templates.length],
+    fallbackMode: "offline_question_no_match",
+    triggerReason: "question_no_match",
+    templateKey: "no_match",
+    currentState: latestStateSnapshot?.currentState || "Idle",
+    phase: latestStateSnapshot?.phase || null,
+    stateContextSummary: summarizeDialogStateContext(),
+  };
+}
+
 function buildOfflineDialogFallback(promptText, fallbackMode) {
+  const memorySnapshot =
+    (memoryPipeline && typeof memoryPipeline.getSnapshot === "function"
+      ? memoryPipeline.getSnapshot()
+      : null) ||
+    latestMemorySnapshot ||
+    null;
+  const runtimeObservations =
+    memoryPipeline && typeof memoryPipeline.getRecentObservations === "function"
+      ? memoryPipeline.getRecentObservations({ limit: 24 })
+      : [];
+  const recallResult = buildOfflineRecallResult({
+    promptText,
+    workspaceRoot:
+      memorySnapshot?.localWorkspaceRoot || runtimeSettingsResolvedPaths?.localRoot || __dirname,
+    runtimeObservations,
+    memoryDir: memorySnapshot?.paths?.memoryDir || "",
+    memoryAvailable: Boolean(memoryPipeline),
+    ts: Date.now(),
+  });
+  if (recallResult) {
+    recordOfflineRecallSnapshot(recallResult);
+    return recallResult;
+  }
+
+  if (isOfflineQuestionNoMatchPrompt(promptText)) {
+    return buildOfflineQuestionNoMatchResponse(promptText, fallbackMode);
+  }
+
   const triggerReason = classifyOfflineDialogTrigger(promptText);
   const preferReading =
     triggerReason === "reading" || latestStateSnapshot?.currentState === "Reading";
@@ -5423,6 +5662,21 @@ function recordDialogSuggestion(suggestion) {
       typeof suggestion.fallbackMode === "string" && suggestion.fallbackMode.trim().length > 0
         ? suggestion.fallbackMode.trim()
         : "none",
+    recallType:
+      typeof suggestion.recallType === "string" && suggestion.recallType.trim().length > 0
+        ? suggestion.recallType.trim()
+        : null,
+    recallDegradedReason:
+      typeof suggestion.recallDegradedReason === "string" &&
+      suggestion.recallDegradedReason.trim().length > 0
+        ? suggestion.recallDegradedReason.trim()
+        : null,
+    recallEvidenceTags: Array.isArray(suggestion.recallEvidenceTags)
+      ? suggestion.recallEvidenceTags
+          .map((entry) => (typeof entry === "string" ? entry.trim() : ""))
+          .filter((entry) => entry.length > 0)
+          .slice(0, 6)
+      : [],
     talkFeedbackMode: DIALOG_TALK_FEEDBACK_MODE,
     stateContextSummary: summarizeDialogStateContext(),
     currentState: latestStateSnapshot?.currentState || "Idle",
@@ -5610,19 +5864,18 @@ function buildBridgeActionFeedbackSuffix(blockedActions, commandOutcomes, plugin
 }
 
 async function requestBridgeDialog({ correlationId, route, promptText }) {
-  if (!runtimeSettings?.openclaw?.enabled) {
+  const gate = evaluateOpenClawDialogGate({
+    settings: runtimeSettings,
+    bridge: openclawBridge,
+  });
+  if (!gate.allowed) {
+    console.log(
+      `[pet-openclaw] skipped correlationId=${correlationId} route=${route} reason=${gate.fallbackMode}`
+    );
     return {
       source: "offline",
       text: buildBridgeFallbackText(route, promptText),
-      fallbackMode: "bridge_disabled",
-    };
-  }
-
-  if (!openclawBridge) {
-    return {
-      source: "offline",
-      text: buildBridgeFallbackText(route, promptText),
-      fallbackMode: "bridge_unavailable",
+      fallbackMode: gate.fallbackMode,
     };
   }
 
@@ -5745,10 +5998,21 @@ async function buildUserInputContext(eventType, payload, correlationId) {
 
   if (isGenericUserMessage && bridgeResult.source !== "online") {
     const offlineResult = buildOfflineDialogFallback(promptText, bridgeResult.fallbackMode);
+    const recallContext =
+      offlineResult?.kind === "offlineRecallResult"
+        ? {
+            recallType: offlineResult.recallType || "unknown",
+            degradedReason: offlineResult.degradedReason || "none",
+            evidenceTags: Array.isArray(offlineResult.evidenceTags)
+              ? offlineResult.evidenceTags.slice(0, 6)
+              : [],
+          }
+        : null;
     return {
       source: offlineResult.source,
       bridgeDialogText: offlineResult.text,
       bridgeFallbackMode: offlineResult.fallbackMode,
+      bridgeDialogRecall: recallContext,
     };
   }
 
