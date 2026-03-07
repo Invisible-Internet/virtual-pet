@@ -35,6 +35,10 @@ const {
 } = require("./dialog-runtime");
 const { buildOfflineRecallResult } = require("./offline-recall");
 const {
+  buildPersonaSnapshot: buildRuntimePersonaSnapshot,
+  buildPersonaExport: buildRuntimePersonaExport,
+} = require("./persona-snapshot");
+const {
   DEFAULT_OPENCLAW_AGENT_ID,
   DEFAULT_OPENCLAW_AGENT_TIMEOUT_MS,
   buildSpotifyNowPlayingPrompt,
@@ -318,6 +322,8 @@ let openclawPairingGuidance = createOpenClawPairingGuidance();
 let memoryPipeline = null;
 let latestMemorySnapshot = null;
 let latestOfflineRecallSnapshot = null;
+let latestPersonaSnapshot = null;
+let latestPersonaExportSnapshot = null;
 let latestIntegrationEvent = null;
 let stateRuntime = null;
 let latestStateSnapshot = null;
@@ -2470,7 +2476,21 @@ function buildCurrentShellSettingsSnapshot() {
   });
 }
 
-function applyShellSettingsEditorPatch(patchInput = {}) {
+function shouldRefreshMemoryRuntimeForSettingsPatchKeys(keys = []) {
+  if (!Array.isArray(keys) || keys.length <= 0) return false;
+  return keys.some((key) => {
+    if (typeof key !== "string" || key.trim().length <= 0) return false;
+    return (
+      key.startsWith("memory.") ||
+      key === "openclaw.enabled" ||
+      key === "paths.localWorkspaceRoot" ||
+      key === "paths.openClawWorkspaceRoot" ||
+      key === "paths.obsidianVaultRoot"
+    );
+  });
+}
+
+async function applyShellSettingsEditorPatch(patchInput = {}) {
   const validation = validateShellSettingsPatch({ patch: patchInput });
   const acceptedKeys = validation.accepted.map((entry) => entry.key);
   const normalizedPatch =
@@ -2490,6 +2510,9 @@ function applyShellSettingsEditorPatch(patchInput = {}) {
   }
   if (acceptedKeys.length > 0) {
     applyRuntimeSettingsPatch(normalizedPatch, "shell_settings_editor_apply");
+    if (shouldRefreshMemoryRuntimeForSettingsPatchKeys(acceptedKeys)) {
+      await initializeMemoryPipelineRuntime();
+    }
   }
 
   const shellState = latestShellState || buildShellStateSnapshot();
@@ -5055,12 +5078,173 @@ function emitMemorySnapshot(snapshot) {
   if (latestOfflineRecallSnapshot && typeof latestOfflineRecallSnapshot === "object") {
     mergedSnapshot.lastOfflineRecall = latestOfflineRecallSnapshot;
   }
+  if (latestPersonaSnapshot && typeof latestPersonaSnapshot === "object") {
+    mergedSnapshot.lastPersonaSnapshot = latestPersonaSnapshot;
+  }
+  if (latestPersonaExportSnapshot && typeof latestPersonaExportSnapshot === "object") {
+    mergedSnapshot.lastPersonaExport = latestPersonaExportSnapshot;
+  }
   latestMemorySnapshot = mergedSnapshot;
   emitToRenderer("pet:memory", {
     kind: "memorySnapshot",
     snapshot: mergedSnapshot,
     ts: Date.now(),
   });
+}
+
+function normalizePersonaSnapshotSummary(snapshot) {
+  if (!snapshot || typeof snapshot !== "object") return null;
+  const fields = snapshot.fields && typeof snapshot.fields === "object" ? snapshot.fields : {};
+  const fieldKeys = Object.keys(fields)
+    .filter((entry) => typeof entry === "string" && entry.trim().length > 0)
+    .sort()
+    .slice(0, 12);
+  return {
+    builtAt: Number.isFinite(Number(snapshot.builtAt))
+      ? Math.max(0, Math.round(Number(snapshot.builtAt)))
+      : Date.now(),
+    schemaVersion:
+      typeof snapshot.schemaVersion === "string" && snapshot.schemaVersion.trim().length > 0
+        ? snapshot.schemaVersion.trim()
+        : "vp-persona-snapshot-v1",
+    state:
+      typeof snapshot.state === "string" && snapshot.state.trim().toLowerCase() === "ready"
+        ? "ready"
+        : "degraded",
+    degradedReason:
+      typeof snapshot.degradedReason === "string" && snapshot.degradedReason.trim().length > 0
+        ? snapshot.degradedReason.trim()
+        : "parse_incomplete",
+    derivedFrom: Array.isArray(snapshot.derivedFrom)
+      ? snapshot.derivedFrom
+          .map((entry) => (typeof entry === "string" ? entry.trim() : ""))
+          .filter((entry) => entry.length > 0)
+          .slice(0, 8)
+      : [],
+    fieldCount: fieldKeys.length,
+    fieldKeys,
+  };
+}
+
+function normalizePersonaExportSummary(personaExport) {
+  if (!personaExport || typeof personaExport !== "object") return null;
+  const facts = Array.isArray(personaExport.facts)
+    ? personaExport.facts
+        .filter((entry) => entry && typeof entry === "object")
+        .map((entry) => ({
+          key: typeof entry.key === "string" ? entry.key.trim() : "",
+          value: typeof entry.value === "string" ? entry.value.trim() : "",
+          provenanceTag:
+            typeof entry.provenanceTag === "string" && entry.provenanceTag.trim().length > 0
+              ? entry.provenanceTag.trim()
+              : "unknown",
+        }))
+        .filter((entry) => entry.key.length > 0 && entry.value.length > 0)
+        .slice(0, 12)
+    : [];
+  const styleHints = Array.isArray(personaExport.styleHints)
+    ? personaExport.styleHints
+        .map((entry) => (typeof entry === "string" ? entry.trim() : ""))
+        .filter((entry) => entry.length > 0)
+        .slice(0, 6)
+    : [];
+  const highlightCount = Array.isArray(personaExport.recentHighlights)
+    ? Math.min(3, personaExport.recentHighlights.length)
+    : 0;
+  const mode =
+    typeof personaExport.mode === "string" && personaExport.mode.trim().length > 0
+      ? personaExport.mode.trim()
+      : "online_dialog";
+  const summary =
+    typeof personaExport.summary === "string" && personaExport.summary.trim().length > 0
+      ? personaExport.summary.trim()
+      : "";
+  const byteSize = Number.isFinite(Number(personaExport.byteSize))
+    ? Math.max(0, Math.round(Number(personaExport.byteSize)))
+    : Buffer.byteLength(
+        JSON.stringify({
+          summary,
+          facts,
+          styleHints,
+          highlightCount,
+        }),
+        "utf8"
+      );
+  return {
+    ts: Number.isFinite(Number(personaExport.ts))
+      ? Math.max(0, Math.round(Number(personaExport.ts)))
+      : Date.now(),
+    mode,
+    schemaVersion:
+      typeof personaExport.schemaVersion === "string" && personaExport.schemaVersion.trim().length > 0
+        ? personaExport.schemaVersion.trim()
+        : "vp-persona-export-v1",
+    snapshotVersion:
+      typeof personaExport.snapshotVersion === "string" && personaExport.snapshotVersion.trim().length > 0
+        ? personaExport.snapshotVersion.trim()
+        : "vp-persona-snapshot-v1",
+    state:
+      typeof personaExport.state === "string" && personaExport.state.trim().toLowerCase() === "ready"
+        ? "ready"
+        : "degraded",
+    degradedReason:
+      typeof personaExport.degradedReason === "string" && personaExport.degradedReason.trim().length > 0
+        ? personaExport.degradedReason.trim()
+        : "parse_incomplete",
+    summary,
+    fieldCount: facts.length,
+    facts,
+    styleHints,
+    highlightCount,
+    byteSize,
+  };
+}
+
+function buildCurrentPersonaRuntimeInputs() {
+  const memorySnapshot =
+    latestMemorySnapshot ||
+    (memoryPipeline && typeof memoryPipeline.getSnapshot === "function"
+      ? memoryPipeline.getSnapshot()
+      : null);
+  const runtimeObservations =
+    memoryPipeline && typeof memoryPipeline.getRecentObservations === "function"
+      ? memoryPipeline.getRecentObservations({ limit: 24 })
+      : [];
+  return {
+    workspaceRoot:
+      memorySnapshot?.localWorkspaceRoot || runtimeSettingsResolvedPaths?.localRoot || __dirname,
+    runtimeObservations,
+    memoryDir: memorySnapshot?.paths?.memoryDir || "",
+    memoryAvailable: Boolean(memoryPipeline),
+  };
+}
+
+function refreshPersonaSnapshotCache({ recordExportMode = null } = {}) {
+  const nowTs = Date.now();
+  const inputs = buildCurrentPersonaRuntimeInputs();
+  const personaSnapshot = buildRuntimePersonaSnapshot({
+    workspaceRoot: inputs.workspaceRoot,
+    runtimeObservations: inputs.runtimeObservations,
+    memoryDir: inputs.memoryDir,
+    memoryAvailable: inputs.memoryAvailable,
+    ts: nowTs,
+  });
+  latestPersonaSnapshot = normalizePersonaSnapshotSummary(personaSnapshot);
+
+  let personaExport = null;
+  if (recordExportMode) {
+    personaExport = buildRuntimePersonaExport({
+      snapshot: personaSnapshot,
+      mode: recordExportMode,
+      ts: nowTs,
+    });
+    latestPersonaExportSnapshot = normalizePersonaExportSummary(personaExport);
+  }
+
+  return {
+    personaSnapshot,
+    personaExport,
+  };
 }
 
 function normalizeOfflineRecallSnapshot(recallResult) {
@@ -5138,6 +5322,8 @@ async function initializeMemoryPipelineRuntime() {
       paths: null,
     };
     emitMemorySnapshot(latestMemorySnapshot);
+    refreshPersonaSnapshotCache();
+    emitMemorySnapshot(latestMemorySnapshot);
     logMemoryEvent("runtimeDisabled", latestMemorySnapshot);
     return;
   }
@@ -5168,6 +5354,8 @@ async function initializeMemoryPipelineRuntime() {
   try {
     const snapshot = await memoryPipeline.start();
     emitMemorySnapshot(snapshot);
+    refreshPersonaSnapshotCache();
+    emitMemorySnapshot(snapshot);
     logMemoryEvent("runtimeReady", snapshot);
   } catch (error) {
     console.warn(`[pet-memory] runtime initialization failed: ${error?.message || String(error)}`);
@@ -5183,6 +5371,8 @@ async function initializeMemoryPipelineRuntime() {
       openclawEnabled: fallbackSettings.openclaw.enabled,
       writeLegacyJsonl: fallbackSettings.memory.writeLegacyJsonl,
     };
+    emitMemorySnapshot(latestMemorySnapshot);
+    refreshPersonaSnapshotCache();
     emitMemorySnapshot(latestMemorySnapshot);
   }
 }
@@ -5420,8 +5610,15 @@ function buildRecentDialogSummaryForBridge(turns) {
   return `${summary.slice(0, Math.max(1, BRIDGE_RECENT_DIALOG_SUMMARY_LIMIT - 3))}...`;
 }
 
-function buildBridgeRequestContext() {
+function buildBridgeRequestContext(route = "dialog_user_command") {
   const recentDialogTurns = buildRecentDialogTurnsForBridge();
+  const shouldAttachPersonaExport = route === "dialog_user_message";
+  const personaContext = refreshPersonaSnapshotCache({
+    recordExportMode: shouldAttachPersonaExport ? "online_dialog" : null,
+  });
+  if (latestMemorySnapshot && typeof latestMemorySnapshot === "object") {
+    emitMemorySnapshot(latestMemorySnapshot);
+  }
   return {
     currentState: deriveBridgeCurrentState(),
     stateContextSummary: latestStateSnapshot?.contextSummary || buildStatusText(),
@@ -5429,6 +5626,7 @@ function buildBridgeRequestContext() {
     extensionContextSummary: buildExtensionContextSummary(),
     recentDialogSummary: buildRecentDialogSummaryForBridge(recentDialogTurns),
     recentDialogTurns,
+    personaExport: shouldAttachPersonaExport ? personaContext.personaExport : null,
     source: deriveContractSource(),
   };
 }
@@ -5885,7 +6083,7 @@ async function requestBridgeDialog({ correlationId, route, promptText }) {
         correlationId,
         route,
         promptText,
-        context: buildBridgeRequestContext(),
+        context: buildBridgeRequestContext(route),
       }),
       getBridgeRequestTimeoutMs()
     );
@@ -6176,6 +6374,10 @@ function queueMemoryObservation(observation) {
     .recordObservation(observation)
     .then((outcome) => {
       if (!outcome?.ok) return;
+      refreshPersonaSnapshotCache();
+      if (latestMemorySnapshot && typeof latestMemorySnapshot === "object") {
+        emitMemorySnapshot(latestMemorySnapshot);
+      }
       emitToRenderer("pet:memory", {
         kind: "observationWritten",
         observationType: outcome.observation?.observationType || "unknown",

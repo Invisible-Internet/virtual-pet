@@ -53,6 +53,42 @@ function run() {
         degradedReason: "none",
         evidenceTags: ["identity.name"],
       },
+      lastPersonaSnapshot: {
+        builtAt: 1700000001333,
+        schemaVersion: "vp-persona-snapshot-v1",
+        state: "ready",
+        degradedReason: "none",
+        derivedFrom: ["SOUL.md", "STYLE.md", "IDENTITY.md", "USER.md", "MEMORY.md"],
+        fieldCount: 8,
+        fieldKeys: [
+          "pet_name",
+          "pet_pronouns",
+        ],
+      },
+      lastPersonaExport: {
+        ts: 1700000001666,
+        mode: "online_dialog",
+        schemaVersion: "vp-persona-export-v1",
+        snapshotVersion: "vp-persona-snapshot-v1",
+        state: "ready",
+        degradedReason: "none",
+        summary: "Persona ready for Nori.",
+        fieldCount: 2,
+        byteSize: 480,
+        highlightCount: 1,
+        facts: [
+          {
+            key: "pet_name",
+            value: "Nori",
+            provenanceTag: "IDENTITY.md:Name",
+          },
+          {
+            key: "pet_pronouns",
+            value: "she/her",
+            provenanceTag: "IDENTITY.md:Pronouns",
+          },
+        ],
+      },
     },
     settingsSummary: {
       memory: {
@@ -102,6 +138,16 @@ function run() {
     "memory row should include normalized last recall type"
   );
   assertEqual(
+    healthy.rows.memory.lastPersonaSnapshot?.schemaVersion,
+    "vp-persona-snapshot-v1",
+    "memory row should include normalized persona snapshot summary"
+  );
+  assertEqual(
+    healthy.rows.memory.lastPersonaExport?.mode,
+    "online_dialog",
+    "memory row should include normalized persona export metadata"
+  );
+  assertEqual(
     healthy.rows.canonicalFiles.localWorkspace.readableCount,
     5,
     "local canonical files should be readable"
@@ -120,6 +166,81 @@ function run() {
       (entry) => entry.label === "Last Recall Type" && entry.value === "identity name"
     ),
     "memory detail should include last recall provenance"
+  );
+  assert(
+    memoryDetail.provenance.some(
+      (entry) => entry.label === "Last Persona Export Mode" && entry.value === "online dialog"
+    ),
+    "memory detail should include persona export mode provenance"
+  );
+
+  const personaSnapshotDegraded = buildObservabilitySnapshot({
+    capabilitySnapshot: {
+      runtimeState: "degraded",
+      capabilities: [],
+    },
+    openclawCapabilityState: {
+      state: "healthy",
+      reason: "requestSuccess",
+    },
+    memorySnapshot: {
+      requestedAdapterMode: "obsidian",
+      activeAdapterMode: "obsidian",
+      fallbackReason: "none",
+      lastPersonaSnapshot: {
+        builtAt: 1700000002000,
+        schemaVersion: "vp-persona-snapshot-v1",
+        state: "degraded",
+        degradedReason: "canonical_missing",
+        derivedFrom: ["STYLE.md", "MEMORY.md"],
+        fieldCount: 2,
+        fieldKeys: ["tone_keywords"],
+      },
+    },
+    settingsSummary: {
+      memory: {
+        enabled: true,
+        adapterMode: "obsidian",
+        writeLegacyJsonl: false,
+      },
+      openclaw: {
+        enabled: true,
+        transport: "http",
+        mode: "online",
+        agentId: "main",
+        baseUrl: "http://127.0.0.1:18789/bridge/dialog",
+        authTokenConfigured: false,
+      },
+      paths: {
+        localWorkspaceRoot: localRoot,
+        openClawWorkspaceRoot: null,
+        obsidianVaultRoot: "W:\\AI\\OpenClaw\\Memory\\Vault",
+      },
+    },
+    settingsSourceMap: {
+      baseConfig: "config/settings.json",
+    },
+    settingsFiles: {
+      baseConfigPath: "config/settings.json",
+    },
+    validationWarnings: [],
+    validationErrors: [],
+    resolvedPaths: {
+      localRoot,
+      openClawRoot: null,
+      obsidianRoot: "W:\\AI\\OpenClaw\\Memory\\Vault",
+    },
+    trayAvailable: true,
+  });
+  assertEqual(
+    personaSnapshotDegraded.rows.memory.state,
+    "degraded",
+    "memory row should degrade when persona snapshot is degraded"
+  );
+  assertEqual(
+    personaSnapshotDegraded.rows.memory.reason,
+    "persona_snapshot_canonical_missing",
+    "memory row reason should include persona degraded reason"
   );
 
   const degraded = buildObservabilitySnapshot({

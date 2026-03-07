@@ -38,6 +38,12 @@ async function writeJson(filePath, value) {
 async function run() {
   const root = await makeTempProjectRoot("snapshot-and-validate");
   await writeJson(path.join(root, "config", "settings.json"), {
+    memory: {
+      enabled: true,
+      adapterMode: "local",
+      mutationTransparencyPolicy: "logged",
+      writeLegacyJsonl: false,
+    },
     integrations: {
       spotify: {
         enabled: true,
@@ -85,6 +91,8 @@ async function run() {
     projectRoot: root,
     env: {
       PET_SPOTIFY_ENABLED: "1",
+      PET_MEMORY_ENABLED: "0",
+      PET_LOCAL_WORKSPACE_ROOT: path.join(root, "env-local-workspace"),
     },
   });
   const envSnapshot = buildShellSettingsSnapshot({
@@ -112,20 +120,47 @@ async function run() {
       ),
     "snapshot should list active env overrides with env var names"
   );
+  const memoryEnabledField = envSnapshot.fields.find((field) => field.key === "memory.enabled");
+  assert(memoryEnabledField, "memory enabled field should exist in snapshot");
+  assert(
+    memoryEnabledField.source === "env" && memoryEnabledField.envOverridden === true,
+    "memory enabled field should show env source"
+  );
+  assert(
+    memoryEnabledField.envOverrideKey === "PET_MEMORY_ENABLED",
+    "memory enabled field should expose env override key"
+  );
+  const localWorkspaceRootField = envSnapshot.fields.find(
+    (field) => field.key === "paths.localWorkspaceRoot"
+  );
+  assert(localWorkspaceRootField, "local workspace root field should exist in snapshot");
+  assert(
+    localWorkspaceRootField.label === "Canonical Files Root",
+    "local workspace root field should use Canonical Files Root label"
+  );
+  assert(
+    localWorkspaceRootField.source === "env" && localWorkspaceRootField.envOverridden === true,
+    "local workspace root field should show env source"
+  );
+  assert(
+    localWorkspaceRootField.envOverrideKey === "PET_LOCAL_WORKSPACE_ROOT",
+    "local workspace root field should expose env override key"
+  );
 
   const validation = validateShellSettingsPatch({
     patch: {
+      "memory.enabled": false,
+      "paths.localWorkspaceRoot": path.join(root, "next-local-workspace"),
       "openclaw.enabled": false,
       "openclaw.transport": "http",
       "openclaw.baseUrl": "https://example.openclaw.dev",
       "ui.characterScalePercent": 118,
       "ui.characterHitboxScalePercent": 200,
       "openclaw.authTokenRef": "not valid ref",
-      "paths.localWorkspaceRoot": "W:/not-allowed",
     },
   });
-  assert(validation.accepted.length === 4, "four patch keys should be accepted");
-  assert(validation.rejected.length === 3, "three patch keys should be rejected");
+  assert(validation.accepted.length === 6, "six patch keys should be accepted");
+  assert(validation.rejected.length === 2, "two patch keys should be rejected");
   assert(
     validation.rejected.some((entry) => entry.key === "ui.characterHitboxScalePercent" && entry.reason === "blocked_key"),
     "hitbox percent should be blocked from settings editor writes"
@@ -133,10 +168,6 @@ async function run() {
   assert(
     validation.rejected.some((entry) => entry.key === "openclaw.authTokenRef" && entry.reason === "invalid_env_ref"),
     "invalid auth token ref should be rejected"
-  );
-  assert(
-    validation.rejected.some((entry) => entry.key === "paths.localWorkspaceRoot" && entry.reason === "blocked_key"),
-    "path root key should be blocked"
   );
 
   persistRuntimeSettingsPatch({
@@ -162,6 +193,14 @@ async function run() {
   assert(
     reloaded.settings.openclaw.baseUrl === "https://example.openclaw.dev",
     "accepted openclaw.baseUrl patch should persist"
+  );
+  assert(
+    reloaded.settings.memory.enabled === false,
+    "accepted memory.enabled patch should persist"
+  );
+  assert(
+    reloaded.settings.paths.localWorkspaceRoot === path.join(root, "next-local-workspace"),
+    "accepted paths.localWorkspaceRoot patch should persist"
   );
 
   const persistedSnapshot = buildShellSettingsSnapshot({

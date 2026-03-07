@@ -1,7 +1,7 @@
 # Deliverable 13b: Persona Snapshot Synthesis and Provenance
 
 **Deliverable ID:** `13b-persona-snapshot-synthesis-and-provenance`  
-**Status:** `specifying`  
+**Status:** `accepted`  
 **Owner:** `Mic + Codex`  
 **Last Updated:** `2026-03-07`  
 **Depends On:** `05-memory-pipeline-and-obsidian-adapter`, `11b-guided-pet-setup-and-markdown-bootstrap`, `11c-repair-actions-and-provenance-visibility`, `12a-real-openclaw-dialog-parity`, `13a-offline-identity-and-recent-recall`  
@@ -81,25 +81,25 @@ The operator can open `Status` and see a deterministic persona snapshot state wi
    - Expect: copied text includes provenance tags/source labels for exported facts.
 
 ### Failure + Recovery (5 min max)
-1. Break it: switch local workspace root to an empty/unreadable path, then click `Refresh Status`.
+1. Break it: `Settings` tab -> set `Canonical Files Root` to an empty/unreadable folder -> `Save Settings`, then click `Refresh Status`.
    - Expect degraded signal: `Persona Snapshot: DEGRADED` with reason `canonical_missing` or `canonical_unreadable`.
-2. Recover it: restore valid local workspace root and click `Refresh Status`.
+2. Recover it: restore valid `Canonical Files Root`, `Save Settings`, and click `Refresh Status`.
    - Expect recovered signal: `Persona Snapshot: READY` and degraded reason cleared.
 
 ### Pass / Fail Checklist
-- [ ] `Persona Snapshot: READY` appears with version label.
-- [ ] Online dialog still responds with `source=online`.
-- [ ] Last export metadata is visible and field count is bounded.
-- [ ] Degraded snapshot reason appears when canonical inputs are unavailable.
-- [ ] Snapshot recovers to `READY` after restore without restart.
+- [x] `Persona Snapshot: READY` appears with version label.
+- [x] Online dialog still responds with `source=online`.
+- [x] Last export metadata is visible and field count is bounded.
+- [x] Degraded snapshot reason appears when canonical inputs are unavailable.
+- [x] Snapshot recovers to `READY` after restore without restart.
 
 ## Acceptance Evidence Checklist (Mandatory)
-- [ ] `Status` capture showing `Persona Snapshot: READY` + version.
-- [ ] `Copy Details` capture showing bounded exported fields with provenance tags.
-- [ ] Chat capture showing `source=online` during happy-path export.
-- [ ] Degraded capture showing `Persona Snapshot: DEGRADED` reason.
-- [ ] Recovery capture showing `READY` restored.
-- [ ] Deterministic check output line captured for `D13b-persona-snapshot-provenance`.
+- [x] `Status` capture showing `Persona Snapshot: READY` + version.
+- [x] `Copy Details` capture showing bounded exported fields with provenance tags.
+- [x] Chat capture showing `source=online` during happy-path export.
+- [x] Degraded capture showing `Persona Snapshot: DEGRADED` reason.
+- [x] Recovery capture showing `READY` restored.
+- [x] Deterministic check output line captured for `D13b-persona-snapshot-provenance`.
 
 ## Public Interfaces / Touchpoints
 - Runtime snapshot synthesis and normalization:
@@ -211,34 +211,105 @@ Rules:
   - provenance is missing or leaks sensitive config/secrets.
 
 ## Implementation Slice (Mandatory)
-- Spec-only session completed; implementation intentionally not started.
-- Locked first-slice contracts for:
-  - `vp-persona-snapshot-v1`
-  - `vp-persona-export-v1`
-  - degraded reason taxonomy
-  - deterministic payload bounds and precedence rules
-- Locked deterministic check targets:
-  - `scripts/check-persona-snapshot.js`
-  - acceptance row `D13b-persona-snapshot-provenance`
+- Implemented first `13b` runtime slice:
+  - added deterministic persona synthesis/export module:
+    - `persona-snapshot.js`
+    - `vp-persona-snapshot-v1` synthesis from canonical files + bounded recent highlights
+    - bounded `vp-persona-export-v1` payload shaping with provenance tags and byte-size cap (`<= 4KB`)
+  - wired runtime integration in `main.js`:
+    - persona snapshot/export cache fields in memory snapshot runtime state
+    - `dialog_user_message` bridge context now includes bounded `personaExport`
+    - snapshot/export metadata now refreshes on memory init and new memory observations
+  - extended bridge context normalization/path usage in `openclaw-bridge.js`:
+    - `personaExport` normalization and bounds in request context
+    - gateway CLI message composition includes bounded persona context block for dialog route
+  - extended `Status` memory detail visibility in `shell-observability.js`:
+    - `Persona Snapshot`, `Snapshot Version`, `Snapshot Fields`, `Snapshot Derived From`, `Snapshot Reason`
+    - `Last Persona Export Mode`, `Last Persona Export Fields`, `Last Persona Export Reason`, `Last Persona Export Facts`, `Last Persona Export At`
+- Added deterministic coverage:
+  - `scripts/check-persona-snapshot.js` (new)
+  - `scripts/check-dialog-openclaw-parity.js` (extended persona export bounds assertions)
+  - `scripts/check-shell-observability.js` (extended persona snapshot/export provenance assertions)
+  - `scripts/check-shell-settings-editor.js` (extended for `memory.enabled` and `paths.localWorkspaceRoot` bounded settings coverage)
+  - `scripts/run-acceptance-matrix.js` new row:
+    - `D13b-persona-snapshot-provenance`
+  - package checks updated:
+    - `check:syntax` now includes `persona-snapshot.js`
+    - `check:contracts` now includes `scripts/check-persona-snapshot.js`
+  - Operator-iteration slice from acceptance walkthrough feedback:
+    - `Advanced Settings` now includes:
+      - `Memory Runtime` (`memory.enabled`)
+      - `Canonical Files Root` (`paths.localWorkspaceRoot`)
+  - settings snapshot/env-override detail now surfaces:
+    - `PET_MEMORY_ENABLED`
+    - `PET_LOCAL_WORKSPACE_ROOT`
+  - applying relevant settings now refreshes memory runtime in-process (no app restart required) for:
+    - `memory.*`
+    - `openclaw.enabled`
+    - `paths.localWorkspaceRoot`
+    - `paths.openClawWorkspaceRoot`
+    - `paths.obsidianVaultRoot`
+  - memory observability alignment iteration:
+    - Advanced Settings label renamed for clarity:
+      - `Canonical Files Root` (`paths.localWorkspaceRoot`)
+    - `Memory Runtime` row now degrades when `Persona Snapshot` is degraded, with explicit reason:
+      - `persona_snapshot_<degraded_reason>`
+- Verification run passed:
+  - `npm run check:syntax`
+  - `npm run check:contracts`
+  - `npm run check:acceptance` -> `24/24 automated checks passed`
 
 ## Visible App Outcome
-- No visible app/runtime change in this session.
-- This session delivers spec contracts only so implementation can begin after `Spec Gate` pass.
+- Visible app/runtime change delivered:
+  - online dialog bridge requests now carry bounded persona export context derived from canonical local files.
+  - `Status` -> `Memory Runtime` detail now shows persona snapshot readiness/provenance and last persona export metadata.
+  - degraded persona conditions (for missing/unreadable canonical files) are surfaced through deterministic reason labels.
 
 ## Acceptance Notes
 - `2026-03-07`: File created from post-v1 template for `13b`.
 - `2026-03-07`: Locked showcase promise, operator demo script, failure/recovery script, quick operator test card, evidence checklist, and first-slice contracts for persona snapshot synthesis + provenance export.
 - `2026-03-07`: `Spec Gate` passed; implementation intentionally not started.
+- `2026-03-07`: Implemented first `13b` slice for snapshot synthesis/export, bridge context wiring, and status provenance visibility.
+- `2026-03-07`: Build verification passed:
+  - `npm run check:syntax`
+  - `npm run check:contracts`
+  - `npm run check:acceptance` -> `24/24`
+- `2026-03-07`: Iterated settings UX for `13b` acceptance flow:
+  - added `Memory Runtime` toggle and `Canonical Files Root` editor in Advanced Settings
+  - extended env-override provenance for `PET_MEMORY_ENABLED` and `PET_LOCAL_WORKSPACE_ROOT`
+  - added immediate memory-runtime refresh after applying relevant settings
+  - aligned memory observability semantics:
+    - renamed settings label to `Canonical Files Root`
+    - `Memory Runtime` now reports `degraded` while persona snapshot is degraded
+  - reran verification:
+    - `npm run check:contracts`
+    - `npm run check:acceptance` -> `24/24`
+- `2026-03-07`: Operator acceptance evidence captured:
+  - happy path confirmed:
+    - `Persona Snapshot: ready`
+    - bounded persona export metadata and provenance tags visible
+    - online dialog path confirmed
+  - failure/recovery confirmed:
+    - setting `Canonical Files Root` to invalid path degraded persona snapshot and memory runtime detail
+    - restoring `Canonical Files Root` returned snapshot to `ready`
+  - accepted closure approved by operator.
 
 ## Iteration Log
 - `2026-03-07`: Initial `13b` spec drafted from roadmap rough-in and `13a` continuity requirements.
+- `2026-03-07`: Added operator-requested settings controls (`memory.enabled`, `paths.localWorkspaceRoot`) and runtime refresh coupling so failure/recovery can be run entirely from the GUI.
+- `2026-03-07`: Clarified settings naming (`Canonical Files Root`) and aligned observability so `Memory Runtime` degrades when persona snapshot degrades.
 
 ## Gate Status
 - `Spec Gate`: `passed` (`2026-03-07`)
-- `Build Gate`: `not_started`
-- `Acceptance Gate`: `not_started`
-- `Overall`: `specifying`
+- `Build Gate`: `passed` (`2026-03-07`)
+- `Acceptance Gate`: `passed` (`2026-03-07`)
+- `Overall`: `accepted`
 
 ## Change Log
 - `2026-03-07`: File created from the post-v1 deliverable template.
 - `2026-03-07`: Added persona snapshot/export contracts, operator demo/failure scripts, and marked `Spec Gate` passed (spec-only session).
+- `2026-03-07`: Implemented first runtime slice (`persona-snapshot.js`, bridge context export, memory/status provenance visibility) and added deterministic `D13b` acceptance coverage.
+- `2026-03-07`: Marked `Build Gate` passed after green syntax/contracts/acceptance checks.
+- `2026-03-07`: Iterated Advanced Settings for operator acceptance: added bounded `memory.enabled` and `paths.localWorkspaceRoot` controls, env-override visibility, and immediate memory runtime refresh on apply.
+- `2026-03-07`: Iterated `13b` observability semantics: renamed `paths.localWorkspaceRoot` label to `Canonical Files Root` and made `Memory Runtime` report `degraded` when `Persona Snapshot` is degraded.
+- `2026-03-07`: Marked `Acceptance Gate` passed after operator-confirmed happy-path plus failure/recovery evidence; deliverable closed as `accepted`.

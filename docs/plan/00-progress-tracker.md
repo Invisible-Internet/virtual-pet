@@ -33,16 +33,16 @@ Historical v1 deliverables keep their original wording and remain archived histo
   - operator-visible demo passes and evidence is logged
 
 ## Current Deliverable
-- Current Deliverable: `13b-persona-snapshot-synthesis-and-provenance`
-- Workflow State: `specifying`
-- Current Status: `specifying`
-- Last Completed Deliverable: `13a-offline-identity-and-recent-recall`
+- Current Deliverable: `none`
+- Workflow State: `idle`
+- Current Status: `accepted`
+- Last Completed Deliverable: `13b-persona-snapshot-synthesis-and-provenance`
 - Next Detailed Target: `13c-persona-aware-offline-dialog-and-proactive-behavior`
 - Next Queued Target: `13d-online-reflection-and-runtime-sync`
 - Current Gate State:
-  - `Spec Gate`: `passed` (`2026-03-07`)
-  - `Build Gate`: `not_started`
-  - `Acceptance Gate`: `not_started`
+  - `Spec Gate`: `n/a`
+  - `Build Gate`: `n/a`
+  - `Acceptance Gate`: `n/a`
 
 ## Post-v1 Family Rough-In
 Locked family order:
@@ -63,7 +63,7 @@ Planning state:
 - `12d-openclaw-plugin-and-skill-virtual-pet-lane` is accepted and closed (`Spec/Build/Acceptance Gates passed`; Acceptance on `2026-03-06`).
 - `12e-guided-openclaw-connectivity-and-pairing` is accepted and closed (`Spec/Build/Acceptance Gates passed`; Acceptance on `2026-03-06`).
 - `13a-offline-identity-and-recent-recall` is accepted and closed (`Spec/Build/Acceptance Gates passed`; Acceptance on `2026-03-07`).
-- `13b-persona-snapshot-synthesis-and-provenance` is active in `specifying` (`Spec Gate` passed on `2026-03-07`; Build/Acceptance pending).
+- `13b-persona-snapshot-synthesis-and-provenance` is accepted and closed (`Spec/Build/Acceptance Gates passed`; Acceptance on `2026-03-07`).
 - Families `13` through `15` now follow the cohesive `12c`-`15c` sequence in rough-in, with family-14 control/animation policy decisions locked.
 - Full family notes live in [`11-15-post-v1-roadmap-rough-in.md`](./11-15-post-v1-roadmap-rough-in.md).
 
@@ -76,14 +76,83 @@ Planning state:
 6. Pass `Spec Gate` before implementation begins.
 
 ## Next 3 Actions
-1. Implement the first `13b` runtime slice (persona snapshot synthesis helper + bounded status detail visibility) now that `Spec Gate` is passed.
-2. Wire bounded `vp-persona-export-v1` bridge context export into online dialog requests with deterministic degraded reasons.
-3. Add deterministic coverage (`check-persona-snapshot` + `D13b-persona-snapshot-provenance`) and run `npm run check:syntax`, `npm run check:contracts`, and `npm run check:acceptance` for `Build Gate`.
+1. Start `13c-persona-aware-offline-dialog-and-proactive-behavior` in `specifying` from the deliverable template.
+2. Lock `13c` showcase promise, operator demo script, and failure/recovery script before implementation.
+3. Pass `13c` Spec Gate and update tracker/AGENTS pointers to the active deliverable.
 
 ## Blockers
 - None currently.
 
 ## Last Session Summary
+- Closed `13b-persona-snapshot-synthesis-and-provenance` as `accepted` after operator-confirmed runtime behavior:
+  - happy-path evidence confirmed:
+    - `Persona Snapshot: ready`
+    - bounded persona export metadata/provenance visible after online dialog
+  - failure/recovery evidence confirmed:
+    - setting `Canonical Files Root` invalid degraded persona snapshot and memory runtime detail
+    - restoring `Canonical Files Root` returned snapshot to `ready`
+  - gate outcome:
+    - `Spec Gate` passed on `2026-03-07`
+    - `Build Gate` passed on `2026-03-07`
+    - `Acceptance Gate` passed on `2026-03-07` (operator-accepted closure)
+  - workflow moved to `idle` with `Current Deliverable: none`
+  - shipped outcome note: no additional runtime code changes in this closure step; session focused on operator acceptance evidence and documentation/gate closure for already-shipped `13b` behavior.
+- Iterated active `13b` observability semantics from operator feedback:
+  - renamed settings field label to:
+    - `Canonical Files Root` (`paths.localWorkspaceRoot`)
+  - `Memory Runtime` row now reports `degraded` whenever persona snapshot is degraded, with explicit reason:
+    - `persona_snapshot_<degraded_reason>`
+  - deterministic coverage updated:
+    - `scripts/check-shell-observability.js` now asserts memory-row degradation from degraded persona snapshot
+    - `scripts/check-shell-settings-editor.js` now asserts `Canonical Files Root` label
+  - verification run:
+    - `npm run check:contracts`
+    - `npm run check:acceptance` -> `24/24 automated checks passed`
+  - shipped outcome note: visible app/runtime change delivered (status semantics now align with operator expectation when persona snapshot is degraded).
+- Iterated active `13b` from operator acceptance feedback to remove env-only friction:
+  - added bounded `Advanced Settings` controls:
+    - `memory.enabled` (`Memory Runtime`)
+    - `paths.localWorkspaceRoot` (`Canonical Files Root`)
+  - settings snapshot/env-override visibility now includes:
+    - `PET_MEMORY_ENABLED`
+    - `PET_LOCAL_WORKSPACE_ROOT`
+  - applying relevant settings now refreshes memory runtime in-process (no restart required) for:
+    - `memory.*`
+    - `openclaw.enabled`
+    - `paths.localWorkspaceRoot`
+    - `paths.openClawWorkspaceRoot`
+    - `paths.obsidianVaultRoot`
+  - deterministic coverage updated:
+    - `scripts/check-shell-settings-editor.js` now validates memory/local-root bounded settings behavior
+  - verification run:
+    - `npm run check:contracts`
+    - `npm run check:acceptance` -> `24/24 automated checks passed`
+  - operator evidence captured in-session:
+    - happy-path `Memory Runtime` detail showed:
+      - `Persona Snapshot: ready`
+      - `Last Persona Export Mode: online dialog`
+      - bounded exported facts/provenance
+  - shipped outcome note: visible app/runtime change delivered (operator can now run `13b` memory toggle and local-workspace failure/recovery directly from GUI Settings).
+- Implemented the first `13b-persona-snapshot-synthesis-and-provenance` runtime slice and passed `Build Gate`:
+  - added deterministic persona synthesis/export module:
+    - `persona-snapshot.js`
+    - `vp-persona-snapshot-v1` synthesis + bounded `vp-persona-export-v1` payload
+  - wired main runtime integration:
+    - `dialog_user_message` bridge context now includes bounded `personaExport`
+    - memory snapshot now carries `lastPersonaSnapshot` + `lastPersonaExport` metadata
+  - extended bridge context normalization and gateway dialog composition in `openclaw-bridge.js`
+  - extended `Status` -> `Memory Runtime` detail provenance in `shell-observability.js` for persona snapshot/export fields
+  - added deterministic coverage:
+    - `scripts/check-persona-snapshot.js` (new)
+    - acceptance row `D13b-persona-snapshot-provenance` (new)
+    - extended `scripts/check-dialog-openclaw-parity.js`
+    - extended `scripts/check-shell-observability.js`
+    - updated package check scripts for `persona-snapshot`
+  - verification run:
+    - `npm run check:syntax`
+    - `npm run check:contracts`
+    - `npm run check:acceptance` -> `24/24 automated checks passed`
+  - shipped outcome note: visible app/runtime change delivered (persona snapshot synthesis/provenance and bounded online export context are now live in runtime/status surfaces).
 - Started `13b-persona-snapshot-synthesis-and-provenance` as the active deliverable and passed `Spec Gate`:
   - created [`13b-persona-snapshot-synthesis-and-provenance.md`](./13b-persona-snapshot-synthesis-and-provenance.md) from the post-v1 template
   - set workflow to `specifying`

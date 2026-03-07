@@ -388,6 +388,69 @@ function normalizeOfflineRecall(value) {
   };
 }
 
+function normalizePersonaSnapshot(value) {
+  if (!value || typeof value !== "object") return null;
+  const schemaVersion = toOptionalString(value.schemaVersion, null);
+  if (!schemaVersion) return null;
+  const derivedFrom = Array.isArray(value.derivedFrom)
+    ? value.derivedFrom
+        .map((entry) => toOptionalString(entry, ""))
+        .filter(Boolean)
+        .slice(0, 8)
+    : [];
+  const fieldKeys = Array.isArray(value.fieldKeys)
+    ? value.fieldKeys
+        .map((entry) => toOptionalString(entry, ""))
+        .filter(Boolean)
+        .slice(0, 12)
+    : [];
+  return {
+    builtAt: Number.isFinite(Number(value.builtAt)) ? Math.max(0, Math.round(Number(value.builtAt))) : 0,
+    schemaVersion,
+    state: toOptionalString(value.state, "degraded"),
+    degradedReason: toOptionalString(value.degradedReason, "parse_incomplete"),
+    derivedFrom,
+    fieldCount: Number.isFinite(Number(value.fieldCount))
+      ? Math.max(0, Math.round(Number(value.fieldCount)))
+      : fieldKeys.length,
+    fieldKeys,
+  };
+}
+
+function normalizePersonaExport(value) {
+  if (!value || typeof value !== "object") return null;
+  const schemaVersion = toOptionalString(value.schemaVersion, null);
+  if (!schemaVersion) return null;
+  const facts = Array.isArray(value.facts)
+    ? value.facts
+        .filter((entry) => entry && typeof entry === "object")
+        .map((entry) => ({
+          key: toOptionalString(entry.key, ""),
+          value: toOptionalString(entry.value, ""),
+          provenanceTag: toOptionalString(entry.provenanceTag, "unknown"),
+        }))
+        .filter((entry) => entry.key && entry.value)
+        .slice(0, 12)
+    : [];
+  return {
+    ts: Number.isFinite(Number(value.ts)) ? Math.max(0, Math.round(Number(value.ts))) : 0,
+    mode: toOptionalString(value.mode, "online_dialog"),
+    schemaVersion,
+    snapshotVersion: toOptionalString(value.snapshotVersion, "vp-persona-snapshot-v1"),
+    state: toOptionalString(value.state, "degraded"),
+    degradedReason: toOptionalString(value.degradedReason, "parse_incomplete"),
+    summary: toOptionalString(value.summary, ""),
+    fieldCount: Number.isFinite(Number(value.fieldCount))
+      ? Math.max(0, Math.round(Number(value.fieldCount)))
+      : facts.length,
+    facts,
+    byteSize: Number.isFinite(Number(value.byteSize)) ? Math.max(0, Math.round(Number(value.byteSize))) : 0,
+    highlightCount: Number.isFinite(Number(value.highlightCount))
+      ? Math.max(0, Math.round(Number(value.highlightCount)))
+      : 0,
+  };
+}
+
 function buildMemoryRow({ settingsSummary, memorySnapshot }) {
   const requestedAdapterMode =
     toOptionalString(memorySnapshot?.requestedAdapterMode, null) ||
@@ -397,6 +460,13 @@ function buildMemoryRow({ settingsSummary, memorySnapshot }) {
     toOptionalString(memorySnapshot?.activeAdapterMode, null) ||
     (settingsSummary?.memory?.enabled === false ? "disabled" : requestedAdapterMode);
   const fallbackReason = toOptionalString(memorySnapshot?.fallbackReason, "none") || "none";
+  const lastOfflineRecall = normalizeOfflineRecall(memorySnapshot?.lastOfflineRecall);
+  const lastPersonaSnapshot = normalizePersonaSnapshot(memorySnapshot?.lastPersonaSnapshot);
+  const lastPersonaExport = normalizePersonaExport(memorySnapshot?.lastPersonaExport);
+  const personaSnapshotDegraded =
+    lastPersonaSnapshot && toOptionalString(lastPersonaSnapshot.state, "degraded") !== "ready";
+  const personaSnapshotReason =
+    toOptionalString(lastPersonaSnapshot?.degradedReason, "parse_incomplete") || "parse_incomplete";
   if (activeAdapterMode === "disabled") {
     return {
       state: OBSERVABILITY_ROW_STATES.disabled,
@@ -405,7 +475,9 @@ function buildMemoryRow({ settingsSummary, memorySnapshot }) {
       activeAdapterMode,
       fallbackReason,
       writeLegacyJsonl: Boolean(settingsSummary?.memory?.writeLegacyJsonl),
-      lastOfflineRecall: normalizeOfflineRecall(memorySnapshot?.lastOfflineRecall),
+      lastOfflineRecall,
+      lastPersonaSnapshot,
+      lastPersonaExport,
     };
   }
   if (fallbackReason !== "none" || activeAdapterMode !== requestedAdapterMode) {
@@ -416,7 +488,22 @@ function buildMemoryRow({ settingsSummary, memorySnapshot }) {
       activeAdapterMode,
       fallbackReason,
       writeLegacyJsonl: Boolean(settingsSummary?.memory?.writeLegacyJsonl),
-      lastOfflineRecall: normalizeOfflineRecall(memorySnapshot?.lastOfflineRecall),
+      lastOfflineRecall,
+      lastPersonaSnapshot,
+      lastPersonaExport,
+    };
+  }
+  if (personaSnapshotDegraded) {
+    return {
+      state: OBSERVABILITY_ROW_STATES.degraded,
+      reason: `persona_snapshot_${personaSnapshotReason === "none" ? "degraded" : personaSnapshotReason}`,
+      requestedAdapterMode,
+      activeAdapterMode,
+      fallbackReason,
+      writeLegacyJsonl: Boolean(settingsSummary?.memory?.writeLegacyJsonl),
+      lastOfflineRecall,
+      lastPersonaSnapshot,
+      lastPersonaExport,
     };
   }
   return {
@@ -426,7 +513,9 @@ function buildMemoryRow({ settingsSummary, memorySnapshot }) {
     activeAdapterMode,
     fallbackReason,
     writeLegacyJsonl: Boolean(settingsSummary?.memory?.writeLegacyJsonl),
-    lastOfflineRecall: normalizeOfflineRecall(memorySnapshot?.lastOfflineRecall),
+    lastOfflineRecall,
+    lastPersonaSnapshot,
+    lastPersonaExport,
   };
 }
 
@@ -970,6 +1059,14 @@ function buildRowDetail({
       row?.lastOfflineRecall && typeof row.lastOfflineRecall === "object"
         ? row.lastOfflineRecall
         : null;
+    const lastPersonaSnapshot =
+      row?.lastPersonaSnapshot && typeof row.lastPersonaSnapshot === "object"
+        ? row.lastPersonaSnapshot
+        : null;
+    const lastPersonaExport =
+      row?.lastPersonaExport && typeof row.lastPersonaExport === "object"
+        ? row.lastPersonaExport
+        : null;
     provenance.push(
       {
         label: "Requested Adapter",
@@ -1015,6 +1112,93 @@ function buildRowDetail({
         suggestedSteps.push(
           "Restore local identity/memory inputs, then ask the recall question again and refresh status."
         );
+      }
+    }
+    if (lastPersonaSnapshot) {
+      provenance.push(
+        {
+          label: "Persona Snapshot",
+          kind: "runtime",
+          value: toSentence(lastPersonaSnapshot.state, "degraded"),
+        },
+        {
+          label: "Snapshot Version",
+          kind: "runtime",
+          value: toSentence(lastPersonaSnapshot.schemaVersion, "unknown"),
+        },
+        {
+          label: "Snapshot Fields",
+          kind: "runtime",
+          value: String(
+            Number.isFinite(Number(lastPersonaSnapshot.fieldCount))
+              ? lastPersonaSnapshot.fieldCount
+              : 0
+          ),
+        },
+        {
+          label: "Snapshot Derived From",
+          kind: "runtime",
+          value:
+            Array.isArray(lastPersonaSnapshot.derivedFrom) &&
+            lastPersonaSnapshot.derivedFrom.length > 0
+              ? lastPersonaSnapshot.derivedFrom.join(", ")
+              : "none",
+        },
+        {
+          label: "Snapshot Reason",
+          kind: "runtime",
+          value: normalizeReasonLabel(lastPersonaSnapshot.degradedReason),
+        }
+      );
+      if (lastPersonaSnapshot.state !== "ready") {
+        suggestedSteps.length = 0;
+        suggestedSteps.push(
+          "Restore local canonical files, press Refresh Status, then send one chat message to regenerate persona export metadata."
+        );
+      }
+    }
+    if (lastPersonaExport) {
+      provenance.push(
+        {
+          label: "Last Persona Export Mode",
+          kind: "runtime",
+          value: toSentence(lastPersonaExport.mode, "none"),
+        },
+        {
+          label: "Last Persona Export Fields",
+          kind: "runtime",
+          value: String(
+            Number.isFinite(Number(lastPersonaExport.fieldCount))
+              ? lastPersonaExport.fieldCount
+              : 0
+          ),
+        },
+        {
+          label: "Last Persona Export Reason",
+          kind: "runtime",
+          value: normalizeReasonLabel(lastPersonaExport.degradedReason),
+        }
+      );
+      if (
+        Array.isArray(lastPersonaExport.facts) &&
+        lastPersonaExport.facts.length > 0
+      ) {
+        const factSummary = lastPersonaExport.facts
+          .map((entry) => `${entry.key} (${entry.provenanceTag})`)
+          .slice(0, 6)
+          .join(", ");
+        provenance.push({
+          label: "Last Persona Export Facts",
+          kind: "runtime",
+          value: factSummary || "none",
+        });
+      }
+      if (Number.isFinite(Number(lastPersonaExport.ts)) && Number(lastPersonaExport.ts) > 0) {
+        provenance.push({
+          label: "Last Persona Export At",
+          kind: "runtime",
+          value: String(Math.round(Number(lastPersonaExport.ts))),
+        });
       }
     }
   } else if (rowId === OBSERVABILITY_SUBJECT_IDS.paths) {

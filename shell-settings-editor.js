@@ -11,6 +11,22 @@ const {
 
 const SHELL_SETTINGS_FIELDS = Object.freeze([
   Object.freeze({
+    key: "memory.enabled",
+    label: "Memory Runtime",
+    description: "Turn memory runtime writes and recall helpers on or off.",
+    kind: "boolean",
+    defaultValue: true,
+  }),
+  Object.freeze({
+    key: "paths.localWorkspaceRoot",
+    label: "Canonical Files Root",
+    description: "Folder used for canonical files and Setup writes.",
+    kind: "text",
+    allowEmpty: false,
+    maxLength: 512,
+    defaultValue: ".",
+  }),
+  Object.freeze({
     key: "openclaw.enabled",
     label: "OpenClaw Service",
     description: "Turn OpenClaw bridge usage on or off.",
@@ -135,6 +151,8 @@ const SHELL_SETTINGS_FIELDS = Object.freeze([
 
 const SHELL_SETTINGS_FIELD_MAP = new Map(SHELL_SETTINGS_FIELDS.map((field) => [field.key, field]));
 const FIELD_ENV_OVERRIDE_KEYS = Object.freeze({
+  "memory.enabled": "PET_MEMORY_ENABLED",
+  "paths.localWorkspaceRoot": "PET_LOCAL_WORKSPACE_ROOT",
   "openclaw.enabled": "PET_OPENCLAW_ENABLED",
   "openclaw.transport": "PET_OPENCLAW_TRANSPORT",
   "openclaw.baseUrl": "PET_OPENCLAW_BASE_URL",

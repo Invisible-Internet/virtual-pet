@@ -127,33 +127,63 @@ Historical v1 deliverables keep their original status wording and are not retrof
 - `accepted` is the only terminal state for future post-v1 deliverables.
 
 ### Current Workflow Snapshot
-- Current Deliverable: `13b-persona-snapshot-synthesis-and-provenance`
-- Workflow State: `specifying`
-- Current Status: `specifying`
-- Last Completed Deliverable: `13a-offline-identity-and-recent-recall`
+- Current Deliverable: `none`
+- Workflow State: `idle`
+- Current Status: `accepted`
+- Last Completed Deliverable: `13b-persona-snapshot-synthesis-and-provenance`
 - Next Detailed Target: `13c-persona-aware-offline-dialog-and-proactive-behavior`
 - Next Queued Target: `13d-online-reflection-and-runtime-sync`
 - Current Gate State:
-  - `Spec Gate`: `passed` (`2026-03-07`)
-  - `Build Gate`: `not_started`
-  - `Acceptance Gate`: `not_started`
+  - `Spec Gate`: `n/a`
+  - `Build Gate`: `n/a`
+  - `Acceptance Gate`: `n/a`
 - Current Session Shipped Outcome:
-  - `no visible app change` (session focused on creating/specifying `13b` and passing `Spec Gate` before implementation)
+  - `no visible app change` (session focused on operator acceptance evidence capture and documentation/gate closure for already-shipped `13b` runtime behavior)
 - Historical Note:
   - D01-D10 are complete historical v1 records.
   - Detailed v1 session history lives in `docs/plan/archive/00-progress-tracker-v1-history.md`.
-- Active `13b` specification outcome:
-  - Created `docs/plan/13b-persona-snapshot-synthesis-and-provenance.md` from template.
-  - Locked showcase promise, operator demo script, failure/recovery script, quick operator test card, and acceptance evidence checklist.
-  - Locked first-slice contracts for:
-    - `vp-persona-snapshot-v1`
-    - bounded `vp-persona-export-v1`
-    - deterministic degraded reasons and payload bounds
+- Closed `13b` implementation outcome:
+  - Created `docs/plan/13b-persona-snapshot-synthesis-and-provenance.md` from template and passed `Spec Gate`.
+  - Implemented first runtime slice:
+    - `persona-snapshot.js` (`vp-persona-snapshot-v1` + bounded `vp-persona-export-v1`)
+    - `main.js` bridge-context export wiring + memory snapshot persona metadata
+    - `openclaw-bridge.js` persona export normalization + bounded gateway dialog context block
+    - `shell-observability.js` memory-detail provenance for persona snapshot/export fields
+  - Deterministic coverage added/extended:
+    - `scripts/check-persona-snapshot.js`
+    - acceptance row `D13b-persona-snapshot-provenance`
+    - `scripts/check-dialog-openclaw-parity.js`
+    - `scripts/check-shell-observability.js`
+  - Verification run passed:
+    - `npm run check:syntax`
+    - `npm run check:contracts`
+    - `npm run check:acceptance` -> `24/24`
+  - Iteration slice from operator acceptance feedback:
+    - added bounded Advanced Settings controls for:
+      - `memory.enabled` (`Memory Runtime`)
+      - `paths.localWorkspaceRoot` (`Canonical Files Root`)
+    - settings env-override visibility now includes:
+      - `PET_MEMORY_ENABLED`
+      - `PET_LOCAL_WORKSPACE_ROOT`
+    - applying relevant settings now refreshes memory runtime in-process (no restart required) for:
+      - `memory.*`
+      - `openclaw.enabled`
+      - `paths.localWorkspaceRoot`
+      - `paths.openClawWorkspaceRoot`
+      - `paths.obsidianVaultRoot`
+    - extended deterministic settings coverage:
+      - `scripts/check-shell-settings-editor.js`
+    - observability semantics alignment:
+      - `Memory Runtime` row now reports `degraded` when persona snapshot is degraded (`persona_snapshot_<degraded_reason>`)
+      - `scripts/check-shell-observability.js` now asserts the degraded coupling path
+    - verification rerun remained green:
+      - `npm run check:contracts`
+      - `npm run check:acceptance` -> `24/24`
   - Gate outcome:
     - `Spec Gate` passed on `2026-03-07`
-    - `Build Gate` not started
-    - `Acceptance Gate` not started
-  - Shipped outcome: `no visible app change` (spec-only session to satisfy post-v1 Spec Gate rule before implementation).
+    - `Build Gate` passed on `2026-03-07`
+    - `Acceptance Gate` passed on `2026-03-07` (operator-accepted closure)
+  - Shipped outcome: visible app/runtime change delivered and accepted; persona snapshot synthesis/provenance and bounded online export context are now closed with deterministic degraded/recovery evidence.
 - Closed `13a` implementation outcome:
   - Created `docs/plan/13a-offline-identity-and-recent-recall.md` from template.
   - Locked showcase promise, operator demo script, failure/recovery script, quick operator test card, and acceptance evidence checklist.
@@ -393,7 +423,7 @@ Historical v1 deliverables keep their original status wording and are not retrof
   - `12d-openclaw-plugin-and-skill-virtual-pet-lane` is accepted and closed (`Spec/Build/Acceptance Gates passed`; Acceptance on `2026-03-06`).
   - `12e-guided-openclaw-connectivity-and-pairing` is accepted and closed (`Spec/Build/Acceptance Gates passed`; Acceptance on `2026-03-06`).
   - `13a-offline-identity-and-recent-recall` is accepted and closed (`Spec/Build/Acceptance Gates passed`; Acceptance on `2026-03-07`).
-  - `13b-persona-snapshot-synthesis-and-provenance` is active in `specifying` (`Spec Gate` passed on `2026-03-07`; Build/Acceptance pending).
+  - `13b-persona-snapshot-synthesis-and-provenance` is accepted and closed (`Spec/Build/Acceptance Gates passed`; Acceptance on `2026-03-07`).
   - Families `13` through `15` now use the cohesive `12c` through `15c` sequence in rough-in.
   - Family `14` decisions are locked for downstream slices:
     - `Utility scoring -> FSM arbitration -> per-state micro BT`

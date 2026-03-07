@@ -140,6 +140,13 @@ const CASES = Object.freeze([
     script: "scripts/check-offline-recall.js",
   },
   {
+    id: "D13b-persona-snapshot-provenance",
+    deliverable: "13b-persona-snapshot-synthesis-and-provenance",
+    scenario:
+      "Derived persona snapshot/export contracts stay bounded and deterministic with explicit degraded reasons and provenance tags.",
+    script: "scripts/check-persona-snapshot.js",
+  },
+  {
     id: "Layout-assets",
     deliverable: "core-renderer-assets",
     scenario: "Layout bounds and required sprite assets remain internally consistent.",

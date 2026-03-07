@@ -24,6 +24,10 @@ const DEFAULT_TEXT_LIMIT = 240;
 const DEFAULT_SUMMARY_LIMIT = 180;
 const DEFAULT_DIALOG_CONTEXT_TEXT_LIMIT = 140;
 const DEFAULT_DIALOG_CONTEXT_TURNS_LIMIT = 6;
+const DEFAULT_PERSONA_SUMMARY_LIMIT = 220;
+const DEFAULT_PERSONA_FACTS_LIMIT = 12;
+const DEFAULT_PERSONA_STYLE_HINTS_LIMIT = 6;
+const DEFAULT_PERSONA_HIGHLIGHTS_LIMIT = 3;
 const DEFAULT_HTTP_TIMEOUT_MS = 1200;
 const DEFAULT_GATEWAY_SESSION_KEY = "main";
 const GATEWAY_PROTOCOL_VERSION = 3;
@@ -73,6 +77,63 @@ function normalizeBridgeTransport(value, fallback = BRIDGE_TRANSPORTS.stub) {
   return fallback;
 }
 
+function normalizePersonaExportContext(value) {
+  const raw = value && typeof value === "object" ? value : null;
+  if (!raw) return null;
+  const state = normalizeText(raw.state, 16).toLowerCase();
+  const normalizedState = state === "ready" ? "ready" : "degraded";
+  const facts = Array.isArray(raw.facts)
+    ? raw.facts
+        .slice(0, DEFAULT_PERSONA_FACTS_LIMIT)
+        .map((entry) => {
+          const key = normalizeText(entry?.key, 48).toLowerCase();
+          const factValue = normalizeText(entry?.value, 140);
+          const provenanceTag = normalizeText(entry?.provenanceTag, 96);
+          if (!key || !factValue) return null;
+          return {
+            key,
+            value: factValue,
+            provenanceTag: provenanceTag || "unknown",
+          };
+        })
+        .filter(Boolean)
+    : [];
+  const styleHints = Array.isArray(raw.styleHints)
+    ? raw.styleHints
+        .slice(0, DEFAULT_PERSONA_STYLE_HINTS_LIMIT)
+        .map((entry) => normalizeText(entry, 64))
+        .filter(Boolean)
+    : [];
+  const recentHighlights = Array.isArray(raw.recentHighlights)
+    ? raw.recentHighlights
+        .slice(0, DEFAULT_PERSONA_HIGHLIGHTS_LIMIT)
+        .map((entry) => normalizeText(entry, 140))
+        .filter(Boolean)
+    : [];
+  const normalized = {
+    kind: "personaExport",
+    schemaVersion: normalizeText(raw.schemaVersion, 64) || "vp-persona-export-v1",
+    snapshotVersion: normalizeText(raw.snapshotVersion, 64) || "vp-persona-snapshot-v1",
+    ts: asPositiveInteger(raw.ts, Date.now(), 0),
+    mode: normalizeText(raw.mode, 32) || "online_dialog",
+    state: normalizedState,
+    degradedReason: normalizeText(raw.degradedReason, 64) || "none",
+    summary: normalizeText(raw.summary, DEFAULT_PERSONA_SUMMARY_LIMIT),
+    facts,
+    styleHints,
+    recentHighlights,
+  };
+  if (
+    !normalized.summary &&
+    normalized.facts.length <= 0 &&
+    normalized.styleHints.length <= 0 &&
+    normalized.recentHighlights.length <= 0
+  ) {
+    return null;
+  }
+  return normalized;
+}
+
 function normalizeContext(context) {
   const raw = context && typeof context === "object" ? context : {};
   const rawTurns = Array.isArray(raw.recentDialogTurns) ? raw.recentDialogTurns : [];
@@ -97,6 +158,7 @@ function normalizeContext(context) {
     extensionContextSummary: normalizeText(raw.extensionContextSummary, DEFAULT_SUMMARY_LIMIT),
     recentDialogSummary: normalizeText(raw.recentDialogSummary, DEFAULT_SUMMARY_LIMIT),
     recentDialogTurns,
+    personaExport: normalizePersonaExportContext(raw.personaExport),
     source: normalizeText(raw.source || "offline", 16) || "offline",
   };
 }
@@ -676,9 +738,53 @@ class OpenClawBridge {
   _buildGatewayDialogMessage(request) {
     const prompt = normalizeText(request?.promptText, DEFAULT_TEXT_LIMIT) || "Hello.";
     if (request?.route !== "dialog_user_message") return prompt;
+    const segments = [prompt];
     const summary = normalizeText(request?.context?.recentDialogSummary, DEFAULT_SUMMARY_LIMIT);
-    if (!summary) return prompt;
-    return `${prompt}\n\nRecent context: ${summary}`;
+    if (summary) {
+      segments.push(`Recent context: ${summary}`);
+    }
+    const personaBlock = this._buildGatewayPersonaContextBlock(request?.context?.personaExport);
+    if (personaBlock) {
+      segments.push(personaBlock);
+    }
+    return segments.join("\n\n");
+  }
+
+  _buildGatewayPersonaContextBlock(personaExport) {
+    const persona = personaExport && typeof personaExport === "object" ? personaExport : null;
+    if (!persona) return "";
+
+    const summary = normalizeText(persona.summary, DEFAULT_PERSONA_SUMMARY_LIMIT);
+    const facts = Array.isArray(persona.facts)
+      ? persona.facts
+          .slice(0, 4)
+          .map((entry) => {
+            const key = normalizeText(entry?.key, 48).toLowerCase();
+            const factValue = normalizeText(entry?.value, 80);
+            if (!key || !factValue) return null;
+            return `${key}=${factValue}`;
+          })
+          .filter(Boolean)
+      : [];
+    const styleHints = Array.isArray(persona.styleHints)
+      ? persona.styleHints
+          .slice(0, 4)
+          .map((entry) => normalizeText(entry, 48))
+          .filter(Boolean)
+      : [];
+    const highlights = Array.isArray(persona.recentHighlights)
+      ? persona.recentHighlights
+          .slice(0, 2)
+          .map((entry) => normalizeText(entry, 80))
+          .filter(Boolean)
+      : [];
+
+    const segments = [];
+    if (summary) segments.push(`Persona: ${summary}`);
+    if (facts.length > 0) segments.push(`Facts: ${facts.join("; ")}`);
+    if (styleHints.length > 0) segments.push(`Style hints: ${styleHints.join(", ")}`);
+    if (highlights.length > 0) segments.push(`Recent highlights: ${highlights.join(" | ")}`);
+    return segments.join("\n");
   }
 
   _summarizeGatewayStatusPayload(payload, fallbackState = "Idle") {

@@ -33,6 +33,14 @@ async function testRecentDialogContextBoundaries() {
       source: `source-${index}-${"y".repeat(40)}`,
     });
   }
+  const oversizedFacts = [];
+  for (let index = 0; index < 20; index += 1) {
+    oversizedFacts.push({
+      key: `fact_${index}`,
+      value: `value-${index}-${"q".repeat(120)}`,
+      provenanceTag: `IDENTITY.md:Field${index}`,
+    });
+  }
 
   const outcome = await requestWithTimeout(
     bridge.sendDialog({
@@ -44,6 +52,30 @@ async function testRecentDialogContextBoundaries() {
         source: "online",
         recentDialogSummary: "z".repeat(1200),
         recentDialogTurns: longTurns,
+        personaExport: {
+          schemaVersion: "vp-persona-export-v1",
+          snapshotVersion: "vp-persona-snapshot-v1",
+          mode: "online_dialog",
+          state: "ready",
+          degradedReason: "none",
+          summary: `persona-${"r".repeat(500)}`,
+          facts: oversizedFacts,
+          styleHints: [
+            "gentle",
+            "curious",
+            "warm",
+            "calm",
+            "precise",
+            "playful",
+            "extra",
+          ],
+          recentHighlights: [
+            "h1",
+            "h2",
+            "h3",
+            "h4",
+          ],
+        },
       },
     }),
     1200
@@ -60,6 +92,19 @@ async function testRecentDialogContextBoundaries() {
   assert(
     outcome.request.context.recentDialogSummary.length <= 180,
     "recentDialogSummary should be bounded"
+  );
+  const personaExport = outcome.request.context.personaExport;
+  assert(personaExport && typeof personaExport === "object", "personaExport should be normalized");
+  assertEqual(personaExport.facts.length, 12, "personaExport facts should be bounded");
+  assertEqual(personaExport.styleHints.length, 6, "personaExport styleHints should be bounded");
+  assertEqual(
+    personaExport.recentHighlights.length,
+    3,
+    "personaExport recentHighlights should be bounded"
+  );
+  assert(
+    personaExport.summary.length <= 220,
+    "personaExport summary should be bounded"
   );
 }
 
