@@ -33,16 +33,16 @@ Historical v1 deliverables keep their original wording and remain archived histo
   - operator-visible demo passes and evidence is logged
 
 ## Current Deliverable
-- Current Deliverable: `none`
-- Workflow State: `idle`
-- Current Status: `accepted`
+- Current Deliverable: `13b-persona-snapshot-synthesis-and-provenance`
+- Workflow State: `specifying`
+- Current Status: `specifying`
 - Last Completed Deliverable: `13a-offline-identity-and-recent-recall`
-- Next Detailed Target: `13b-persona-snapshot-synthesis-and-provenance`
-- Next Queued Target: `13c-persona-aware-offline-dialog-and-proactive-behavior`
+- Next Detailed Target: `13c-persona-aware-offline-dialog-and-proactive-behavior`
+- Next Queued Target: `13d-online-reflection-and-runtime-sync`
 - Current Gate State:
-  - `Spec Gate`: `n/a`
-  - `Build Gate`: `n/a`
-  - `Acceptance Gate`: `n/a`
+  - `Spec Gate`: `passed` (`2026-03-07`)
+  - `Build Gate`: `not_started`
+  - `Acceptance Gate`: `not_started`
 
 ## Post-v1 Family Rough-In
 Locked family order:
@@ -63,6 +63,7 @@ Planning state:
 - `12d-openclaw-plugin-and-skill-virtual-pet-lane` is accepted and closed (`Spec/Build/Acceptance Gates passed`; Acceptance on `2026-03-06`).
 - `12e-guided-openclaw-connectivity-and-pairing` is accepted and closed (`Spec/Build/Acceptance Gates passed`; Acceptance on `2026-03-06`).
 - `13a-offline-identity-and-recent-recall` is accepted and closed (`Spec/Build/Acceptance Gates passed`; Acceptance on `2026-03-07`).
+- `13b-persona-snapshot-synthesis-and-provenance` is active in `specifying` (`Spec Gate` passed on `2026-03-07`; Build/Acceptance pending).
 - Families `13` through `15` now follow the cohesive `12c`-`15c` sequence in rough-in, with family-14 control/animation policy decisions locked.
 - Full family notes live in [`11-15-post-v1-roadmap-rough-in.md`](./11-15-post-v1-roadmap-rough-in.md).
 
@@ -75,14 +76,26 @@ Planning state:
 6. Pass `Spec Gate` before implementation begins.
 
 ## Next 3 Actions
-1. Start `13b-persona-snapshot-synthesis-and-provenance` in `specifying` from the deliverable template.
-2. Lock `13b` showcase promise, operator demo script, and failure/recovery script around bounded persona snapshot export + provenance.
-3. Pass `13b` `Spec Gate` before any implementation work.
+1. Implement the first `13b` runtime slice (persona snapshot synthesis helper + bounded status detail visibility) now that `Spec Gate` is passed.
+2. Wire bounded `vp-persona-export-v1` bridge context export into online dialog requests with deterministic degraded reasons.
+3. Add deterministic coverage (`check-persona-snapshot` + `D13b-persona-snapshot-provenance`) and run `npm run check:syntax`, `npm run check:contracts`, and `npm run check:acceptance` for `Build Gate`.
 
 ## Blockers
 - None currently.
 
 ## Last Session Summary
+- Started `13b-persona-snapshot-synthesis-and-provenance` as the active deliverable and passed `Spec Gate`:
+  - created [`13b-persona-snapshot-synthesis-and-provenance.md`](./13b-persona-snapshot-synthesis-and-provenance.md) from the post-v1 template
+  - set workflow to `specifying`
+  - locked showcase promise, operator demo script, failure/recovery script, quick operator test card, acceptance evidence checklist, and first-slice contracts for:
+    - `vp-persona-snapshot-v1` synthesis/provenance
+    - bounded `vp-persona-export-v1` online bridge context export
+    - deterministic degraded-reason taxonomy and payload bounds
+  - gate outcome:
+    - `Spec Gate` passed on `2026-03-07`
+    - `Build Gate` not started
+    - `Acceptance Gate` not started
+  - shipped outcome note: `no visible app change` (spec-only session to satisfy the post-v1 Spec Gate rule before implementation).
 - Closed `13a-offline-identity-and-recent-recall` as `accepted` after operator-run demo + failure/recovery evidence:
   - happy-path offline recall passed for name, birthday, and bounded recent highlights
   - `Status` -> `Memory Runtime` detail confirmed recall provenance fields (`Last Recall Type/Reason/Tags/At`)

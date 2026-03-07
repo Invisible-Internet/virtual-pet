@@ -127,21 +127,33 @@ Historical v1 deliverables keep their original status wording and are not retrof
 - `accepted` is the only terminal state for future post-v1 deliverables.
 
 ### Current Workflow Snapshot
-- Current Deliverable: `none`
-- Workflow State: `idle`
-- Current Status: `accepted`
+- Current Deliverable: `13b-persona-snapshot-synthesis-and-provenance`
+- Workflow State: `specifying`
+- Current Status: `specifying`
 - Last Completed Deliverable: `13a-offline-identity-and-recent-recall`
-- Next Detailed Target: `13b-persona-snapshot-synthesis-and-provenance`
-- Next Queued Target: `13c-persona-aware-offline-dialog-and-proactive-behavior`
+- Next Detailed Target: `13c-persona-aware-offline-dialog-and-proactive-behavior`
+- Next Queued Target: `13d-online-reflection-and-runtime-sync`
 - Current Gate State:
-  - `Spec Gate`: `n/a`
-  - `Build Gate`: `n/a`
-  - `Acceptance Gate`: `n/a`
+  - `Spec Gate`: `passed` (`2026-03-07`)
+  - `Build Gate`: `not_started`
+  - `Acceptance Gate`: `not_started`
 - Current Session Shipped Outcome:
-  - `no visible app change` (session focused on operator acceptance evidence capture and documentation/gate closure for already-shipped `13a` runtime behavior)
+  - `no visible app change` (session focused on creating/specifying `13b` and passing `Spec Gate` before implementation)
 - Historical Note:
   - D01-D10 are complete historical v1 records.
   - Detailed v1 session history lives in `docs/plan/archive/00-progress-tracker-v1-history.md`.
+- Active `13b` specification outcome:
+  - Created `docs/plan/13b-persona-snapshot-synthesis-and-provenance.md` from template.
+  - Locked showcase promise, operator demo script, failure/recovery script, quick operator test card, and acceptance evidence checklist.
+  - Locked first-slice contracts for:
+    - `vp-persona-snapshot-v1`
+    - bounded `vp-persona-export-v1`
+    - deterministic degraded reasons and payload bounds
+  - Gate outcome:
+    - `Spec Gate` passed on `2026-03-07`
+    - `Build Gate` not started
+    - `Acceptance Gate` not started
+  - Shipped outcome: `no visible app change` (spec-only session to satisfy post-v1 Spec Gate rule before implementation).
 - Closed `13a` implementation outcome:
   - Created `docs/plan/13a-offline-identity-and-recent-recall.md` from template.
   - Locked showcase promise, operator demo script, failure/recovery script, quick operator test card, and acceptance evidence checklist.
@@ -381,6 +393,7 @@ Historical v1 deliverables keep their original status wording and are not retrof
   - `12d-openclaw-plugin-and-skill-virtual-pet-lane` is accepted and closed (`Spec/Build/Acceptance Gates passed`; Acceptance on `2026-03-06`).
   - `12e-guided-openclaw-connectivity-and-pairing` is accepted and closed (`Spec/Build/Acceptance Gates passed`; Acceptance on `2026-03-06`).
   - `13a-offline-identity-and-recent-recall` is accepted and closed (`Spec/Build/Acceptance Gates passed`; Acceptance on `2026-03-07`).
+  - `13b-persona-snapshot-synthesis-and-provenance` is active in `specifying` (`Spec Gate` passed on `2026-03-07`; Build/Acceptance pending).
   - Families `13` through `15` now use the cohesive `12c` through `15c` sequence in rough-in.
   - Family `14` decisions are locked for downstream slices:
     - `Utility scoring -> FSM arbitration -> per-state micro BT`
