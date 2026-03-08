@@ -1,8 +1,8 @@
 # D08 Acceptance Smoke Report
 
-- Generated: 2026-03-07T03:19:45.589Z
+- Generated: 2026-03-08T03:55:27.803Z
 - Runner: Codex automated smoke
-- Summary: 24/24 automated checks passed
+- Summary: 25/25 automated checks passed
 
 | ID | Deliverable | Status | Command | Evidence |
 | --- | --- | --- | --- | --- |
@@ -28,6 +28,9 @@
 | D12e-guided-openclaw-pairing | 12e-guided-openclaw-connectivity-and-pairing | passed | `node scripts/check-openclaw-pairing-guidance.js` | `[openclaw-pairing-guidance] checks passed` |
 | D13a-offline-identity-recall | 13a-offline-identity-and-recent-recall | passed | `node scripts/check-offline-recall.js` | `[offline-recall] checks passed` |
 | D13b-persona-snapshot-provenance | 13b-persona-snapshot-synthesis-and-provenance | passed | `node scripts/check-persona-snapshot.js` | `[persona-snapshot] checks passed` |
+| D13c-persona-aware-offline-proactive | 13c-persona-aware-offline-dialog-and-proactive-behavior | passed | `node scripts/check-persona-offline-proactive.js` | `[offline-persona-style] checks passed
+[proactive-policy] checks passed
+[persona-offline-proactive] checks passed` |
 | Layout-assets | core-renderer-assets | passed | `node scripts/check-layout.js` | `layout checks passed` |
 | Sprite-assets | core-renderer-assets | passed | `node scripts/check-assets.js` | `[assets] girl: manifest OK (7 states)
 [assets] checks passed` |

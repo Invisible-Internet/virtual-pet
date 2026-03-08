@@ -50,6 +50,16 @@ function testTrayAndDialogWiring() {
     "conversationHoldActive",
     "main shell snapshot should include conversation hold state"
   );
+  assertContains(
+    mainSource,
+    "proactiveBackoffTier",
+    "main shell snapshot should include proactive backoff tier"
+  );
+  assertContains(
+    mainSource,
+    "proactiveNextEligibleAtMs",
+    "main shell snapshot should include proactive next eligible timestamp"
+  );
 
   assertContains(
     preloadSource,

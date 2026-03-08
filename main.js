@@ -33,7 +33,23 @@ const {
   createDefaultDialogTemplateCatalog,
   loadDialogTemplateCatalog,
 } = require("./dialog-runtime");
+const {
+  buildPersonaAwareOfflineFallbackResponse,
+  buildPersonaAwareProactivePrompt,
+} = require("./offline-persona-style");
 const { buildOfflineRecallResult } = require("./offline-recall");
+const {
+  PROACTIVE_SUPPRESSED_RETRY_MS,
+  applyIgnoredBackoffIfNeeded,
+  buildProactivePolicySnapshot,
+  createInitialProactivePolicyState,
+  evaluateProactiveSuppression,
+  getProactiveCooldownMsForTier,
+  getCooldownRemainingMs,
+  recordProactiveAnnouncement,
+  recordProactiveSuppression,
+  recordProactiveUserEngagement,
+} = require("./proactive-policy");
 const {
   buildPersonaSnapshot: buildRuntimePersonaSnapshot,
   buildPersonaExport: buildRuntimePersonaExport,
@@ -237,10 +253,8 @@ const CAPABILITY_CONTRACT_VERSION = "1.0";
 const DIALOG_HISTORY_LIMIT = 24;
 const DIALOG_TALK_FEEDBACK_MODE = "bubble_pulse";
 const PROACTIVE_CONVERSATION_REASON = "proactive_conversation";
-const PROACTIVE_CONVERSATION_COOLDOWN_MS = 90000;
 const PROACTIVE_CONVERSATION_START_DELAY_MS = 20000;
 const PROACTIVE_CONVERSATION_CHECK_INTERVAL_MS = 2000;
-const PROACTIVE_CONVERSATION_SUPPRESSED_RETRY_MS = 6000;
 const BRIDGE_RECENT_DIALOG_TURNS_LIMIT = 6;
 const BRIDGE_RECENT_DIALOG_TEXT_LIMIT = 140;
 const BRIDGE_RECENT_DIALOG_SUMMARY_LIMIT = 360;
@@ -322,8 +336,11 @@ let openclawPairingGuidance = createOpenClawPairingGuidance();
 let memoryPipeline = null;
 let latestMemorySnapshot = null;
 let latestOfflineRecallSnapshot = null;
+let latestOfflinePersonaReplySnapshot = null;
 let latestPersonaSnapshot = null;
+let latestPersonaSnapshotRuntime = null;
 let latestPersonaExportSnapshot = null;
+let latestProactivePolicySnapshot = null;
 let latestIntegrationEvent = null;
 let stateRuntime = null;
 let latestStateSnapshot = null;
@@ -358,13 +375,8 @@ const dialogPresence = {
   updatedAtMs: 0,
 };
 let dialogUserMessageInFlightCount = 0;
-const proactiveConversationState = {
-  nextCheckAtMs: 0,
-  lastCheckedAtMs: 0,
-  lastAnnouncementAtMs: 0,
-  lastSuppressedReason: "none",
-  lastSuppressedAtMs: 0,
-};
+const proactiveConversationState = createInitialProactivePolicyState();
+latestProactivePolicySnapshot = buildProactivePolicySnapshot(proactiveConversationState, Date.now());
 
 const flingState = {
   active: false,
@@ -2065,7 +2077,11 @@ function buildShellStateSnapshot() {
   const quickProps = settings.inventory?.quickProps || [];
   const trayAvailable = Boolean(shellTray);
   const nowMs = Date.now();
+  latestProactivePolicySnapshot = normalizeProactivePolicySnapshot(
+    buildProactivePolicySnapshot(proactiveConversationState, nowMs)
+  );
   const proactiveCooldownRemainingMs = getProactiveCooldownRemainingMs(nowMs);
+  const proactiveSuppressionReason = getProactiveSuppressionReason({ nowMs });
   return {
     kind: "shellState",
     ts: nowMs,
@@ -2094,14 +2110,26 @@ function buildShellStateSnapshot() {
       conversationHoldActive: isConversationHoldActive(),
       inputActive: isDialogInputActive(),
       proactiveCooldownRemainingMs,
-      proactiveEligible: !getProactiveSuppressionReason() && proactiveCooldownRemainingMs <= 0,
+      proactiveEligible: !proactiveSuppressionReason && proactiveCooldownRemainingMs <= 0,
       proactiveSuppressionReason:
-        getProactiveSuppressionReason() ||
+        proactiveSuppressionReason ||
         (proactiveConversationState.lastSuppressedReason === "none"
           ? ""
           : proactiveConversationState.lastSuppressedReason),
       proactiveLastSuppressedAtMs: proactiveConversationState.lastSuppressedAtMs || 0,
       proactiveNextCheckAtMs: proactiveConversationState.nextCheckAtMs || 0,
+      proactiveBackoffTier: proactiveConversationState.backoffTier || 0,
+      proactiveLastReason:
+        typeof proactiveConversationState.lastAttemptReason === "string"
+          ? proactiveConversationState.lastAttemptReason
+          : "none",
+      proactiveNextEligibleAtMs: proactiveConversationState.nextEligibleAtMs || nowMs,
+      proactiveRepeatGuardWindowMs:
+        latestProactivePolicySnapshot?.repeatGuardWindowMs || 0,
+      proactiveLastOpenerHash:
+        typeof proactiveConversationState.lastOpenerHash === "string"
+          ? proactiveConversationState.lastOpenerHash
+          : "none",
     },
     inventoryUi: {
       open: Boolean(inventoryWin && !inventoryWin.isDestroyed()),
@@ -3157,28 +3185,66 @@ function isDialogInputActive() {
 }
 
 function getProactiveCooldownRemainingMs(nowMs = Date.now()) {
-  const elapsedMs = Math.max(0, nowMs - proactiveConversationState.lastAnnouncementAtMs);
-  if (elapsedMs >= PROACTIVE_CONVERSATION_COOLDOWN_MS) return 0;
-  return PROACTIVE_CONVERSATION_COOLDOWN_MS - elapsedMs;
+  return getCooldownRemainingMs(proactiveConversationState, nowMs);
 }
 
-function getProactiveSuppressionReason() {
-  if (isDialogSurfaceOpen()) return "suppressed_dialog_open";
-  if (isDialogInputActive()) return "suppressed_input_active";
-  if (!isAmbientStateId(latestStateSnapshot?.currentState || "Idle")) {
-    return "suppressed_state_ineligible";
-  }
-  return "";
+function isProactiveQuietHoursActive() {
+  return false;
 }
 
-function buildProactiveConversationText() {
-  if (isMusicStateId(latestStateSnapshot?.currentState)) {
-    return "Want to talk about what is playing right now?";
+function getProactiveSuppressionReason({
+  nowMs = Date.now(),
+  candidateOpenerHash = "",
+} = {}) {
+  const evaluation = evaluateProactiveSuppression({
+    state: proactiveConversationState,
+    nowMs,
+    dialogOpen: isDialogSurfaceOpen(),
+    inputActive: isDialogInputActive(),
+    stateEligible: isAmbientStateId(latestStateSnapshot?.currentState || "Idle"),
+    quietHoursActive: isProactiveQuietHoursActive(),
+    candidateOpenerHash,
+  });
+  return evaluation.suppressed ? evaluation.reason : "";
+}
+
+function getCurrentPersonaSnapshotForOffline() {
+  if (latestPersonaSnapshotRuntime && typeof latestPersonaSnapshotRuntime === "object") {
+    return latestPersonaSnapshotRuntime;
   }
+  const personaContext = refreshPersonaSnapshotCache({
+    recordExportMode: null,
+  });
+  return personaContext?.personaSnapshot || null;
+}
+
+function buildProactiveConversationPrompt(nowMs = Date.now()) {
+  const personaSnapshot = getCurrentPersonaSnapshotForOffline();
+  const currentState = latestStateSnapshot?.currentState || "Idle";
+  let stateDescription = "I am keeping to local routines.";
   if (latestStateSnapshot?.currentState === "Reading") {
-    return "I can chat about what I am reading if you want.";
+    stateDescription =
+      stateRuntime?.describeReading?.()?.text ||
+      "I am in reading mode with local context.";
+  } else if (isMusicStateId(currentState)) {
+    stateDescription = "I can chat about what is playing right now.";
+  } else {
+    stateDescription = stateRuntime?.describeActivity?.()?.text || "I am keeping to local routines.";
   }
-  return "Want to chat for a minute?";
+  return buildPersonaAwareProactivePrompt({
+    ts: nowMs,
+    reason: PROACTIVE_CONVERSATION_REASON,
+    backoffTier: proactiveConversationState.backoffTier || 0,
+    lastOpenerHash:
+      typeof proactiveConversationState.lastOpenerHash === "string"
+        ? proactiveConversationState.lastOpenerHash
+        : "none",
+    personaSnapshot,
+    currentState,
+    phase: latestStateSnapshot?.phase || null,
+    stateDescription,
+    stateContextSummary: summarizeDialogStateContext(),
+  });
 }
 
 function pickAmbientRestStateId() {
@@ -4361,6 +4427,15 @@ function syncShellRoamingState(reason = "shell_roam_sync", force = false) {
 }
 
 function updateProactiveConversationStateFromResult(result, nowMs = Date.now()) {
+  let promptOpenerHash = "none";
+  if (result && typeof result === "object" && result._proactivePrompt) {
+    promptOpenerHash =
+      typeof result._proactivePrompt.openerHash === "string" &&
+      result._proactivePrompt.openerHash.trim().length > 0
+        ? result._proactivePrompt.openerHash.trim()
+        : "none";
+  }
+
   proactiveConversationState.lastCheckedAtMs = nowMs;
   const suggestion = Array.isArray(result?.suggestions)
     ? result.suggestions.find(
@@ -4369,15 +4444,21 @@ function updateProactiveConversationStateFromResult(result, nowMs = Date.now()) 
     : null;
 
   if (!suggestion) {
-    proactiveConversationState.nextCheckAtMs = nowMs + PROACTIVE_CONVERSATION_SUPPRESSED_RETRY_MS;
+    recordProactiveSuppression(proactiveConversationState, {
+      reason: "suppressed_router_no_suggestion",
+      nowMs,
+      cooldownRemainingMs: 0,
+    });
+    refreshProactivePolicySnapshot(nowMs);
     return;
   }
 
   if (suggestion.type === "PET_ANNOUNCEMENT") {
-    proactiveConversationState.lastAnnouncementAtMs = nowMs;
-    proactiveConversationState.lastSuppressedReason = "none";
-    proactiveConversationState.lastSuppressedAtMs = 0;
-    proactiveConversationState.nextCheckAtMs = nowMs + PROACTIVE_CONVERSATION_COOLDOWN_MS;
+    recordProactiveAnnouncement(proactiveConversationState, {
+      nowMs,
+      openerHash: promptOpenerHash,
+    });
+    refreshProactivePolicySnapshot(nowMs);
     return;
   }
 
@@ -4385,18 +4466,27 @@ function updateProactiveConversationStateFromResult(result, nowMs = Date.now()) 
     typeof suggestion.skipReason === "string" && suggestion.skipReason.trim().length > 0
       ? suggestion.skipReason.trim()
       : "unknown";
-  proactiveConversationState.lastSuppressedReason = skipReason;
-  proactiveConversationState.lastSuppressedAtMs = nowMs;
-  if (skipReason === "suppressed_cooldown") {
-    const remainingMs = Number.isFinite(Number(suggestion.cooldownRemainingMs))
-      ? Math.max(0, Math.round(Number(suggestion.cooldownRemainingMs)))
-      : getProactiveCooldownRemainingMs(nowMs);
-    proactiveConversationState.nextCheckAtMs =
-      nowMs + Math.max(PROACTIVE_CONVERSATION_SUPPRESSED_RETRY_MS, remainingMs);
-    return;
-  }
+  const remainingMs = Number.isFinite(Number(suggestion.cooldownRemainingMs))
+    ? Math.max(0, Math.round(Number(suggestion.cooldownRemainingMs)))
+    : getProactiveCooldownRemainingMs(nowMs);
+  recordProactiveSuppression(proactiveConversationState, {
+    reason: skipReason,
+    nowMs,
+    cooldownRemainingMs: remainingMs,
+  });
+  refreshProactivePolicySnapshot(nowMs);
+}
 
-  proactiveConversationState.nextCheckAtMs = nowMs + PROACTIVE_CONVERSATION_SUPPRESSED_RETRY_MS;
+function recordProactiveEngagement(reason = "user_input", nowMs = Date.now()) {
+  recordProactiveUserEngagement(proactiveConversationState, nowMs);
+  proactiveConversationState.lastAttemptReason = reason;
+  proactiveConversationState.lastSuppressedReason = "none";
+  proactiveConversationState.lastSuppressedAtMs = 0;
+  proactiveConversationState.nextCheckAtMs = Math.min(
+    proactiveConversationState.nextCheckAtMs || nowMs,
+    nowMs + 1200
+  );
+  refreshProactivePolicySnapshot(nowMs);
 }
 
 function setDialogSurfaceOpen(open, reason = "renderer") {
@@ -4420,6 +4510,8 @@ function setDialogSurfaceOpen(open, reason = "renderer") {
     );
   }
 
+  refreshProactivePolicySnapshot(nowMs);
+
   if (DIAGNOSTICS_ENABLED) {
     logDiagnostics("dialog-surface-open", {
       open: nextOpen,
@@ -4432,20 +4524,32 @@ function setDialogSurfaceOpen(open, reason = "renderer") {
 async function runProactiveConversationCheck(trigger = "interval") {
   const nowMs = Date.now();
   if (!contractRouter || nowMs < proactiveConversationState.nextCheckAtMs) return null;
+  applyIgnoredBackoffIfNeeded(proactiveConversationState, nowMs);
+  const proactivePrompt = buildProactiveConversationPrompt(nowMs);
+  const suppression = evaluateProactiveSuppression({
+    state: proactiveConversationState,
+    nowMs,
+    dialogOpen: isDialogSurfaceOpen(),
+    inputActive: isDialogInputActive(),
+    stateEligible: isAmbientStateId(latestStateSnapshot?.currentState || "Idle"),
+    quietHoursActive: isProactiveQuietHoursActive(),
+    candidateOpenerHash: proactivePrompt.openerHash,
+  });
+  const dynamicCooldownMs = getProactiveCooldownMsForTier(proactiveConversationState.backoffTier || 0);
   const context = {
     source: deriveContractSource(),
     statusText: buildStatusText(),
-    announcementSuppressedReason: getProactiveSuppressionReason(),
+    announcementSuppressedReason: suppression.suppressed ? suppression.reason : "",
     announcementCooldownSkipReason: "suppressed_cooldown",
     announcementCooldownMsByReason: {
-      [PROACTIVE_CONVERSATION_REASON]: PROACTIVE_CONVERSATION_COOLDOWN_MS,
+      [PROACTIVE_CONVERSATION_REASON]: dynamicCooldownMs,
     },
   };
   const result = await processPetContractEvent(
     "PROACTIVE_CHECK",
     {
       reason: PROACTIVE_CONVERSATION_REASON,
-      text: buildProactiveConversationText(),
+      text: proactivePrompt.text,
       priority: "low",
       channel: "dialog",
     },
@@ -4455,6 +4559,9 @@ async function runProactiveConversationCheck(trigger = "interval") {
       ...context,
     }
   );
+  if (result && typeof result === "object") {
+    result._proactivePrompt = proactivePrompt;
+  }
   updateProactiveConversationStateFromResult(result, nowMs);
   emitShellState(buildShellStateSnapshot());
   return result;
@@ -4466,11 +4573,10 @@ function startProactiveConversationController() {
     proactiveConversationTimer = null;
   }
   const nowMs = Date.now();
+  const nextState = createInitialProactivePolicyState(nowMs);
+  Object.assign(proactiveConversationState, nextState);
   proactiveConversationState.nextCheckAtMs = nowMs + PROACTIVE_CONVERSATION_START_DELAY_MS;
-  proactiveConversationState.lastCheckedAtMs = 0;
-  proactiveConversationState.lastAnnouncementAtMs = 0;
-  proactiveConversationState.lastSuppressedReason = "none";
-  proactiveConversationState.lastSuppressedAtMs = 0;
+  refreshProactivePolicySnapshot(nowMs);
   proactiveConversationTimer = setInterval(() => {
     void runProactiveConversationCheck("interval").catch((error) => {
       console.warn(`[pet-contract] proactive-check error: ${error?.message || String(error)}`);
@@ -5084,6 +5190,12 @@ function emitMemorySnapshot(snapshot) {
   if (latestPersonaExportSnapshot && typeof latestPersonaExportSnapshot === "object") {
     mergedSnapshot.lastPersonaExport = latestPersonaExportSnapshot;
   }
+  if (latestOfflinePersonaReplySnapshot && typeof latestOfflinePersonaReplySnapshot === "object") {
+    mergedSnapshot.lastOfflinePersonaReply = latestOfflinePersonaReplySnapshot;
+  }
+  if (latestProactivePolicySnapshot && typeof latestProactivePolicySnapshot === "object") {
+    mergedSnapshot.lastProactivePolicy = latestProactivePolicySnapshot;
+  }
   latestMemorySnapshot = mergedSnapshot;
   emitToRenderer("pet:memory", {
     kind: "memorySnapshot",
@@ -5124,6 +5236,114 @@ function normalizePersonaSnapshotSummary(snapshot) {
     fieldCount: fieldKeys.length,
     fieldKeys,
   };
+}
+
+function normalizeOfflinePersonaReplySnapshot(reply) {
+  if (!reply || typeof reply !== "object") return null;
+  const intent =
+    typeof reply.intent === "string" && reply.intent.trim().length > 0
+      ? reply.intent.trim()
+      : null;
+  if (!intent) return null;
+  const styleProfile =
+    reply.styleProfile && typeof reply.styleProfile === "object" ? reply.styleProfile : {};
+  return {
+    ts: Number.isFinite(Number(reply.ts)) ? Math.max(0, Math.round(Number(reply.ts))) : Date.now(),
+    intent,
+    personaState:
+      typeof reply.personaState === "string" && reply.personaState.trim().length > 0
+        ? reply.personaState.trim()
+        : "degraded",
+    personaReason:
+      typeof reply.personaReason === "string" && reply.personaReason.trim().length > 0
+        ? reply.personaReason.trim()
+        : "parse_incomplete",
+    personaMode:
+      typeof reply.personaMode === "string" && reply.personaMode.trim().length > 0
+        ? reply.personaMode.trim()
+        : "neutral_fallback",
+    selectionHash:
+      typeof reply.selectionHash === "string" && reply.selectionHash.trim().length > 0
+        ? reply.selectionHash.trim()
+        : "none",
+    styleProfile: {
+      warmth:
+        typeof styleProfile.warmth === "string" && styleProfile.warmth.trim().length > 0
+          ? styleProfile.warmth.trim()
+          : "medium",
+      playfulness:
+        typeof styleProfile.playfulness === "string" && styleProfile.playfulness.trim().length > 0
+          ? styleProfile.playfulness.trim()
+          : "low",
+      curiosity:
+        typeof styleProfile.curiosity === "string" && styleProfile.curiosity.trim().length > 0
+          ? styleProfile.curiosity.trim()
+          : "medium",
+      openerStyle:
+        typeof styleProfile.openerStyle === "string" && styleProfile.openerStyle.trim().length > 0
+          ? styleProfile.openerStyle.trim()
+          : "direct",
+      closerStyle:
+        typeof styleProfile.closerStyle === "string" && styleProfile.closerStyle.trim().length > 0
+          ? styleProfile.closerStyle.trim()
+          : "none",
+      emojiPolicy:
+        typeof styleProfile.emojiPolicy === "string" && styleProfile.emojiPolicy.trim().length > 0
+          ? styleProfile.emojiPolicy.trim()
+          : "none",
+    },
+  };
+}
+
+function normalizeProactivePolicySnapshot(policy) {
+  if (!policy || typeof policy !== "object") return null;
+  return {
+    ts: Number.isFinite(Number(policy.ts)) ? Math.max(0, Math.round(Number(policy.ts))) : Date.now(),
+    proactiveState:
+      typeof policy.proactiveState === "string" && policy.proactiveState.trim().length > 0
+        ? policy.proactiveState.trim()
+        : "eligible",
+    lastAttemptReason:
+      typeof policy.lastAttemptReason === "string" && policy.lastAttemptReason.trim().length > 0
+        ? policy.lastAttemptReason.trim()
+        : "none",
+    suppressionReason:
+      typeof policy.suppressionReason === "string" && policy.suppressionReason.trim().length > 0
+        ? policy.suppressionReason.trim()
+        : "none",
+    backoffTier: Number.isFinite(Number(policy.backoffTier))
+      ? Math.max(0, Math.round(Number(policy.backoffTier)))
+      : 0,
+    cooldownMs: Number.isFinite(Number(policy.cooldownMs))
+      ? Math.max(0, Math.round(Number(policy.cooldownMs)))
+      : getProactiveCooldownMsForTier(0),
+    cooldownRemainingMs: Number.isFinite(Number(policy.cooldownRemainingMs))
+      ? Math.max(0, Math.round(Number(policy.cooldownRemainingMs)))
+      : 0,
+    nextEligibleAt: Number.isFinite(Number(policy.nextEligibleAt))
+      ? Math.max(0, Math.round(Number(policy.nextEligibleAt)))
+      : 0,
+    repeatGuardWindowMs: Number.isFinite(Number(policy.repeatGuardWindowMs))
+      ? Math.max(0, Math.round(Number(policy.repeatGuardWindowMs)))
+      : 0,
+    recentUserInputAtMs: Number.isFinite(Number(policy.recentUserInputAtMs))
+      ? Math.max(0, Math.round(Number(policy.recentUserInputAtMs)))
+      : 0,
+    lastOpenerHash:
+      typeof policy.lastOpenerHash === "string" && policy.lastOpenerHash.trim().length > 0
+        ? policy.lastOpenerHash.trim()
+        : "none",
+    awaitingUserEngagement: Boolean(policy.awaitingUserEngagement),
+  };
+}
+
+function refreshProactivePolicySnapshot(nowMs = Date.now()) {
+  latestProactivePolicySnapshot = normalizeProactivePolicySnapshot(
+    buildProactivePolicySnapshot(proactiveConversationState, nowMs)
+  );
+  if (latestMemorySnapshot && typeof latestMemorySnapshot === "object") {
+    emitMemorySnapshot(latestMemorySnapshot);
+  }
 }
 
 function normalizePersonaExportSummary(personaExport) {
@@ -5229,6 +5449,7 @@ function refreshPersonaSnapshotCache({ recordExportMode = null } = {}) {
     memoryAvailable: inputs.memoryAvailable,
     ts: nowTs,
   });
+  latestPersonaSnapshotRuntime = personaSnapshot;
   latestPersonaSnapshot = normalizePersonaSnapshotSummary(personaSnapshot);
 
   let personaExport = null;
@@ -5289,6 +5510,15 @@ function recordOfflineRecallSnapshot(recallResult) {
   const normalized = normalizeOfflineRecallSnapshot(recallResult);
   if (!normalized) return;
   latestOfflineRecallSnapshot = normalized;
+  if (latestMemorySnapshot && typeof latestMemorySnapshot === "object") {
+    emitMemorySnapshot(latestMemorySnapshot);
+  }
+}
+
+function recordOfflinePersonaReplySnapshot(reply) {
+  const normalized = normalizeOfflinePersonaReplySnapshot(reply);
+  if (!normalized) return;
+  latestOfflinePersonaReplySnapshot = normalized;
   if (latestMemorySnapshot && typeof latestMemorySnapshot === "object") {
     emitMemorySnapshot(latestMemorySnapshot);
   }
@@ -5486,6 +5716,35 @@ function extractUserInputText(payload) {
     return rawPayload.type.trim();
   }
   return "";
+}
+
+function normalizeDialogPromptForVariation(text) {
+  if (typeof text !== "string") return "";
+  return text
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .replace(/[?!.,]+$/g, "");
+}
+
+function buildOfflineDialogVariationKey(promptText) {
+  const normalizedPrompt = normalizeDialogPromptForVariation(promptText);
+  if (!normalizedPrompt) return "repeat:0|petTurns:0";
+  let promptRepeatCount = 0;
+  let petTurnCount = 0;
+  for (const entry of dialogHistory) {
+    if (!entry || typeof entry !== "object") continue;
+    if (entry.role === "pet") {
+      petTurnCount += 1;
+      continue;
+    }
+    if (entry.role !== "user") continue;
+    const entryPrompt = normalizeDialogPromptForVariation(entry.text);
+    if (entryPrompt === normalizedPrompt) {
+      promptRepeatCount += 1;
+    }
+  }
+  return `repeat:${promptRepeatCount}|petTurns:${petTurnCount}`;
 }
 
 function deriveContractSource() {
@@ -5763,10 +6022,6 @@ function buildOfflineDialogFallback(promptText, fallbackMode) {
     return recallResult;
   }
 
-  if (isOfflineQuestionNoMatchPrompt(promptText)) {
-    return buildOfflineQuestionNoMatchResponse(promptText, fallbackMode);
-  }
-
   const triggerReason = classifyOfflineDialogTrigger(promptText);
   const preferReading =
     triggerReason === "reading" || latestStateSnapshot?.currentState === "Reading";
@@ -5778,6 +6033,29 @@ function buildOfflineDialogFallback(promptText, fallbackMode) {
     (preferReading
       ? buildBridgeFallbackText("state_description", "what-are-you-reading")
       : buildBridgeFallbackText("state_description", "what-are-you-doing"));
+  const personaSnapshot = getCurrentPersonaSnapshotForOffline();
+  const personaFallback = buildPersonaAwareOfflineFallbackResponse({
+    promptText,
+    ts: Date.now(),
+    personaSnapshot,
+    variationKey: buildOfflineDialogVariationKey(promptText),
+    currentState: latestStateSnapshot?.currentState || "Idle",
+    phase: latestStateSnapshot?.phase || null,
+    stateDescription: fallbackText,
+    stateContextSummary: summarizeDialogStateContext(),
+    recentMediaSummary: buildRecentMediaSummary(),
+    recentHobbySummary: buildRecentHobbySummary(),
+  });
+  recordOfflinePersonaReplySnapshot(personaFallback);
+  if (personaFallback && typeof personaFallback === "object") {
+    return {
+      ...personaFallback,
+      fallbackMode:
+        typeof personaFallback.fallbackMode === "string" && personaFallback.fallbackMode.length > 0
+          ? personaFallback.fallbackMode
+          : fallbackMode,
+    };
+  }
   return buildOfflineDialogResponse({
     templates: dialogTemplateCatalog,
     text: promptText,
@@ -5875,6 +6153,22 @@ function recordDialogSuggestion(suggestion) {
           .filter((entry) => entry.length > 0)
           .slice(0, 6)
       : [],
+    personaIntent:
+      typeof suggestion.personaIntent === "string" && suggestion.personaIntent.trim().length > 0
+        ? suggestion.personaIntent.trim()
+        : null,
+    personaState:
+      typeof suggestion.personaState === "string" && suggestion.personaState.trim().length > 0
+        ? suggestion.personaState.trim()
+        : null,
+    personaReason:
+      typeof suggestion.personaReason === "string" && suggestion.personaReason.trim().length > 0
+        ? suggestion.personaReason.trim()
+        : null,
+    personaMode:
+      typeof suggestion.personaMode === "string" && suggestion.personaMode.trim().length > 0
+        ? suggestion.personaMode.trim()
+        : null,
     talkFeedbackMode: DIALOG_TALK_FEEDBACK_MODE,
     stateContextSummary: summarizeDialogStateContext(),
     currentState: latestStateSnapshot?.currentState || "Idle",
@@ -6206,11 +6500,36 @@ async function buildUserInputContext(eventType, payload, correlationId) {
               : [],
           }
         : null;
+    const personaContext =
+      offlineResult?.kind === "offlinePersonaReply"
+        ? {
+            intent:
+              typeof offlineResult.intent === "string" && offlineResult.intent.trim().length > 0
+                ? offlineResult.intent.trim()
+                : "unknown",
+            personaState:
+              typeof offlineResult.personaState === "string" &&
+              offlineResult.personaState.trim().length > 0
+                ? offlineResult.personaState.trim()
+                : "degraded",
+            personaReason:
+              typeof offlineResult.personaReason === "string" &&
+              offlineResult.personaReason.trim().length > 0
+                ? offlineResult.personaReason.trim()
+                : "parse_incomplete",
+            personaMode:
+              typeof offlineResult.personaMode === "string" &&
+              offlineResult.personaMode.trim().length > 0
+                ? offlineResult.personaMode.trim()
+                : "neutral_fallback",
+          }
+        : null;
     return {
       source: offlineResult.source,
       bridgeDialogText: offlineResult.text,
       bridgeFallbackMode: offlineResult.fallbackMode,
       bridgeDialogRecall: recallContext,
+      bridgeDialogPersona: personaContext,
     };
   }
 
@@ -6449,6 +6768,9 @@ async function processPetContractEvent(eventType, payload = {}, context = {}) {
     typeof context?.correlationId === "string" && context.correlationId.length > 0
       ? context.correlationId
       : createContractCorrelationId();
+  if (eventType === "USER_COMMAND" || eventType === "USER_MESSAGE") {
+    recordProactiveEngagement(eventType === "USER_MESSAGE" ? "user_message" : "user_command", Date.now());
+  }
   const bridgeContext =
     eventType === "USER_COMMAND" || eventType === "USER_MESSAGE"
       ? await buildUserInputContext(eventType, payload, correlationId)

@@ -882,9 +882,22 @@ function reportDialogSurfaceOpen(open, reason = "renderer") {
   window.petAPI.setDialogSurfaceOpen(Boolean(open), reason);
 }
 
+function clearStalePetBubbleOnDialogOpen() {
+  if (!activeBubbleMessage || activeBubbleMessage.role !== "pet") return false;
+  stopDialogTyping();
+  activeBubbleMessage = null;
+  dialogBubbleTextMessageId = "";
+  dialogBubbleTextVisible = "";
+  talkFeedbackUntilMs = 0;
+  return true;
+}
+
 function openDialogSurface(options = {}) {
   const wasOpen = dialogSurfaceOpen;
   dialogSurfaceOpen = true;
+  if (!wasOpen) {
+    clearStalePetBubbleOnDialogOpen();
+  }
   syncDialogSurfaceState();
   if (!wasOpen) {
     reportDialogSurfaceOpen(true, options?.reason || "renderer_open");

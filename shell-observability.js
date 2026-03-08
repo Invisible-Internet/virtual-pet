@@ -388,6 +388,56 @@ function normalizeOfflineRecall(value) {
   };
 }
 
+function normalizeOfflinePersonaReply(value) {
+  if (!value || typeof value !== "object") return null;
+  const intent = toOptionalString(value.intent, null);
+  if (!intent) return null;
+  const styleProfile = value.styleProfile && typeof value.styleProfile === "object" ? value.styleProfile : {};
+  return {
+    ts: Number.isFinite(Number(value.ts)) ? Math.max(0, Math.round(Number(value.ts))) : 0,
+    intent,
+    personaState: toOptionalString(value.personaState, "degraded"),
+    personaReason: toOptionalString(value.personaReason, "parse_incomplete"),
+    personaMode: toOptionalString(value.personaMode, "neutral_fallback"),
+    selectionHash: toOptionalString(value.selectionHash, "none"),
+    styleProfile: {
+      warmth: toOptionalString(styleProfile.warmth, "medium"),
+      playfulness: toOptionalString(styleProfile.playfulness, "low"),
+      curiosity: toOptionalString(styleProfile.curiosity, "medium"),
+      openerStyle: toOptionalString(styleProfile.openerStyle, "direct"),
+      closerStyle: toOptionalString(styleProfile.closerStyle, "none"),
+      emojiPolicy: toOptionalString(styleProfile.emojiPolicy, "none"),
+    },
+  };
+}
+
+function normalizeProactivePolicy(value) {
+  if (!value || typeof value !== "object") return null;
+  return {
+    ts: Number.isFinite(Number(value.ts)) ? Math.max(0, Math.round(Number(value.ts))) : 0,
+    proactiveState: toOptionalString(value.proactiveState, "eligible"),
+    lastAttemptReason: toOptionalString(value.lastAttemptReason, "none"),
+    suppressionReason: toOptionalString(value.suppressionReason, "none"),
+    backoffTier: Number.isFinite(Number(value.backoffTier))
+      ? Math.max(0, Math.round(Number(value.backoffTier)))
+      : 0,
+    cooldownMs: Number.isFinite(Number(value.cooldownMs))
+      ? Math.max(0, Math.round(Number(value.cooldownMs)))
+      : 0,
+    cooldownRemainingMs: Number.isFinite(Number(value.cooldownRemainingMs))
+      ? Math.max(0, Math.round(Number(value.cooldownRemainingMs)))
+      : 0,
+    nextEligibleAt: Number.isFinite(Number(value.nextEligibleAt))
+      ? Math.max(0, Math.round(Number(value.nextEligibleAt)))
+      : 0,
+    repeatGuardWindowMs: Number.isFinite(Number(value.repeatGuardWindowMs))
+      ? Math.max(0, Math.round(Number(value.repeatGuardWindowMs)))
+      : 0,
+    lastOpenerHash: toOptionalString(value.lastOpenerHash, "none"),
+    awaitingUserEngagement: Boolean(value.awaitingUserEngagement),
+  };
+}
+
 function normalizePersonaSnapshot(value) {
   if (!value || typeof value !== "object") return null;
   const schemaVersion = toOptionalString(value.schemaVersion, null);
@@ -461,8 +511,10 @@ function buildMemoryRow({ settingsSummary, memorySnapshot }) {
     (settingsSummary?.memory?.enabled === false ? "disabled" : requestedAdapterMode);
   const fallbackReason = toOptionalString(memorySnapshot?.fallbackReason, "none") || "none";
   const lastOfflineRecall = normalizeOfflineRecall(memorySnapshot?.lastOfflineRecall);
+  const lastOfflinePersonaReply = normalizeOfflinePersonaReply(memorySnapshot?.lastOfflinePersonaReply);
   const lastPersonaSnapshot = normalizePersonaSnapshot(memorySnapshot?.lastPersonaSnapshot);
   const lastPersonaExport = normalizePersonaExport(memorySnapshot?.lastPersonaExport);
+  const lastProactivePolicy = normalizeProactivePolicy(memorySnapshot?.lastProactivePolicy);
   const personaSnapshotDegraded =
     lastPersonaSnapshot && toOptionalString(lastPersonaSnapshot.state, "degraded") !== "ready";
   const personaSnapshotReason =
@@ -476,8 +528,10 @@ function buildMemoryRow({ settingsSummary, memorySnapshot }) {
       fallbackReason,
       writeLegacyJsonl: Boolean(settingsSummary?.memory?.writeLegacyJsonl),
       lastOfflineRecall,
+      lastOfflinePersonaReply,
       lastPersonaSnapshot,
       lastPersonaExport,
+      lastProactivePolicy,
     };
   }
   if (fallbackReason !== "none" || activeAdapterMode !== requestedAdapterMode) {
@@ -489,8 +543,10 @@ function buildMemoryRow({ settingsSummary, memorySnapshot }) {
       fallbackReason,
       writeLegacyJsonl: Boolean(settingsSummary?.memory?.writeLegacyJsonl),
       lastOfflineRecall,
+      lastOfflinePersonaReply,
       lastPersonaSnapshot,
       lastPersonaExport,
+      lastProactivePolicy,
     };
   }
   if (personaSnapshotDegraded) {
@@ -502,8 +558,10 @@ function buildMemoryRow({ settingsSummary, memorySnapshot }) {
       fallbackReason,
       writeLegacyJsonl: Boolean(settingsSummary?.memory?.writeLegacyJsonl),
       lastOfflineRecall,
+      lastOfflinePersonaReply,
       lastPersonaSnapshot,
       lastPersonaExport,
+      lastProactivePolicy,
     };
   }
   return {
@@ -514,8 +572,10 @@ function buildMemoryRow({ settingsSummary, memorySnapshot }) {
     fallbackReason,
     writeLegacyJsonl: Boolean(settingsSummary?.memory?.writeLegacyJsonl),
     lastOfflineRecall,
+    lastOfflinePersonaReply,
     lastPersonaSnapshot,
     lastPersonaExport,
+    lastProactivePolicy,
   };
 }
 
@@ -639,6 +699,36 @@ function normalizeStateLabel(value) {
 
 function normalizeReasonLabel(value) {
   return toSentence(value || "unknown_reason", "unknown reason");
+}
+
+function formatDurationMs(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return "unknown";
+  const remainingMs = Math.max(0, Math.round(numeric));
+  if (remainingMs <= 0) return "ready now";
+  let seconds = Math.ceil(remainingMs / 1000);
+  const hours = Math.floor(seconds / 3600);
+  seconds -= hours * 3600;
+  const minutes = Math.floor(seconds / 60);
+  seconds -= minutes * 60;
+  if (hours > 0) {
+    return `${hours}h ${minutes}m ${seconds}s`;
+  }
+  if (minutes > 0) {
+    return `${minutes}m ${seconds}s`;
+  }
+  return `${seconds}s`;
+}
+
+function formatEpochUtcMs(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric <= 0) return "unknown";
+  const rounded = Math.max(0, Math.round(numeric));
+  try {
+    return `${rounded} (${new Date(rounded).toISOString()})`;
+  } catch {
+    return String(rounded);
+  }
 }
 
 function toStatePill(state, fallback = OBSERVABILITY_ROW_STATES.unknown) {
@@ -934,6 +1024,7 @@ function buildRowDetail({
   rowId,
   row,
   settingsSourceMap,
+  ts = Date.now(),
 }) {
   const state = toStatePill(row?.state);
   let label = "Status Row";
@@ -1059,6 +1150,14 @@ function buildRowDetail({
       row?.lastOfflineRecall && typeof row.lastOfflineRecall === "object"
         ? row.lastOfflineRecall
         : null;
+    const lastOfflinePersonaReply =
+      row?.lastOfflinePersonaReply && typeof row.lastOfflinePersonaReply === "object"
+        ? row.lastOfflinePersonaReply
+        : null;
+    const lastProactivePolicy =
+      row?.lastProactivePolicy && typeof row.lastProactivePolicy === "object"
+        ? row.lastProactivePolicy
+        : null;
     const lastPersonaSnapshot =
       row?.lastPersonaSnapshot && typeof row.lastPersonaSnapshot === "object"
         ? row.lastPersonaSnapshot
@@ -1111,6 +1210,101 @@ function buildRowDetail({
         suggestedSteps.length = 0;
         suggestedSteps.push(
           "Restore local identity/memory inputs, then ask the recall question again and refresh status."
+        );
+      }
+    }
+    if (lastOfflinePersonaReply) {
+      const styleProfile =
+        lastOfflinePersonaReply.styleProfile && typeof lastOfflinePersonaReply.styleProfile === "object"
+          ? lastOfflinePersonaReply.styleProfile
+          : {};
+      provenance.push(
+        {
+          label: "Last Offline Persona Intent",
+          kind: "runtime",
+          value: toSentence(lastOfflinePersonaReply.intent, "none"),
+        },
+        {
+          label: "Last Offline Persona Mode",
+          kind: "runtime",
+          value: toSentence(lastOfflinePersonaReply.personaMode, "none"),
+        },
+        {
+          label: "Last Offline Persona State",
+          kind: "runtime",
+          value: toSentence(lastOfflinePersonaReply.personaState, "degraded"),
+        },
+        {
+          label: "Last Offline Persona Reason",
+          kind: "runtime",
+          value: normalizeReasonLabel(lastOfflinePersonaReply.personaReason),
+        },
+        {
+          label: "Last Offline Persona Style",
+          kind: "runtime",
+          value: `warmth=${toSentence(styleProfile.warmth, "medium")}, playfulness=${toSentence(
+            styleProfile.playfulness,
+            "low"
+          )}, curiosity=${toSentence(styleProfile.curiosity, "medium")}`,
+        }
+      );
+      if (Number.isFinite(Number(lastOfflinePersonaReply.ts)) && Number(lastOfflinePersonaReply.ts) > 0) {
+        provenance.push({
+          label: "Last Offline Persona At",
+          kind: "runtime",
+          value: String(Math.round(Number(lastOfflinePersonaReply.ts))),
+        });
+      }
+    }
+    if (lastProactivePolicy) {
+      const nextEligibleAtMs = Number.isFinite(Number(lastProactivePolicy.nextEligibleAt))
+        ? Math.max(0, Math.round(Number(lastProactivePolicy.nextEligibleAt)))
+        : 0;
+      const nextEligibleInMs = Math.max(0, nextEligibleAtMs - Math.max(0, Math.round(Number(ts) || 0)));
+      provenance.push(
+        {
+          label: "Last Proactive Reason",
+          kind: "runtime",
+          value: normalizeReasonLabel(lastProactivePolicy.lastAttemptReason),
+        },
+        {
+          label: "Last Suppression Reason",
+          kind: "runtime",
+          value: normalizeReasonLabel(lastProactivePolicy.suppressionReason),
+        },
+        {
+          label: "Backoff Tier",
+          kind: "runtime",
+          value: String(
+            Number.isFinite(Number(lastProactivePolicy.backoffTier))
+              ? Math.max(0, Math.round(Number(lastProactivePolicy.backoffTier)))
+              : 0
+          ),
+        },
+        {
+          label: "Next Proactive Eligible At",
+          kind: "runtime",
+          value: formatEpochUtcMs(nextEligibleAtMs),
+        },
+        {
+          label: "Next Proactive Eligible In",
+          kind: "runtime",
+          value: formatDurationMs(nextEligibleInMs),
+        },
+        {
+          label: "Proactive Repeat Window",
+          kind: "runtime",
+          value: String(
+            Number.isFinite(Number(lastProactivePolicy.repeatGuardWindowMs))
+              ? Math.max(0, Math.round(Number(lastProactivePolicy.repeatGuardWindowMs)))
+              : 0
+          ),
+        }
+      );
+      if (lastProactivePolicy.suppressionReason && lastProactivePolicy.suppressionReason !== "none") {
+        suggestedSteps.length = 0;
+        suggestedSteps.push(
+          "Clear suppression conditions (close chat, stop typing, or wait cooldown), then press Refresh Status."
         );
       }
     }
@@ -1576,6 +1770,7 @@ function buildObservabilityDetail({
       rowId: resolvedSubject.subjectId,
       row: rows?.[resolvedSubject.subjectId] || {},
       settingsSourceMap,
+      ts,
     });
   }
 

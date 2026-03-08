@@ -128,34 +128,64 @@ Historical v1 deliverables keep their original status wording and are not retrof
 
 ### Current Workflow Snapshot
 - Current Deliverable: `13c-persona-aware-offline-dialog-and-proactive-behavior`
-- Workflow State: `specifying`
-- Current Status: `specifying`
+- Workflow State: `iterating`
+- Current Status: `iterating`
 - Last Completed Deliverable: `13b-persona-snapshot-synthesis-and-provenance`
 - Next Detailed Target: `13c-persona-aware-offline-dialog-and-proactive-behavior`
 - Next Queued Target: `13d-online-reflection-and-runtime-sync`
 - Current Gate State:
   - `Spec Gate`: `passed` (`2026-03-07`)
-  - `Build Gate`: `not_started`
+  - `Build Gate`: `passed` (`2026-03-07`)
   - `Acceptance Gate`: `not_started`
 - Current Session Shipped Outcome:
-  - `no visible app change` (session focused on deepening `13c` deterministic offline persona/proactive specification before implementation)
+  - `visible app/runtime change delivered` (`13c` iteration patch shipped from operator feedback: reduced canned repetition, improved chat-open bubble behavior, expanded offline persona-fact recall)
 - Historical Note:
   - D01-D10 are complete historical v1 records.
   - Detailed v1 session history lives in `docs/plan/archive/00-progress-tracker-v1-history.md`.
-- Active `13c` specification outcome:
-  - Created `docs/plan/13c-persona-aware-offline-dialog-and-proactive-behavior.md` from template.
-  - Locked showcase promise, operator demo script, failure/recovery script, quick operator test card, acceptance evidence checklist, and first-slice contracts for persona-aware offline dialog and proactive robustness.
-  - Expanded `13c` with explicit deterministic mechanics for:
-    - style-profile derivation from `vp-persona-snapshot-v1`
-    - fixed-order intent routing and frame/token composition
-    - hash-stable variant selection and output-bounds clipping
-    - proactive suppression order, cooldown tiers/backoff, repeat guard, and engagement-reset semantics
-    - deterministic check-plan requirements for style/proactive/observability coverage
+- Active `13c` implementation outcome:
+  - Created `docs/plan/13c-persona-aware-offline-dialog-and-proactive-behavior.md` from template and passed `Spec Gate`.
+  - Implemented first runtime slice:
+    - `offline-persona-style.js` for deterministic offline persona-style shaping (`styleProfile` normalization, fixed-order intent routing, frame/token composition, hash-stable variant selection, bounded output enforcement)
+    - `proactive-policy.js` for deterministic proactive suppression ordering, cooldown tiers/backoff, repeat guard, and engagement reset
+    - `main.js` integration for persona-aware offline fallback replies and persona-aware proactive openers
+  - Observability + contract wiring:
+    - `pet-contract-router.js` now carries bounded offline persona metadata for bridge dialog context
+    - `shell-observability.js` memory detail now reports offline persona/proactive metadata (`Last Offline Persona Intent/Mode/State/Reason`, `Last Proactive Reason`, `Last Suppression Reason`, `Backoff Tier`, `Next Proactive Eligible At`, `Proactive Repeat Window`)
+  - Deterministic coverage added/extended:
+    - new:
+      - `scripts/check-offline-persona-style.js`
+      - `scripts/check-proactive-policy.js`
+      - `scripts/check-persona-offline-proactive.js`
+    - extended:
+      - `scripts/check-contract-router.js`
+      - `scripts/check-chat-shell-presence.js`
+      - `scripts/check-shell-observability.js`
+    - acceptance row:
+      - `D13c-persona-aware-offline-proactive`
+  - Verification run passed:
+    - `npm run check:syntax`
+    - `npm run check:contracts`
+    - `npm run check:acceptance` -> `25/25`
+  - Iteration slice from operator feedback:
+    - offline fallback now uses deterministic repeat-aware variation keying for repeated user prompts
+    - opening `Open Chat...` now clears stale announcement bubbles so chat does not auto-show the same canned line
+    - opening `Open Chat...` now also clears stale pet reply bubbles on reopen (not just announcements)
+    - offline fallback now supports bounded persona-fact answers from snapshot fields (including `USER.md`-derived companion fields like timezone)
+    - `Status -> Memory Runtime` proactive timing now includes:
+      - readable UTC context for `Next Proactive Eligible At`
+      - `Next Proactive Eligible In` countdown that updates on refresh
+    - deterministic coverage extended in `scripts/check-offline-persona-style.js`:
+      - variation-key influence checks
+      - persona-fact lookup checks
+    - deterministic coverage extended in `scripts/check-shell-observability.js` for proactive countdown visibility
+    - verification rerun remained green:
+      - `npm run check:contracts`
+      - `npm run check:acceptance` -> `25/25`
   - Gate outcome:
     - `Spec Gate` passed on `2026-03-07`
-    - `Build Gate` not started
+    - `Build Gate` passed on `2026-03-07`
     - `Acceptance Gate` not started
-  - Shipped outcome: `no visible app change` (spec-only session; implementation intentionally not started).
+  - Shipped outcome: visible app/runtime change delivered; operator demo/failure evidence capture is next to close `Acceptance Gate`.
 - Closed `13b` implementation outcome:
   - Created `docs/plan/13b-persona-snapshot-synthesis-and-provenance.md` from template and passed `Spec Gate`.
   - Implemented first runtime slice:

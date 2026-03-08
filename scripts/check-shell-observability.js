@@ -53,6 +53,22 @@ function run() {
         degradedReason: "none",
         evidenceTags: ["identity.name"],
       },
+      lastOfflinePersonaReply: {
+        ts: 1700000001222,
+        intent: "smalltalk",
+        personaState: "ready",
+        personaReason: "none",
+        personaMode: "gentle_helper",
+        selectionHash: "abc12345",
+        styleProfile: {
+          warmth: "high",
+          playfulness: "low",
+          curiosity: "high",
+          openerStyle: "warm_reflective",
+          closerStyle: "supportive_note",
+          emojiPolicy: "none",
+        },
+      },
       lastPersonaSnapshot: {
         builtAt: 1700000001333,
         schemaVersion: "vp-persona-snapshot-v1",
@@ -88,6 +104,19 @@ function run() {
             provenanceTag: "IDENTITY.md:Pronouns",
           },
         ],
+      },
+      lastProactivePolicy: {
+        ts: 1700000001777,
+        proactiveState: "suppressed",
+        lastAttemptReason: "suppressed_dialog_open",
+        suppressionReason: "suppressed_dialog_open",
+        backoffTier: 2,
+        cooldownMs: 720000,
+        cooldownRemainingMs: 210000,
+        nextEligibleAt: 1700000211777,
+        repeatGuardWindowMs: 1800000,
+        lastOpenerHash: "def67890",
+        awaitingUserEngagement: true,
       },
     },
     settingsSummary: {
@@ -172,6 +201,27 @@ function run() {
       (entry) => entry.label === "Last Persona Export Mode" && entry.value === "online dialog"
     ),
     "memory detail should include persona export mode provenance"
+  );
+  assert(
+    memoryDetail.provenance.some(
+      (entry) => entry.label === "Last Offline Persona Intent" && entry.value === "smalltalk"
+    ),
+    "memory detail should include offline persona intent provenance"
+  );
+  assert(
+    memoryDetail.provenance.some(
+      (entry) => entry.label === "Last Proactive Reason" && entry.value === "suppressed dialog open"
+    ),
+    "memory detail should include proactive reason provenance"
+  );
+  assert(
+    memoryDetail.provenance.some(
+      (entry) =>
+        entry.label === "Next Proactive Eligible In" &&
+        typeof entry.value === "string" &&
+        entry.value.length > 0
+    ),
+    "memory detail should include proactive countdown provenance"
   );
 
   const personaSnapshotDegraded = buildObservabilitySnapshot({

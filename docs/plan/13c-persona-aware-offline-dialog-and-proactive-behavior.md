@@ -1,7 +1,7 @@
 # Deliverable 13c: Persona-Aware Offline Dialog and Proactive Behavior
 
 **Deliverable ID:** `13c-persona-aware-offline-dialog-and-proactive-behavior`  
-**Status:** `specifying`  
+**Status:** `iterating`  
 **Owner:** `Mic + Codex`  
 **Last Updated:** `2026-03-07`  
 **Depends On:** `12a-real-openclaw-dialog-parity`, `12b-chat-shell-and-conversation-presence`, `13a-offline-identity-and-recent-recall`, `13b-persona-snapshot-synthesis-and-provenance`  
@@ -130,6 +130,7 @@ With OpenClaw offline, the pet responds in a persona-aligned offline tone (deriv
   - `scripts/check-shell-observability.js`
   - `scripts/check-offline-persona-style.js` (new)
   - `scripts/check-proactive-policy.js` (new or extend existing proactive check)
+  - `scripts/check-persona-offline-proactive.js` (new acceptance row driver)
   - `scripts/run-acceptance-matrix.js` (`D13c-persona-aware-offline-proactive`)
 
 ## Offline Persona Style Contract (First Slice)
@@ -298,7 +299,7 @@ Proactive opener creation uses the same `styleProfile` as offline reply shaping.
 
 Rules:
 - Opener template selection uses deterministic hash with key:
-  - `<proactive_reason>|<snapshotFingerprint>|<backoffTier>|<lastOpenerHash>`
+  - `<proactive_reason>|<snapshotFingerprint>|<backoffTier>|<lastOpenerHash>|<minuteBucket>`
 - Repeat guard compares normalized opener hash against rolling window cache.
 - If repeat guard blocks all candidate openers, emit no prompt and record `suppressed_repeat_guard`.
 
@@ -341,37 +342,105 @@ Required `13c` contract checks:
   - degraded persona conditions are silent or ambiguous to operator.
 
 ## Implementation Slice (Mandatory)
-- Not started in this session (spec-only).
-- First implementation slice plan (next session after spec handoff):
-  1. Add style-profile derivation helper from `vp-persona-snapshot-v1` with deterministic defaults.
-  2. Add offline intent classification + frame/token composition path.
-  3. Add stable hash-based variant selection + output bounds enforcement.
-  4. Add proactive backoff, suppression ordering, repeat guard, and engagement reset handling.
-  5. Expose proactive policy fields in `Status` detail and snapshot metadata.
-  6. Add deterministic check scripts and acceptance row `D13c-persona-aware-offline-proactive`.
+- First implementation slice shipped:
+  1. Added deterministic offline persona style module:
+     - `offline-persona-style.js`
+     - style-profile derivation from `vp-persona-snapshot-v1`
+     - fixed-order intent classifier
+     - frame/token composition + bounded output
+     - stable hash variant selection (`fnv1a32`) for offline replies and proactive openers
+  2. Added proactive policy module:
+     - `proactive-policy.js`
+     - suppression ordering, cooldown tiers, repeat guard, ignored-backoff growth, and user-engagement reset
+  3. Wired runtime integration in `main.js`:
+     - offline fallback path now uses persona-aware deterministic shaping for non-recall prompts
+     - proactive prompt generation now uses persona-aware deterministic prompt shaping
+     - proactive state now tracks attempt reason, suppression reason, tier, next eligible timestamp, and opener hash
+     - user chat/command engagement now resets proactive backoff tier
+  4. Extended contract and observability surfaces:
+     - `pet-contract-router.js` now passes bounded persona metadata on offline bridge dialog suggestions
+     - `shell-observability.js` memory detail now surfaces:
+       - `Last Offline Persona Intent/Mode/State/Reason`
+       - `Last Proactive Reason`
+       - `Last Suppression Reason`
+       - `Backoff Tier`
+       - `Next Proactive Eligible At`
+       - `Proactive Repeat Window`
+  5. Added deterministic coverage:
+     - `scripts/check-offline-persona-style.js` (new)
+     - `scripts/check-proactive-policy.js` (new)
+     - `scripts/check-persona-offline-proactive.js` (new acceptance row wrapper)
+     - extended:
+       - `scripts/check-contract-router.js`
+       - `scripts/check-chat-shell-presence.js`
+       - `scripts/check-shell-observability.js`
+     - acceptance row added:
+       - `D13c-persona-aware-offline-proactive`
+  6. Verification run passed:
+     - `npm run check:syntax`
+     - `npm run check:contracts`
+     - `npm run check:acceptance` -> `25/25 automated checks passed`
 
 ## Visible App Outcome
-- No visible app/runtime change yet in this session (`spec-only`).
-- This spec defines the operator-visible target outcome for the first `13c` implementation slice.
+- Visible app/runtime change delivered:
+  - Offline non-recall dialog now uses deterministic persona-aware tone shaping from `vp-persona-snapshot-v1`.
+  - Proactive conversation lane now applies deterministic suppression/backoff/repeat-guard policy.
+  - `Status` -> `Memory Runtime` detail now exposes proactive reason/tier/next-eligible visibility and last offline persona reply metadata.
 
 ## Acceptance Notes
 - `2026-03-07`: File created from post-v1 template for `13c`.
 - `2026-03-07`: Locked showcase promise, operator demo script, failure/recovery script, quick operator test card, evidence checklist, and first-slice contracts for offline persona style + proactive robustness.
 - `2026-03-07`: `Spec Gate` passed; implementation intentionally not started.
 - `2026-03-07`: Expanded spec to include complete deterministic shaping mechanics (style derivation, intent routing, frame/token composition, hash-based varianting, bounds/safety) and proactive cadence/suppression/backoff details.
+- `2026-03-07`: Implemented first `13c` runtime slice across offline persona shaping, proactive policy runtime, and observability surface metadata.
+- `2026-03-07`: Build verification passed:
+  - `npm run check:syntax`
+  - `npm run check:contracts`
+  - `npm run check:acceptance` -> `25/25`
+- `2026-03-07`: Operator happy-path/failure run captured iteration feedback:
+  - repeated offline freeform phrasing felt too static for repeated prompts
+  - opening chat surfaced a stale canned announcement bubble and felt awkward
+  - requested broader offline answers for persona-known companion facts (for example from `USER.md`)
+- `2026-03-07`: Iteration patch landed and checks re-verified green (`25/25`):
+  - added deterministic repeat-aware variation keying for offline persona fallback selection
+  - cleared stale announcement bubble on chat-open so `Open Chat...` does not auto-show old canned text
+  - added bounded offline persona fact lookup/response lane for snapshot fields (including companion facts from `USER.md`, such as timezone)
+- `2026-03-07`: Observability timing UX iteration landed:
+  - `Next Proactive Eligible At` now includes readable UTC timestamp
+  - added `Next Proactive Eligible In` countdown so refresh visibly updates remaining time
+- `2026-03-07`: Chat-open bubble behavior iteration landed:
+  - opening chat now clears stale pet reply bubbles in addition to stale announcements
+  - prevents old reply text from auto-popping when reopening chat without a new message
 
 ## Iteration Log
 - `2026-03-07`: Initial `13c` spec drafted from rough-in addendum and `12b` proactive cadence feedback.
 - `2026-03-07`: Added full deterministic offline-voice design and deterministic check plan to make implementation targets unambiguous.
+- `2026-03-07`: Implemented deterministic policy/runtime slice and tightened tests after mapping/suppression edge-case fixes discovered during contract checks.
+- `2026-03-07`: Iterated `13c` from operator-run feedback to reduce canned repetition and improve offline persona fact coverage from snapshot-derived companion fields.
+- `2026-03-07`: Iterated `13c` observability timing detail so proactive eligibility is understandable on refresh (absolute time + countdown).
+- `2026-03-07`: Iterated `13c` chat-open behavior to suppress stale reply bubbles when reopening chat after prior conversation.
 
 ## Gate Status
 - `Spec Gate`: `passed` (`2026-03-07`)
-- `Build Gate`: `not_started`
+- `Build Gate`: `passed` (`2026-03-07`)
 - `Acceptance Gate`: `not_started`
-- `Overall`: `specifying`
+- `Overall`: `iterating`
 
 ## Change Log
 - `2026-03-07`: File created from the post-v1 deliverable template.
 - `2026-03-07`: Added `13c` contracts for persona-aware offline dialog and proactive suppression/backoff observability.
 - `2026-03-07`: Marked `Spec Gate` passed; implementation intentionally not started.
 - `2026-03-07`: Expanded `13c` plan with concrete deterministic style-profile mapping, intent order, frame/token composition rules, hash selection, output bounds, proactive tier timings, and check coverage expectations.
+- `2026-03-07`: Implemented first runtime slice (`offline-persona-style.js`, `proactive-policy.js`, main/router/observability wiring), added deterministic `13c` checks, and passed `Build Gate` with green syntax/contracts/acceptance runs.
+- `2026-03-07`: Iteration patch from operator feedback:
+  - repeat-aware offline variation keying in `main.js` + `offline-persona-style.js`
+  - chat-open stale announcement bubble suppression in `renderer.js`
+  - offline persona fact lookup/answer templates for snapshot companion fields
+  - extended `scripts/check-offline-persona-style.js` coverage; contracts/acceptance remained green.
+- `2026-03-07`: Iterated `shell-observability.js` memory detail timing fields:
+  - added `Next Proactive Eligible In` refresh-updating countdown
+  - made `Next Proactive Eligible At` include UTC timestamp context
+  - extended `scripts/check-shell-observability.js`; syntax/contracts/acceptance remained green.
+- `2026-03-07`: Iterated `renderer.js` dialog-open behavior:
+  - generalized stale bubble clear from announcement-only to any stale pet bubble on open
+  - syntax/contracts/acceptance remained green (`25/25`).

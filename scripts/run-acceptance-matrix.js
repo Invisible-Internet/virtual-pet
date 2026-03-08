@@ -147,6 +147,13 @@ const CASES = Object.freeze([
     script: "scripts/check-persona-snapshot.js",
   },
   {
+    id: "D13c-persona-aware-offline-proactive",
+    deliverable: "13c-persona-aware-offline-dialog-and-proactive-behavior",
+    scenario:
+      "Offline persona-style shaping and proactive suppression/backoff/repeat-guard behavior remain deterministic with explicit policy metadata.",
+    script: "scripts/check-persona-offline-proactive.js",
+  },
+  {
     id: "Layout-assets",
     deliverable: "core-renderer-assets",
     scenario: "Layout bounds and required sprite assets remain internally consistent.",

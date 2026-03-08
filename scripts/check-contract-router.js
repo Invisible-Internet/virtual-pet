@@ -382,6 +382,12 @@ function testUserMessageDialogFlow() {
         degradedReason: "none",
         evidenceTags: ["identity.name"],
       },
+      bridgeDialogPersona: {
+        intent: "smalltalk",
+        personaState: "ready",
+        personaReason: "none",
+        personaMode: "gentle_helper",
+      },
     }
   );
 
@@ -410,6 +416,21 @@ function testUserMessageDialogFlow() {
     Array.isArray(result.suggestions[0].recallEvidenceTags) &&
       result.suggestions[0].recallEvidenceTags.includes("identity.name"),
     "user message recall evidence tags should pass through bridge context"
+  );
+  assertEqual(
+    result.suggestions[0].personaIntent,
+    "smalltalk",
+    "user message persona intent should pass through bridge context"
+  );
+  assertEqual(
+    result.suggestions[0].personaState,
+    "ready",
+    "user message persona state should pass through bridge context"
+  );
+  assertEqual(
+    result.suggestions[0].personaMode,
+    "gentle_helper",
+    "user message persona mode should pass through bridge context"
   );
   assertIncludes(
     result.suggestions[0].text,

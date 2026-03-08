@@ -409,6 +409,10 @@ class PetContractRouter {
         context.bridgeDialogRecall && typeof context.bridgeDialogRecall === "object"
           ? context.bridgeDialogRecall
           : null;
+      const personaContext =
+        context.bridgeDialogPersona && typeof context.bridgeDialogPersona === "object"
+          ? context.bridgeDialogPersona
+          : null;
       const recallType = normalizeText(recallContext?.recallType);
       const recallDegradedReason = normalizeText(recallContext?.degradedReason) || "none";
       const recallEvidenceTags = Array.isArray(recallContext?.evidenceTags)
@@ -417,6 +421,10 @@ class PetContractRouter {
             .filter(Boolean)
             .slice(0, 6)
         : [];
+      const personaIntent = normalizeText(personaContext?.intent) || "unknown";
+      const personaState = normalizeText(personaContext?.personaState) || "degraded";
+      const personaReason = normalizeText(personaContext?.personaReason) || "parse_incomplete";
+      const personaMode = normalizeText(personaContext?.personaMode) || "neutral_fallback";
       return [
         {
           type: "PET_RESPONSE",
@@ -426,6 +434,10 @@ class PetContractRouter {
           recallType: recallType || null,
           recallDegradedReason: recallType ? recallDegradedReason : "none",
           recallEvidenceTags: recallType ? recallEvidenceTags : [],
+          personaIntent: personaContext ? personaIntent : null,
+          personaState: personaContext ? personaState : null,
+          personaReason: personaContext ? personaReason : null,
+          personaMode: personaContext ? personaMode : null,
           text: bridgeDialogText,
           correlationId: intent.correlationId,
           ts: this._now(),

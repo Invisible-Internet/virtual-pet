@@ -288,6 +288,22 @@ Add online reflection/runtime sync with bounded cadence and governance:
 - Add lightweight observability:
   - expose last proactive reason, suppression reason, and next eligible time in Status/diagnostics.
 
+### `13c` Iteration Candidate: Richer Offline Dialog
+- Operator request: plan a follow-on `13c` iteration focused on richer offline dialog quality.
+- Problem signal:
+  - offline chat still falls back too often to generic unknown-response copy (`not in local memory yet`).
+- Candidate scope (bounded):
+  - deterministic offline QA expansion over canonical local context (`SOUL.md`, `STYLE.md`, `IDENTITY.md`, `USER.md`, `MEMORY.md`).
+  - broader fact extraction + synonym intent mapping for common companion questions.
+  - response framing that preserves persona style while preferring concrete local facts when available.
+- Guardrails:
+  - keep deterministic behavior (no probabilistic generation path for offline fallback).
+  - no raw file dumps or secret/config leakage.
+  - preserve existing authority boundary (app-owned local reads, bounded derived outputs only).
+- Success signals for this iteration discussion:
+  - fewer generic unknown offline replies for questions answerable from local canonical files.
+  - explicit observability of matched local-fact source vs unknown-fallback path.
+
 ### Likely Public Interfaces / Touchpoints
 - Runtime read-model for canonical Markdown identity/persona files
 - Derived persona snapshot format with provenance
