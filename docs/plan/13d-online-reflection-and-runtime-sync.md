@@ -1,7 +1,7 @@
 # Deliverable 13d: Online Reflection and Runtime Sync
 
 **Deliverable ID:** `13d-online-reflection-and-runtime-sync`  
-**Status:** `implementing`  
+**Status:** `accepted`  
 **Owner:** `Mic + Codex`  
 **Last Updated:** `2026-03-08`  
 **Depends On:** `13b-persona-snapshot-synthesis-and-provenance`, `13c-persona-aware-offline-dialog-and-proactive-behavior`  
@@ -108,10 +108,10 @@ When OpenClaw is healthy, the app performs bounded reflection cadence and applie
 - [ ] Reflection resumes after bridge recovery.
 
 ## Acceptance Evidence Checklist (Mandatory)
-- [ ] `Status` capture after successful reflection run.
-- [ ] `Status` capture after suppressed/degraded reflection run.
-- [ ] `Status` capture after recovery reflection run.
-- [ ] Automated row `D13d-online-reflection-runtime-sync` passed.
+- [x] `Status` capture after successful reflection run.
+- [x] `Status` capture after suppressed/degraded reflection run.
+- [x] `Status` capture after recovery reflection run.
+- [x] Automated row `D13d-online-reflection-runtime-sync` passed.
 
 ## Public Interfaces / Touchpoints
 - `main.js`
@@ -168,6 +168,7 @@ When OpenClaw is healthy, the app performs bounded reflection cadence and applie
   - `npm run check:syntax`
   - `npm run check:contracts`
   - `npm run check:acceptance` -> `26/26`
+- `2026-03-08`: Operator confirmed happy-path and failure/recovery checks passed for this slice (`Status -> Memory Runtime` reflection flow), closing `13d` as accepted.
 
 ## Iteration Log
 - `2026-03-08`: Locked first-slice contract:
@@ -185,9 +186,10 @@ When OpenClaw is healthy, the app performs bounded reflection cadence and applie
 ## Gate Status
 - `Spec Gate`: `passed` (`2026-03-08`)
 - `Build Gate`: `passed` (`2026-03-08`)
-- `Acceptance Gate`: `not_started`
-- `Overall`: `implementing`
+- `Acceptance Gate`: `passed` (`2026-03-08`)
+- `Overall`: `accepted`
 
 ## Change Log
 - `2026-03-08`: Initial deliverable template created in specifying phase.
 - `2026-03-08`: Spec lock and first implementation slice landed with deterministic checks and acceptance row.
+- `2026-03-08`: Acceptance evidence confirmed; deliverable status moved to `accepted`.

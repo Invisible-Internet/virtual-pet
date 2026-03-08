@@ -33,15 +33,15 @@ Historical v1 deliverables keep their original wording and remain archived histo
   - operator-visible demo passes and evidence is logged
 
 ## Current Deliverable
-- Current Deliverable: `13d-online-reflection-and-runtime-sync`
-- Workflow State: `implementing`
-- Current Status: `implementing`
-- Last Completed Deliverable: `13c-persona-aware-offline-dialog-and-proactive-behavior`
-- Next Detailed Target: `13d-online-reflection-and-runtime-sync`
+- Current Deliverable: `none`
+- Workflow State: `queued`
+- Current Status: `queued`
+- Last Completed Deliverable: `13d-online-reflection-and-runtime-sync`
+- Next Detailed Target: `14a-deliberate-roam-policy-and-monitor-avoidance`
 - Next Queued Target: `14a-deliberate-roam-policy-and-monitor-avoidance`
 - Current Gate State:
-  - `Spec Gate`: `passed` (`2026-03-08`)
-  - `Build Gate`: `passed` (`2026-03-08`)
+  - `Spec Gate`: `not_started`
+  - `Build Gate`: `not_started`
   - `Acceptance Gate`: `not_started`
 
 ## Post-v1 Family Rough-In
@@ -65,6 +65,7 @@ Planning state:
 - `13a-offline-identity-and-recent-recall` is accepted and closed (`Spec/Build/Acceptance Gates passed`; Acceptance on `2026-03-07`).
 - `13b-persona-snapshot-synthesis-and-provenance` is accepted and closed (`Spec/Build/Acceptance Gates passed`; Acceptance on `2026-03-07`).
 - `13c-persona-aware-offline-dialog-and-proactive-behavior` is accepted and closed (`Spec/Build/Acceptance Gates passed`; Acceptance on `2026-03-08`).
+- `13d-online-reflection-and-runtime-sync` is accepted and closed (`Spec/Build/Acceptance Gates passed`; Acceptance on `2026-03-08`).
 - Families `13` through `15` now follow the cohesive `12c`-`15c` sequence in rough-in, with family-14 control/animation policy decisions locked.
 - Full family notes live in [`11-15-post-v1-roadmap-rough-in.md`](./11-15-post-v1-roadmap-rough-in.md).
 
@@ -77,14 +78,23 @@ Planning state:
 6. Pass `Spec Gate` before implementation begins.
 
 ## Next 3 Actions
-1. Run operator happy-path/failure-recovery demo for `13d` using `Status -> Memory Runtime` (`Run Reflection Now`) and capture evidence.
-2. Iterate `13d` only if operator feedback exposes gaps in cadence/gating/observability behavior.
-3. If operator evidence passes, mark `Acceptance Gate` passed and close `13d`, then move workflow to `14a` specification.
+1. Start `14a-deliberate-roam-policy-and-monitor-avoidance` in `specifying` and lock showcase/demo/failure contracts.
+2. Pass `14a` `Spec Gate` before any implementation.
+3. Define deterministic checks + acceptance row plan for first `14a` slice.
 
 ## Blockers
 - None currently.
 
 ## Last Session Summary
+- Closed `13d-online-reflection-and-runtime-sync` as `accepted` after operator-confirmed pass:
+  - operator confirmed happy-path and failure/recovery checks passed (`Status -> Memory Runtime` reflection flow)
+  - acceptance matrix row `D13d-online-reflection-runtime-sync` passed
+  - gate outcome:
+    - `Spec Gate`: `passed` (`2026-03-08`)
+    - `Build Gate`: `passed` (`2026-03-08`)
+    - `Acceptance Gate`: `passed` (`2026-03-08`)
+  - workflow advanced to `Current Deliverable: none`, with `14a` as next detailed target.
+  - shipped outcome note: `visible app/runtime change delivered and accepted` (bounded reflection scheduler/runtime sync is now closed).
 - Implemented first `13d-online-reflection-and-runtime-sync` slice after locking the spec contract:
   - delivered bounded reflection controller/runtime sync with:
     - wall-clock cadence (`hourly heartbeat`, `2:00 AM local digest`)

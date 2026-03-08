@@ -127,22 +127,22 @@ Historical v1 deliverables keep their original status wording and are not retrof
 - `accepted` is the only terminal state for future post-v1 deliverables.
 
 ### Current Workflow Snapshot
-- Current Deliverable: `13d-online-reflection-and-runtime-sync`
-- Workflow State: `implementing`
-- Current Status: `implementing`
-- Last Completed Deliverable: `13c-persona-aware-offline-dialog-and-proactive-behavior`
-- Next Detailed Target: `13d-online-reflection-and-runtime-sync`
+- Current Deliverable: `none`
+- Workflow State: `queued`
+- Current Status: `queued`
+- Last Completed Deliverable: `13d-online-reflection-and-runtime-sync`
+- Next Detailed Target: `14a-deliberate-roam-policy-and-monitor-avoidance`
 - Next Queued Target: `14a-deliberate-roam-policy-and-monitor-avoidance`
 - Current Gate State:
-  - `Spec Gate`: `passed` (`2026-03-08`)
-  - `Build Gate`: `passed` (`2026-03-08`)
+  - `Spec Gate`: `not_started`
+  - `Build Gate`: `not_started`
   - `Acceptance Gate`: `not_started`
 - Current Session Shipped Outcome:
-  - `visible app/runtime change delivered` (`13d` first reflection runtime slice implemented with checks green; awaiting operator acceptance evidence)
+  - `visible app/runtime change delivered and accepted` (`13d` reflection runtime/controller accepted; workflow queued for `14a` spec)
 - Historical Note:
   - D01-D10 are complete historical v1 records.
   - Detailed v1 session history lives in `docs/plan/archive/00-progress-tracker-v1-history.md`.
-- Active `13d` implementation outcome:
+- Closed `13d` implementation outcome:
   - Spec lock finalized in `docs/plan/13d-online-reflection-and-runtime-sync.md`:
     - guarded apply only
     - bridge-route transport only (`memory_reflection_heartbeat`, `memory_reflection_digest`)
@@ -177,8 +177,8 @@ Historical v1 deliverables keep their original status wording and are not retrof
   - Gate outcome:
     - `Spec Gate` passed on `2026-03-08`
     - `Build Gate` passed on `2026-03-08`
-    - `Acceptance Gate` not started
-  - Shipped outcome: visible app/runtime change delivered; operator demo + evidence collection is next.
+    - `Acceptance Gate` passed on `2026-03-08` (operator-accepted closure)
+  - Shipped outcome: visible app/runtime change delivered and accepted; bounded reflection scheduler/runtime sync is closed.
 - Active `13c` implementation outcome:
   - Created `docs/plan/13c-persona-aware-offline-dialog-and-proactive-behavior.md` from template and passed `Spec Gate`.
   - Implemented first runtime slice:
@@ -576,6 +576,7 @@ Historical v1 deliverables keep their original status wording and are not retrof
   - `13a-offline-identity-and-recent-recall` is accepted and closed (`Spec/Build/Acceptance Gates passed`; Acceptance on `2026-03-07`).
   - `13b-persona-snapshot-synthesis-and-provenance` is accepted and closed (`Spec/Build/Acceptance Gates passed`; Acceptance on `2026-03-07`).
   - `13c-persona-aware-offline-dialog-and-proactive-behavior` is accepted and closed (`Spec/Build/Acceptance Gates passed`; Acceptance on `2026-03-08`).
+  - `13d-online-reflection-and-runtime-sync` is accepted and closed (`Spec/Build/Acceptance Gates passed`; Acceptance on `2026-03-08`).
   - Families `13` through `15` now use the cohesive `12c` through `15c` sequence in rough-in.
   - Family `14` decisions are locked for downstream slices:
     - `Utility scoring -> FSM arbitration -> per-state micro BT`
