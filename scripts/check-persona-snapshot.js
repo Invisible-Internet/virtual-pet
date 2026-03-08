@@ -42,7 +42,7 @@ function createCanonicalWorkspace(root) {
   writeFile(
     root,
     "IDENTITY.md",
-    "# IDENTITY\n\n- Name: Nori\n- Pronouns: she/her\n- Birthday: 2025-05-01\n- Creature: Soft desk familiar\n- Vibe: warm, calm\n"
+    "# IDENTITY\n\n- Name: Nori\n- Persona Profile: bookish_helper\n- Pronouns: she/her\n- Birthday: 2025-05-01\n- Creature: Soft desk familiar\n- Vibe: warm, calm\n- Favorite color: teal\n- Favorite movie: Kiki's Delivery Service\n- Favorite song: Ocean Eyes\n- Favorite book: The Hobbit\n- Hobby: origami\n\n## Extra Offline Facts\n- Q: favorite snack | A: strawberries\n- Q: dream trip | A: Kyoto in spring\n"
   );
   writeFile(
     root,
@@ -104,6 +104,19 @@ function runReadySnapshotTest() {
   assertEqual(snapshot.degradedReason, "none", "snapshot degraded reason should be none");
   assert(snapshot.fields.pet_name?.value === "Nori", "snapshot should include pet_name");
   assert(
+    snapshot.fields.persona_profile_id?.value === "bookish_helper",
+    "snapshot should include explicit persona profile id"
+  );
+  assert(
+    snapshot.fields.pet_favorite_color?.value === "teal" && snapshot.fields.pet_hobby?.value === "origami",
+    "snapshot should include favorite/hobby fields"
+  );
+  assert(
+    Array.isArray(snapshot.fields.extra_offline_facts?.value) &&
+      snapshot.fields.extra_offline_facts.value.some((entry) => entry.includes("favorite snack")),
+    "snapshot should include extra offline fact pairs"
+  );
+  assert(
     Array.isArray(snapshot.fields.tone_keywords?.value) &&
       snapshot.fields.tone_keywords.value.includes("gentle"),
     "snapshot should include tone keywords"
@@ -148,6 +161,11 @@ function runReadySnapshotTest() {
   assert(
     personaExport.facts.every((entry) => typeof entry.provenanceTag === "string" && entry.provenanceTag.length > 0),
     "persona export facts should include provenance tags"
+  );
+  assert(
+    personaExport.facts[0]?.key === "pet_name" &&
+      personaExport.facts[1]?.key === "persona_profile_id",
+    "persona export should prioritize key identity facts first"
   );
 
   fs.rmSync(tempRoot, { recursive: true, force: true });

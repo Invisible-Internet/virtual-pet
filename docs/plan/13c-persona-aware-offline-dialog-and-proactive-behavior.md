@@ -1,9 +1,9 @@
 # Deliverable 13c: Persona-Aware Offline Dialog and Proactive Behavior
 
 **Deliverable ID:** `13c-persona-aware-offline-dialog-and-proactive-behavior`  
-**Status:** `iterating`  
+**Status:** `accepted`  
 **Owner:** `Mic + Codex`  
-**Last Updated:** `2026-03-07`  
+**Last Updated:** `2026-03-08`  
 **Depends On:** `12a-real-openclaw-dialog-parity`, `12b-chat-shell-and-conversation-presence`, `13a-offline-identity-and-recent-recall`, `13b-persona-snapshot-synthesis-and-provenance`  
 **Blocks:** `13d-online-reflection-and-runtime-sync`
 
@@ -33,6 +33,10 @@ Make offline dialog tone and proactive conversation behavior use the same derive
   - next eligible proactive timestamp
   - active backoff tier
 - Add deterministic checks and one acceptance matrix row for `13c` behavior.
+- Add setup-managed offline interest facts (fixed favorites + repeatable custom Q/A) and carry them through persona snapshot/export for offline+online continuity.
+- Move starter persona profile contracts to JSON (`config/persona-profiles/*.json`) with validated runtime loading and safe fallback behavior.
+- Add deterministic offline time-context responses (day/time/month/year from local OS clock/timezone).
+- Record Windows notification integration research notes and recommended bounded implementation path for a future slice.
 
 ## Out of Scope
 - Online reflection cadence, digest/heartbeat sync, and online conflict policy (`13d`).
@@ -411,6 +415,66 @@ Required `13c` contract checks:
 - `2026-03-07`: Chat-open bubble behavior iteration landed:
   - opening chat now clears stale pet reply bubbles in addition to stale announcements
   - prevents old reply text from auto-popping when reopening chat without a new message
+- `2026-03-08`: Expanded `13c` offline depth + online synergy iteration landed:
+  - setup now captures offline interest facts:
+    - fixed pet favorites (`color/movie/song/book`) + `hobby`
+    - repeatable custom offline Q/A pairs with add/remove UI
+    - persisted in managed `IDENTITY.md` (`Extra Offline Facts`) and recovered into setup defaults
+  - persona profile runtime now loads starter profiles from:
+    - `config/persona-profiles/*.json`
+    - validated loader with deterministic safe fallback when JSON is missing/invalid
+  - persona snapshot/export now includes bounded profile + interest fields for offline and online continuity:
+    - `persona_profile_id`
+    - `pet_favorite_*`
+    - `pet_hobby`
+    - `extra_offline_facts`
+    - prioritized export ordering keeps identity+interest facts ahead of lower-priority fields
+  - offline persona dialog intent coverage expanded for:
+    - phrasing variants (`how you feeling`, `what's up`, etc.)
+    - social bids (`play_invite`, `friendship`)
+    - local time/date prompts (`time_context`)
+  - proactive opener shaping now alternates deterministically between check-in and interest-aware prompts when interest facts exist
+  - Windows notification integration research captured (no runtime notification commentary shipped in this patch):
+    - `docs/plan/13c-windows-notification-research-notes.md`
+  - verification run remained green:
+    - `npm run check:syntax`
+    - `npm run check:contracts`
+    - `npm run check:acceptance` -> `25/25`
+- `2026-03-08`: Operator ran the full happy-path and failure/recovery scripts and confirmed both flowed as expected, then provided iteration feedback for setup UX and offline date/time phrasing:
+  - `+ Add Fact` appeared to do nothing (empty row was not rendered)
+  - setup save workflow felt too strict due explicit `Preview` prerequisite
+  - offline date/time prompts using common phrasing variants did not always classify as `time_context`
+- `2026-03-08`: Iteration patch landed and checks re-verified green (`25/25`):
+  - fixed `+ Add Fact` row rendering bug by preserving empty draft rows in setup UI normalization
+  - added debounced automatic setup preview refresh on setup-field edits (including extra fact add/remove/edit)
+  - setup save now auto-runs preview when stale/missing, so manual `Preview` click is no longer required before `Save Setup`
+  - updated setup copy/hints/status text to reflect auto-preview behavior
+  - expanded offline `time_context` intent classifier for additional real-world phrasing (`today's date`, `current time`, `day of week`, `date/time` variants)
+  - extended deterministic coverage in `scripts/check-offline-persona-style.js` for new date/time intent phrasing coverage
+- `2026-03-08`: Additional operator feedback iteration landed after live runtime run:
+  - setup extra-fact typing no longer loses focus during auto-preview cycles
+  - setup no longer requires a manual preview button path:
+    - removed Setup `Preview` button from UI
+    - preview panel remains visible from the latest generated preview
+    - `Save Setup` auto-generates a fresh preview when needed, then applies
+  - setup preview remains visible across edits/save cycles (no blank panel when form is dirty)
+  - offline `time_context` responses now separate question forms:
+    - day questions -> weekday-only answer
+    - date questions -> month/day/year answer (no time)
+    - time questions -> clock answer with timezone
+  - verification rerun remained green:
+    - `npm run check:syntax`
+    - `npm run check:contracts`
+    - `npm run check:acceptance` -> `25/25`
+- `2026-03-08`: Operator confirmed final runtime behavior as acceptable and requested move-on:
+  - happy-path and failure/recovery behavior passed in live run output
+  - setup add-fact + always-visible preview workflow accepted
+  - offline day/date/time answers accepted:
+    - time example: `12:46 PM GMT-7.`
+    - day example: `Sunday.`
+    - date example: `March 8, 2026.`
+  - proactive suppression telemetry remained visible and deterministic (`suppressed_dialog_open`, `suppressed_input_active`)
+  - acceptance evidence accepted from operator run transcript; deliverable closed
 
 ## Iteration Log
 - `2026-03-07`: Initial `13c` spec drafted from rough-in addendum and `12b` proactive cadence feedback.
@@ -419,12 +483,23 @@ Required `13c` contract checks:
 - `2026-03-07`: Iterated `13c` from operator-run feedback to reduce canned repetition and improve offline persona fact coverage from snapshot-derived companion fields.
 - `2026-03-07`: Iterated `13c` observability timing detail so proactive eligibility is understandable on refresh (absolute time + countdown).
 - `2026-03-07`: Iterated `13c` chat-open behavior to suppress stale reply bubbles when reopening chat after prior conversation.
+- `2026-03-08`: Iterated `13c` with setup-managed offline interests, JSON persona profile loading, expanded offline intent coverage (play/friend/time), deterministic interest-aware proactive mix, and bounded persona snapshot/export continuity for offline+online synergy.
+- `2026-03-08`: Iterated setup usability and offline time-context reliability from operator feedback:
+  - fixed `+ Add Fact` empty-row visibility
+  - enabled debounced auto-preview and save-time auto-preview fallback
+  - widened `time_context` phrase routing for date/time/day prompts
+- `2026-03-08`: Iterated setup preview persistence/focus behavior and time/date answer specificity:
+  - removed explicit Setup preview button workflow
+  - preserved visible preview while editing/saving
+  - prevented extra-fact input focus churn during preview cycles
+  - split offline day/date/time answer shaping by prompt subtype
+- `2026-03-08`: Operator accepted final `13c` behavior and requested progression to next slice.
 
 ## Gate Status
 - `Spec Gate`: `passed` (`2026-03-07`)
 - `Build Gate`: `passed` (`2026-03-07`)
-- `Acceptance Gate`: `not_started`
-- `Overall`: `iterating`
+- `Acceptance Gate`: `passed` (`2026-03-08`)
+- `Overall`: `accepted`
 
 ## Change Log
 - `2026-03-07`: File created from the post-v1 deliverable template.
@@ -444,3 +519,60 @@ Required `13c` contract checks:
 - `2026-03-07`: Iterated `renderer.js` dialog-open behavior:
   - generalized stale bubble clear from announcement-only to any stale pet bubble on open
   - syntax/contracts/acceptance remained green (`25/25`).
+- `2026-03-08`: Iterated setup/persona continuity + offline dialog depth:
+  - new JSON profile loader/runtime: `persona-profiles.js` + `config/persona-profiles/*.json`
+  - setup/identity additions in `setup-bootstrap.js`, `inventory.html`, and `inventory-shell-renderer.js`:
+    - `petFavoriteColor`, `petFavoriteMovie`, `petFavoriteSong`, `petFavoriteBook`, `petHobby`
+    - repeatable `extraInterestPairs[]` with `+ Add Fact` UI and persisted `Extra Offline Facts` section
+  - persona snapshot/export extensions in `persona-snapshot.js` for profile + interest fields with prioritized export ordering
+  - offline persona runtime expansion in `offline-persona-style.js`:
+    - four profile lanes (`gentle_companion`, `playful_friend`, `bookish_helper`, `bright_sidekick`)
+    - expanded intent routing and response shaping (`play_invite`, `friendship`, `time_context`, phrasing variants)
+    - deterministic proactive `checkin` vs `interest` alternation when interests are present
+  - deterministic checks expanded/updated:
+    - `scripts/check-offline-persona-style.js`
+    - `scripts/check-persona-snapshot.js`
+    - `scripts/check-setup-bootstrap.js`
+    - `scripts/check-contract-router.js`
+    - `scripts/check-shell-observability.js`
+  - notification research note added (no shipped runtime notification commentary):
+    - `docs/plan/13c-windows-notification-research-notes.md`
+  - verification remained green:
+    - `npm run check:syntax`
+    - `npm run check:contracts`
+    - `npm run check:acceptance` -> `25/25`.
+- `2026-03-08`: Iterated setup UX and date/time phrasing reliability from operator demo feedback:
+  - `inventory-shell-renderer.js`:
+    - fixed extra-fact row normalization so empty draft rows render after `+ Add Fact`
+    - added debounced setup auto-preview scheduling on form changes
+    - setup save now auto-previews when stale/missing before apply
+    - updated setup default status/hint copy to remove hard dependency on manual `Preview`
+  - `inventory.html`:
+    - updated setup preview/help copy to reflect automatic preview updates
+  - `offline-persona-style.js`:
+    - broadened `time_context` intent regex for common date/time/day phrasing variants
+  - `scripts/check-offline-persona-style.js`:
+    - added deterministic assertions for date/time phrase variants and date-focused reply path
+  - verification remained green:
+    - `npm run check:syntax`
+    - `npm run check:contracts`
+    - `npm run check:acceptance` -> `25/25`.
+- `2026-03-08`: Iterated setup preview UX and precise time/date answer formatting from operator feedback:
+  - `inventory.html`:
+    - removed Setup `Preview` button
+    - updated setup preview panel copy for always-visible generated preview flow
+  - `inventory-shell-renderer.js`:
+    - stopped clearing `latestSetupPreview` when setup fields become dirty
+    - `render()` no longer re-renders extra-fact row markup every cycle, preventing focus loss while typing
+    - save button is no longer blocked by `setupDirty`; `Save Setup` triggers auto-preview validation internally
+    - successful save keeps preview visible and refreshes generated preview after apply
+  - `offline-persona-style.js`:
+    - added `time_context` subtype shaping (`day`, `date`, `time`, `month`, `year`, `datetime`)
+    - day/date/time outputs are now intentionally separated to match operator expectations
+  - `scripts/check-offline-persona-style.js`:
+    - added deterministic assertions for day-only, date-only (no clock), and time-only response behavior
+  - verification remained green:
+    - `npm run check:syntax`
+    - `npm run check:contracts`
+    - `npm run check:acceptance` -> `25/25`.
+- `2026-03-08`: Marked `13c` accepted after operator-confirmed live run evidence and move-on request.

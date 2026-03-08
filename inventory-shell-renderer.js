@@ -86,14 +86,20 @@ const setupStarterNote = document.getElementById("setup-starter-note");
 const setupCompanionCallName = document.getElementById("setup-companion-call-name");
 const setupUserGender = document.getElementById("setup-user-gender");
 const setupCreatureLabel = document.getElementById("setup-creature-label");
+const setupPetFavoriteColor = document.getElementById("setup-pet-favorite-color");
+const setupPetFavoriteMovie = document.getElementById("setup-pet-favorite-movie");
+const setupPetFavoriteSong = document.getElementById("setup-pet-favorite-song");
+const setupPetFavoriteBook = document.getElementById("setup-pet-favorite-book");
+const setupPetHobby = document.getElementById("setup-pet-hobby");
 const setupPetGender = document.getElementById("setup-pet-gender");
 const setupSignatureEmoji = document.getElementById("setup-signature-emoji");
 const setupAvatarPath = document.getElementById("setup-avatar-path");
 const setupAvatarBrowseButton = document.getElementById("setup-avatar-browse");
 const setupAvatarFileInput = document.getElementById("setup-avatar-file");
+const setupExtraFactsList = document.getElementById("setup-extra-facts-list");
+const setupExtraFactsAddButton = document.getElementById("setup-extra-facts-add");
 const setupSeedHeartbeat = document.getElementById("setup-seed-heartbeat");
 const setupReloadTargetsButton = document.getElementById("setup-reload-targets");
-const setupPreviewButton = document.getElementById("setup-preview");
 const setupApplyButton = document.getElementById("setup-apply");
 const setupPreviewTabs = document.getElementById("setup-preview-tabs");
 const setupPreviewCopy = document.getElementById("setup-preview-copy");
@@ -130,13 +136,18 @@ const HOVER_HINTS_BY_ID = Object.freeze({
   "setup-starter-note": "Add a short note about yourself.",
   "setup-companion-call-name": "How your pet should call you.",
   "setup-creature-label": "Type what kind of creature your pet is.",
+  "setup-pet-favorite-color": "Optional offline fact: pet favorite color.",
+  "setup-pet-favorite-movie": "Optional offline fact: pet favorite movie.",
+  "setup-pet-favorite-song": "Optional offline fact: pet favorite song.",
+  "setup-pet-favorite-book": "Optional offline fact: pet favorite book.",
+  "setup-pet-hobby": "Optional offline fact: pet hobby.",
   "setup-pet-gender": "Choose your pet's pronouns: boy, girl, or thing.",
   "setup-signature-emoji": "Pick a safe emoji from the list.",
   "setup-avatar-path": "Selected avatar file path.",
   "setup-avatar-browse": "Browse for a pet avatar image.",
+  "setup-extra-facts-add": "Add another custom offline fact pair.",
   "setup-seed-heartbeat": "Create an empty HEARTBEAT file (advanced).",
-  "setup-reload-targets": "Reload target folders before preview or save.",
-  "setup-preview": "Build a preview. Nothing is saved yet.",
+  "setup-reload-targets": "Reload target folders before generating and saving setup files.",
   "setup-apply": "Save setup files to your local pet folder.",
 });
 const CHARACTER_SCALE_FIELD_KEY = "ui.characterScalePercent";
@@ -146,6 +157,7 @@ const CHARACTER_SCALE_SLIDER_STEP = 0.01;
 const CHARACTER_SCALE_PERCENT_MIN = 50;
 const CHARACTER_SCALE_PERCENT_MAX = 200;
 const CHARACTER_SCALE_PERCENT_DEFAULT = 100;
+const SETUP_AUTO_PREVIEW_DEBOUNCE_MS = 350;
 
 let latestShellState = { ...DEFAULT_SHELL_STATE };
 let latestObservabilitySnapshot = null;
@@ -160,6 +172,7 @@ let shellSettingsLoading = false;
 let shellSettingsSaving = false;
 let shellSettingsDirty = false;
 let setupDirty = true;
+let setupExtraInterestPairs = [];
 let activeSetupPreviewFileId = "SOUL.md";
 let activeObservabilitySubjectId = OBSERVABILITY_SUBJECT_IDS.bridge;
 let observabilityLoading = false;
@@ -168,6 +181,8 @@ let statusMessage = "";
 let hoverHintMessage = "";
 let activePlacement = null;
 let placementTimer = null;
+let setupAutoPreviewTimer = null;
+let setupAutoPreviewQueued = false;
 
 function clampNumber(value, min, max) {
   const numeric = Number(value);
@@ -264,6 +279,53 @@ function normalizeStringArray(value) {
     normalized.push(trimmed);
   }
   return normalized;
+}
+
+function sanitizeSetupFactText(value) {
+  if (typeof value !== "string") return "";
+  return value.replace(/\|/g, "/").replace(/\s+/g, " ").trim();
+}
+
+function normalizeSetupExtraInterestPairs(value, { keepEmpty = true } = {}) {
+  const rawPairs = Array.isArray(value) ? value : [];
+  const normalized = [];
+  for (const pair of rawPairs) {
+    if (!pair || typeof pair !== "object") continue;
+    const question = sanitizeSetupFactText(pair.question);
+    const answer = sanitizeSetupFactText(pair.answer);
+    if (!keepEmpty && !question && !answer) continue;
+    normalized.push({
+      question,
+      answer,
+    });
+  }
+  return normalized;
+}
+
+function buildSetupExtraFactRow(pair, index) {
+  const safeIndex = Number.isFinite(Number(index)) ? Math.max(0, Math.floor(Number(index))) : 0;
+  const question = sanitizeSetupFactText(pair?.question || "");
+  const answer = sanitizeSetupFactText(pair?.answer || "");
+  return `<div class="setup-fact-row" data-extra-fact-row="${safeIndex}">
+    <label class="setup-field">
+      <span class="setup-label">Question</span>
+      <input class="setup-input" type="text" autocomplete="off" data-extra-fact-index="${safeIndex}" data-extra-fact-key="question" value="${escapeHtml(question)}" />
+    </label>
+    <label class="setup-field">
+      <span class="setup-label">Answer</span>
+      <input class="setup-input" type="text" autocomplete="off" data-extra-fact-index="${safeIndex}" data-extra-fact-key="answer" value="${escapeHtml(answer)}" />
+    </label>
+    <button class="setup-fact-remove" type="button" data-extra-fact-remove="${safeIndex}">Remove</button>
+  </div>`;
+}
+
+function renderSetupExtraFacts() {
+  if (!setupExtraFactsList) return;
+  const pairs = normalizeSetupExtraInterestPairs(setupExtraInterestPairs, { keepEmpty: true });
+  setupExtraFactsList.innerHTML =
+    pairs.length > 0
+      ? pairs.map((pair, index) => buildSetupExtraFactRow(pair, index)).join("")
+      : '<span class="setup-card-copy">No extra facts yet. Use + Add Fact to add one.</span>';
 }
 
 function normalizeShellState(payload = {}) {
@@ -844,7 +906,7 @@ function getDefaultHoverHint() {
     return "Press Refresh to reload health rows.";
   }
   if (activeTab === TAB_IDS.setup) {
-    return "Fill details, press Preview, then press Save Setup.";
+    return "Fill details and previews update automatically while you type.";
   }
   if (activeTab === TAB_IDS.settings) {
     return "Adjust advanced settings, then press Save Settings.";
@@ -995,11 +1057,22 @@ function isSubjectSelected(subjectId) {
 }
 
 function getSetupFormInput() {
+  const extraInterestPairs = normalizeSetupExtraInterestPairs(setupExtraInterestPairs, {
+    keepEmpty: false,
+  }).filter(
+    (pair) => pair.question && pair.answer
+  );
   return {
     petName: setupPetName?.value || "",
     birthday: setupBirthday?.value || "",
     companionName: setupCompanionName?.value || "",
     companionTimezone: setupCompanionTimezone?.value || "",
+    petFavoriteColor: setupPetFavoriteColor?.value || "",
+    petFavoriteMovie: setupPetFavoriteMovie?.value || "",
+    petFavoriteSong: setupPetFavoriteSong?.value || "",
+    petFavoriteBook: setupPetFavoriteBook?.value || "",
+    petHobby: setupPetHobby?.value || "",
+    extraInterestPairs,
     starterNote: setupStarterNote?.value || "",
     companionCallName: setupCompanionCallName?.value || "",
     userGender: setupUserGender?.value || "",
@@ -1015,10 +1088,27 @@ function getSetupFormInput() {
   };
 }
 
-function markSetupDirty() {
+function queueSetupAutoPreview({ immediate = false } = {}) {
+  if (setupApplying || typeof window.inventoryAPI?.previewSetupBootstrap !== "function") return;
+  if (setupLoading) {
+    setupAutoPreviewQueued = true;
+    return;
+  }
+  if (setupAutoPreviewTimer) {
+    window.clearTimeout(setupAutoPreviewTimer);
+    setupAutoPreviewTimer = null;
+  }
+  setupAutoPreviewTimer = window.setTimeout(() => {
+    setupAutoPreviewTimer = null;
+    void previewSetup({ auto: true });
+  }, immediate ? 0 : SETUP_AUTO_PREVIEW_DEBOUNCE_MS);
+}
+
+function markSetupDirty({ autoPreview = true } = {}) {
   setupDirty = true;
-  latestSetupPreview = null;
-  if (setupApplyButton) setupApplyButton.disabled = true;
+  if (autoPreview) {
+    queueSetupAutoPreview();
+  }
 }
 
 function setSetupResult(message, tone = "muted") {
@@ -1041,7 +1131,7 @@ function renderStatus() {
     if (getActiveTab() === TAB_IDS.status) {
       message = "Refresh re-reads bridge, memory, path, and canonical file health.";
     } else if (getActiveTab() === TAB_IDS.setup) {
-      message = "Press Preview first, then press Save Setup.";
+      message = "Preview updates while you edit. Save Setup writes when preview is valid.";
     } else if (getActiveTab() === TAB_IDS.settings) {
       message = "Adjust values, then press Save Settings.";
     } else if (latestShellState.roaming.mode === "zone" && !latestShellState.roaming.zoneRect) {
@@ -1075,7 +1165,7 @@ function renderHeader() {
       activeTab === TAB_IDS.status
         ? "Bridge, memory, canonical files, and runtime path visibility."
         : activeTab === TAB_IDS.setup
-          ? "Fill in pet details, preview files, then save."
+          ? "Fill in pet details and save setup files."
           : activeTab === TAB_IDS.settings
             ? "Bounded runtime controls with explicit save and provenance."
           : "Wardrobe, roaming, and trusted prop controls.";
@@ -1411,6 +1501,21 @@ function applySetupDefaultsIfEmpty() {
   if (setupCreatureLabel && !setupCreatureLabel.value) {
     setupCreatureLabel.value = defaults.creatureLabel || "";
   }
+  if (setupPetFavoriteColor && !setupPetFavoriteColor.value) {
+    setupPetFavoriteColor.value = defaults.petFavoriteColor || "";
+  }
+  if (setupPetFavoriteMovie && !setupPetFavoriteMovie.value) {
+    setupPetFavoriteMovie.value = defaults.petFavoriteMovie || "";
+  }
+  if (setupPetFavoriteSong && !setupPetFavoriteSong.value) {
+    setupPetFavoriteSong.value = defaults.petFavoriteSong || "";
+  }
+  if (setupPetFavoriteBook && !setupPetFavoriteBook.value) {
+    setupPetFavoriteBook.value = defaults.petFavoriteBook || "";
+  }
+  if (setupPetHobby && !setupPetHobby.value) {
+    setupPetHobby.value = defaults.petHobby || "";
+  }
   if (setupPetGender && !setupPetGender.value) setupPetGender.value = defaults.petGender || "";
   if (setupSignatureEmoji && !setupSignatureEmoji.value) {
     setupSignatureEmoji.value = defaults.signatureEmoji || "";
@@ -1419,6 +1524,10 @@ function applySetupDefaultsIfEmpty() {
   if (setupSeedHeartbeat && !setupSeedHeartbeat.checked && defaults.seedHeartbeatFile) {
     setupSeedHeartbeat.checked = true;
   }
+  if (setupExtraInterestPairs.length <= 0) {
+    setupExtraInterestPairs = normalizeSetupExtraInterestPairs(defaults.extraInterestPairs);
+  }
+  renderSetupExtraFacts();
 }
 
 function renderSetupPresets() {
@@ -1446,16 +1555,15 @@ function renderSetupPresets() {
 }
 
 function renderSetupPreview() {
-  if (setupPreviewButton) setupPreviewButton.disabled = setupLoading || setupApplying;
   if (setupReloadTargetsButton) setupReloadTargetsButton.disabled = setupLoading || setupApplying;
   if (setupApplyButton) {
-    setupApplyButton.disabled = setupLoading || setupApplying || !latestSetupPreview || setupDirty;
+    setupApplyButton.disabled = setupLoading || setupApplying;
   }
   if (!setupPreviewTabs || !setupPreviewCopy || !setupPreviewMarkdown) return;
   if (!latestSetupPreview) {
     setupPreviewTabs.innerHTML = "";
     setupPreviewCopy.textContent =
-      "Pick a personality, then press Preview to see your pet files.";
+      "Pick a personality and edit fields. Preview updates automatically.";
     setupPreviewMarkdown.textContent = "";
     return;
   }
@@ -1479,7 +1587,7 @@ function renderSetupPreview() {
   const writeTargets = (latestSetupPreview.writePlan || []).map((plan) => `${plan.targetId}: ${plan.root}`);
   setupPreviewCopy.textContent =
     latestSetupPreview.applyMode === "local_only"
-      ? `Preview only. Save Setup writes to: ${writeTargets.join(" | ") || "Unavailable"}. OpenClaw stays read-only.`
+      ? `Latest generated preview. Save Setup writes to: ${writeTargets.join(" | ") || "Unavailable"}. OpenClaw stays read-only.`
       : "Preview is blocked until your local folder and required fields are valid.";
   setupPreviewMarkdown.textContent = selectedFile?.previewMarkdown || "";
 }
@@ -1543,6 +1651,7 @@ async function refreshSetupSnapshot(successMessage = "Setup targets loaded.") {
     latestSetupSnapshot = await window.inventoryAPI.getSetupBootstrapSnapshot();
     applySetupDefaultsIfEmpty();
     setSetupResult(successMessage, "ok");
+    queueSetupAutoPreview({ immediate: true });
   } catch (error) {
     setSetupResult(error?.message || "Setup targets failed to load.", "warning");
   } finally {
@@ -1650,8 +1759,12 @@ async function applyShellSettings() {
   }
 }
 
-async function previewSetup() {
+async function previewSetup({ auto = false } = {}) {
   if (typeof window.inventoryAPI?.previewSetupBootstrap !== "function") return;
+  if (setupAutoPreviewTimer) {
+    window.clearTimeout(setupAutoPreviewTimer);
+    setupAutoPreviewTimer = null;
+  }
   setupLoading = true;
   render();
   try {
@@ -1661,31 +1774,54 @@ async function previewSetup() {
     activeSetupPreviewFileId = preview?.files?.[0]?.fileId || activeSetupPreviewFileId;
     if (preview?.ok) {
       setSetupResult(
-        "Preview ready. Save Setup writes to your local pet folder only. OpenClaw stays read-only.",
+        auto
+          ? "Preview auto-updated. Save Setup writes to your local pet folder only. OpenClaw stays read-only."
+          : "Preview ready. Save Setup writes to your local pet folder only. OpenClaw stays read-only.",
         "ok"
       );
-      setStatus("Preview ready.", "ok");
+      if (!auto) {
+        setStatus("Preview ready.", "ok");
+      }
     } else {
       const errorText =
         Array.isArray(preview?.errors) && preview.errors.length > 0
           ? preview.errors.map((entry) => formatSetupError(entry)).join(" ")
           : "Setup preview is blocked.";
       setSetupResult(errorText, "warning");
-      setStatus(errorText, "warning");
+      if (!auto) {
+        setStatus(errorText, "warning");
+      }
     }
   } catch (error) {
-    latestSetupPreview = null;
     setupDirty = true;
     setSetupResult(error?.message || "Setup preview failed.", "warning");
-    setStatus(error?.message || "Setup preview failed.", "warning");
+    if (!auto) {
+      setStatus(error?.message || "Setup preview failed.", "warning");
+    }
   } finally {
     setupLoading = false;
+    if (setupAutoPreviewQueued) {
+      setupAutoPreviewQueued = false;
+      queueSetupAutoPreview({ immediate: true });
+    }
     render();
   }
 }
 
 async function applySetup() {
-  if (!latestSetupPreview || setupDirty || typeof window.inventoryAPI?.applySetupBootstrap !== "function") {
+  if (typeof window.inventoryAPI?.applySetupBootstrap !== "function") {
+    return;
+  }
+  if (!latestSetupPreview || setupDirty) {
+    await previewSetup({ auto: true });
+  }
+  if (!latestSetupPreview || setupDirty || latestSetupPreview.ok === false) {
+    const blockedMessage =
+      latestSetupPreview?.ok === false
+        ? "Setup preview is blocked. Fix required fields before Save Setup."
+        : "Setup preview failed. Fix errors and try Save Setup again.";
+    setSetupResult(blockedMessage, "warning");
+    setStatus(blockedMessage, "warning");
     return;
   }
   setupApplying = true;
@@ -1701,12 +1837,12 @@ async function applySetup() {
     const targetSummary = (result.targetResults || [])
       .map((target) => `${target.targetId}: ${target.root}`)
       .join(" | ");
-    latestSetupPreview = null;
-    setupDirty = true;
+    setupDirty = false;
     const successMessage = `Setup saved. Local files written: ${targetSummary || "none"}. OpenClaw stayed read-only.`;
     setSetupResult(successMessage, "ok");
     setStatus("Setup saved. Open Status and press Refresh to check file health.", "ok");
     await refreshSetupSnapshot("Setup targets refreshed after save.");
+    await previewSetup({ auto: true });
     setSetupResult(successMessage, "ok");
   } catch (error) {
     setSetupResult(error?.message || "Setup apply failed.", "warning");
@@ -1925,6 +2061,11 @@ for (const field of [
   setupCompanionTimezone,
   setupStarterNote,
   setupCreatureLabel,
+  setupPetFavoriteColor,
+  setupPetFavoriteMovie,
+  setupPetFavoriteSong,
+  setupPetFavoriteBook,
+  setupPetHobby,
   setupPetGender,
   setupSignatureEmoji,
   setupAvatarPath,
@@ -1956,11 +2097,64 @@ setupAvatarFileInput?.addEventListener("change", () => {
   renderSetupPreview();
 });
 
+setupExtraFactsAddButton?.addEventListener("click", () => {
+  setupExtraInterestPairs = [...normalizeSetupExtraInterestPairs(setupExtraInterestPairs), { question: "", answer: "" }];
+  markSetupDirty();
+  renderSetupExtraFacts();
+  renderSetupPreview();
+});
+
+setupExtraFactsList?.addEventListener("input", (event) => {
+  const input = event.target?.closest?.("[data-extra-fact-index]");
+  if (!input) return;
+  const index = Number(input.dataset?.extraFactIndex);
+  const key = input.dataset?.extraFactKey;
+  if (!Number.isFinite(index) || index < 0 || (key !== "question" && key !== "answer")) return;
+  const pairs = normalizeSetupExtraInterestPairs(setupExtraInterestPairs);
+  if (!pairs[index]) return;
+  pairs[index] = {
+    ...pairs[index],
+    [key]: sanitizeSetupFactText(input.value || ""),
+  };
+  setupExtraInterestPairs = pairs;
+  markSetupDirty();
+  renderSetupPreview();
+});
+
+setupExtraFactsList?.addEventListener("change", (event) => {
+  const input = event.target?.closest?.("[data-extra-fact-index]");
+  if (!input) return;
+  const index = Number(input.dataset?.extraFactIndex);
+  const key = input.dataset?.extraFactKey;
+  if (!Number.isFinite(index) || index < 0 || (key !== "question" && key !== "answer")) return;
+  const pairs = normalizeSetupExtraInterestPairs(setupExtraInterestPairs);
+  if (!pairs[index]) return;
+  pairs[index] = {
+    ...pairs[index],
+    [key]: sanitizeSetupFactText(input.value || ""),
+  };
+  setupExtraInterestPairs = pairs;
+  markSetupDirty();
+  renderSetupExtraFacts();
+  renderSetupPreview();
+});
+
+setupExtraFactsList?.addEventListener("click", (event) => {
+  const button = event.target?.closest?.("[data-extra-fact-remove]");
+  if (!button) return;
+  const index = Number(button.dataset?.extraFactRemove);
+  if (!Number.isFinite(index) || index < 0) return;
+  const pairs = normalizeSetupExtraInterestPairs(setupExtraInterestPairs);
+  if (!pairs[index]) return;
+  pairs.splice(index, 1);
+  setupExtraInterestPairs = pairs;
+  markSetupDirty();
+  renderSetupExtraFacts();
+  renderSetupPreview();
+});
+
 setupReloadTargetsButton?.addEventListener("click", () => {
   void refreshSetupSnapshot("Setup targets refreshed.");
-});
-setupPreviewButton?.addEventListener("click", () => {
-  void previewSetup();
 });
 setupApplyButton?.addEventListener("click", () => {
   void applySetup();

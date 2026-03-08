@@ -733,6 +733,37 @@
         gap: 10px;
       }
 
+      .setup-fact-list {
+        display: grid;
+        gap: 8px;
+      }
+
+      .setup-fact-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+        gap: 8px;
+        align-items: end;
+      }
+
+      .setup-fact-remove {
+        min-height: 42px;
+        padding: 0 12px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.08);
+        color: var(--text);
+        font: inherit;
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        cursor: pointer;
+      }
+
+      .setup-fact-remove:hover {
+        filter: brightness(1.08);
+      }
+
       .setup-action-button {
         min-height: 40px;
         padding: 0 16px;
@@ -1098,6 +1129,26 @@
                     <input id="setup-creature-label" class="setup-input" type="text" autocomplete="off" />
                   </label>
                   <label class="setup-field">
+                    <span class="setup-label">Favorite Color</span>
+                    <input id="setup-pet-favorite-color" class="setup-input" type="text" autocomplete="off" />
+                  </label>
+                  <label class="setup-field">
+                    <span class="setup-label">Favorite Movie</span>
+                    <input id="setup-pet-favorite-movie" class="setup-input" type="text" autocomplete="off" />
+                  </label>
+                  <label class="setup-field">
+                    <span class="setup-label">Favorite Song</span>
+                    <input id="setup-pet-favorite-song" class="setup-input" type="text" autocomplete="off" />
+                  </label>
+                  <label class="setup-field">
+                    <span class="setup-label">Favorite Book</span>
+                    <input id="setup-pet-favorite-book" class="setup-input" type="text" autocomplete="off" />
+                  </label>
+                  <label class="setup-field">
+                    <span class="setup-label">Hobby</span>
+                    <input id="setup-pet-hobby" class="setup-input" type="text" autocomplete="off" />
+                  </label>
+                  <label class="setup-field">
                     <span class="setup-label">Is your pet a boy, girl, or thing?</span>
                     <select id="setup-pet-gender" class="setup-select">
                       <option value="">Pick one</option>
@@ -1129,6 +1180,12 @@
                     <input id="setup-avatar-file" class="setup-file-input" type="file" accept="image/*" />
                   </label>
                 </div>
+                <section class="setup-field">
+                  <span class="setup-label">Extra Offline Facts (Q&A)</span>
+                  <span class="setup-card-copy">Add custom facts your pet can recall offline and carry online later.</span>
+                  <div id="setup-extra-facts-list" class="setup-fact-list"></div>
+                  <button id="setup-extra-facts-add" class="setup-action-button" type="button">+ Add Fact</button>
+                </section>
                 <label class="setup-checkbox">
                   <input id="setup-seed-heartbeat" type="checkbox" />
                   <span>Create an empty `HEARTBEAT.md` file (advanced).</span>
@@ -1139,22 +1196,21 @@
             <section class="section">
               <div class="section-header">
                 <h2>Preview</h2>
-                <p>Check what will be saved before you press Save Setup.</p>
+                <p>Shows your latest generated setup content. Save Setup writes it to local files.</p>
               </div>
               <div class="setup-card">
                 <div class="setup-actions">
                   <button id="setup-reload-targets" class="setup-action-button" type="button">Reload Targets</button>
-                  <button id="setup-preview" class="setup-action-button" type="button">Preview</button>
                   <button id="setup-apply" class="setup-action-button" type="button" disabled>Save Setup</button>
                 </div>
                 <div id="setup-preview-tabs" class="preview-tab-strip"></div>
                 <div class="preview-pane">
                   <p id="setup-preview-copy" class="preview-copy">
-                    Pick a personality, then press Preview to see your pet files.
+                    Pick a personality and edit fields. Preview updates automatically.
                   </p>
                   <pre id="setup-preview-markdown" class="preview-code"></pre>
                 </div>
-                <div id="setup-result" class="result-banner">No preview yet. Press Preview to start.</div>
+                <div id="setup-result" class="result-banner">No preview yet. Edit a field or click Save Setup.</div>
               </div>
             </section>
           </section>

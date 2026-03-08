@@ -127,21 +127,30 @@ Historical v1 deliverables keep their original status wording and are not retrof
 - `accepted` is the only terminal state for future post-v1 deliverables.
 
 ### Current Workflow Snapshot
-- Current Deliverable: `13c-persona-aware-offline-dialog-and-proactive-behavior`
-- Workflow State: `iterating`
-- Current Status: `iterating`
-- Last Completed Deliverable: `13b-persona-snapshot-synthesis-and-provenance`
-- Next Detailed Target: `13c-persona-aware-offline-dialog-and-proactive-behavior`
-- Next Queued Target: `13d-online-reflection-and-runtime-sync`
+- Current Deliverable: `13d-online-reflection-and-runtime-sync`
+- Workflow State: `specifying`
+- Current Status: `specifying`
+- Last Completed Deliverable: `13c-persona-aware-offline-dialog-and-proactive-behavior`
+- Next Detailed Target: `13d-online-reflection-and-runtime-sync`
+- Next Queued Target: `14a-deliberate-roam-policy-and-monitor-avoidance`
 - Current Gate State:
-  - `Spec Gate`: `passed` (`2026-03-07`)
-  - `Build Gate`: `passed` (`2026-03-07`)
+  - `Spec Gate`: `not_started`
+  - `Build Gate`: `not_started`
   - `Acceptance Gate`: `not_started`
 - Current Session Shipped Outcome:
-  - `visible app/runtime change delivered` (`13c` iteration patch shipped from operator feedback: reduced canned repetition, improved chat-open bubble behavior, expanded offline persona-fact recall)
+  - `no visible app change` (`13c` accepted/closed from operator evidence; workflow advanced to `13d` in `specifying`)
 - Historical Note:
   - D01-D10 are complete historical v1 records.
   - Detailed v1 session history lives in `docs/plan/archive/00-progress-tracker-v1-history.md`.
+- Active `13d` specification outcome:
+  - Created `docs/plan/13d-online-reflection-and-runtime-sync.md` from template.
+  - Set workflow to `specifying` for `13d`.
+  - Locked first-pass scope around bounded online cadence (`hourly heartbeat`, `nightly digest`), log-first governance, guarded apply lane, and conflict precedence.
+  - Gate outcome:
+    - `Spec Gate` not started
+    - `Build Gate` not started
+    - `Acceptance Gate` not started
+  - Shipped outcome: no visible app change (specification progression only).
 - Active `13c` implementation outcome:
   - Created `docs/plan/13c-persona-aware-offline-dialog-and-proactive-behavior.md` from template and passed `Spec Gate`.
   - Implemented first runtime slice:
@@ -181,11 +190,81 @@ Historical v1 deliverables keep their original status wording and are not retrof
     - verification rerun remained green:
       - `npm run check:contracts`
       - `npm run check:acceptance` -> `25/25`
+  - Iteration expansion from operator feedback + implementation request:
+    - setup now captures/persists offline interest facts in managed `IDENTITY.md`:
+      - fixed favorites: `petFavoriteColor`, `petFavoriteMovie`, `petFavoriteSong`, `petFavoriteBook`
+      - `petHobby`
+      - repeatable `extraInterestPairs[]` (`question` + `answer`) rendered via add/remove rows in Setup
+      - explicit `Persona Profile` id persistence for stable offline/online continuity
+    - starter archetypes now load from validated JSON profile files:
+      - `config/persona-profiles/gentle_companion.json`
+      - `config/persona-profiles/playful_friend.json`
+      - `config/persona-profiles/bookish_helper.json`
+      - `config/persona-profiles/bright_sidekick.json`
+      - loader/validator + deterministic safe fallback: `persona-profiles.js`
+    - `persona-snapshot.js` now synthesizes/exports bounded profile+interest fields:
+      - `persona_profile_id`
+      - `pet_favorite_*`
+      - `pet_hobby`
+      - `extra_offline_facts`
+      - prioritized export ordering keeps core identity/interests ahead of lower-priority facts
+    - `offline-persona-style.js` expanded deterministic coverage/behavior:
+      - clearer four-profile offline wording lanes
+      - broader phrasing/synonym routing (`what's up`, `how you feeling`, etc.)
+      - explicit social intents (`play_invite`, `friendship`)
+      - local OS clock/timezone-aware `time_context` replies
+      - proactive opener mix alternates deterministically between `checkin` and `interest` prompts when interest data exists
+    - notification integration research captured for follow-on implementation:
+      - `docs/plan/13c-windows-notification-research-notes.md`
+      - no notification-commentary runtime behavior shipped in this `13c` patch
+    - deterministic coverage extended/aligned:
+      - `scripts/check-offline-persona-style.js`
+      - `scripts/check-persona-snapshot.js`
+      - `scripts/check-setup-bootstrap.js`
+      - `scripts/check-contract-router.js`
+      - `scripts/check-shell-observability.js`
+    - verification rerun remained green:
+      - `npm run check:syntax`
+      - `npm run check:contracts`
+      - `npm run check:acceptance` -> `25/25`
+  - Iteration patch from operator-run happy-path/failure feedback:
+    - setup UX/runtime fixes:
+      - fixed `+ Add Fact` appearing to do nothing by preserving empty draft rows in setup extra-fact rendering
+      - setup fields now trigger debounced automatic preview refresh; manual `Preview` button is optional instead of required before save
+      - `Save Setup` now auto-runs preview when stale/missing before apply, preventing blocked save flow when user forgets manual preview
+      - setup preview/status copy updated to reflect auto-preview semantics
+    - offline time/date intent robustness:
+      - expanded `offline-persona-style.js` `time_context` phrase coverage (`today's date`, `current time`, `day of week`, `date/time` variants)
+    - deterministic coverage updates:
+      - `scripts/check-offline-persona-style.js` now asserts expanded date/time phrasing classification and reply path
+    - verification rerun remained green:
+      - `npm run check:syntax`
+      - `npm run check:contracts`
+      - `npm run check:acceptance` -> `25/25`
+  - Iteration patch from additional operator runtime feedback:
+    - setup preview UX:
+      - removed explicit Setup `Preview` button from UI flow
+      - preview panel now remains visible from latest generated preview while editing
+      - `Save Setup` auto-generates/validates preview before apply when needed
+    - setup editing reliability:
+      - preserved preview state when setup form is dirty (no blank preview pane while editing)
+      - prevented extra-fact input focus loss by avoiding full extra-fact list rerender during general render cycles
+    - offline time/date response precision:
+      - `offline-persona-style.js` now classifies `time_context` subtype and renders:
+        - day questions -> weekday-only answer
+        - date questions -> month/day/year answer
+        - time questions -> clock + timezone answer
+    - deterministic coverage updates:
+      - `scripts/check-offline-persona-style.js` now asserts day/date/time subtype behavior
+    - verification rerun remained green:
+      - `npm run check:syntax`
+      - `npm run check:contracts`
+      - `npm run check:acceptance` -> `25/25`
   - Gate outcome:
     - `Spec Gate` passed on `2026-03-07`
     - `Build Gate` passed on `2026-03-07`
-    - `Acceptance Gate` not started
-  - Shipped outcome: visible app/runtime change delivered; operator demo/failure evidence capture is next to close `Acceptance Gate`.
+    - `Acceptance Gate` passed on `2026-03-08` (operator-accepted closure)
+  - Shipped outcome: visible app/runtime change delivered and accepted; `13c` is now closed and workflow moved to `13d` specification.
 - Closed `13b` implementation outcome:
   - Created `docs/plan/13b-persona-snapshot-synthesis-and-provenance.md` from template and passed `Spec Gate`.
   - Implemented first runtime slice:
@@ -468,6 +547,7 @@ Historical v1 deliverables keep their original status wording and are not retrof
   - `12e-guided-openclaw-connectivity-and-pairing` is accepted and closed (`Spec/Build/Acceptance Gates passed`; Acceptance on `2026-03-06`).
   - `13a-offline-identity-and-recent-recall` is accepted and closed (`Spec/Build/Acceptance Gates passed`; Acceptance on `2026-03-07`).
   - `13b-persona-snapshot-synthesis-and-provenance` is accepted and closed (`Spec/Build/Acceptance Gates passed`; Acceptance on `2026-03-07`).
+  - `13c-persona-aware-offline-dialog-and-proactive-behavior` is accepted and closed (`Spec/Build/Acceptance Gates passed`; Acceptance on `2026-03-08`).
   - Families `13` through `15` now use the cohesive `12c` through `15c` sequence in rough-in.
   - Family `14` decisions are locked for downstream slices:
     - `Utility scoring -> FSM arbitration -> per-state micro BT`

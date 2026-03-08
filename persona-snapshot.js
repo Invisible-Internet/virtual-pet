@@ -21,11 +21,29 @@ const PERSONA_DEGRADED_REASONS = Object.freeze({
 const REQUIRED_CANONICAL_FILES = Object.freeze(["SOUL.md", "STYLE.md", "IDENTITY.md", "USER.md"]);
 const OPTIONAL_CANONICAL_FILES = Object.freeze(["MEMORY.md"]);
 const MAX_FIELD_LIST_VALUES = 8;
+const MAX_EXTRA_OFFLINE_FACTS = 96;
 const MAX_FACTS = 12;
 const MAX_STYLE_HINTS = 6;
 const MAX_HIGHLIGHTS = 3;
 const MAX_SUMMARY_LENGTH = 220;
 const MAX_EXPORT_BYTES = 4096;
+const EXPORT_FACT_PRIORITY = Object.freeze([
+  "pet_name",
+  "persona_profile_id",
+  "pet_creature",
+  "pet_pronouns",
+  "pet_birthday",
+  "pet_hobby",
+  "pet_favorite_color",
+  "pet_favorite_movie",
+  "pet_favorite_song",
+  "pet_favorite_book",
+  "companion_name",
+  "companion_call_name",
+  "companion_timezone",
+  "tone_keywords",
+  "extra_offline_facts",
+]);
 
 function toOptionalString(value, fallback = "") {
   if (typeof value !== "string") return fallback;
@@ -184,6 +202,34 @@ function extractBulletSection(content, headingPattern) {
   return bullets;
 }
 
+function extractIdentityExtraOfflineFacts(content) {
+  const pairs = [];
+  const lines = String(content || "").split(/\r?\n/);
+  let inSection = false;
+  for (const rawLine of lines) {
+    const line = toOptionalString(rawLine, "");
+    if (!line) {
+      if (inSection && pairs.length > 0) break;
+      continue;
+    }
+    if (!inSection) {
+      if (/^##\s+extra offline facts\s*$/i.test(line)) {
+        inSection = true;
+      }
+      continue;
+    }
+    if (/^##\s+/.test(line)) break;
+    const match = line.match(/^\s*-\s*Q:\s*(.+?)\s*\|\s*A:\s*(.+)\s*$/i);
+    if (!match) continue;
+    const question = sanitizeValue(match[1]).replace(/\s+/g, " ").trim();
+    const answer = sanitizeValue(match[2]).replace(/\s+/g, " ").trim();
+    if (!question || !answer) continue;
+    pairs.push(`${question} => ${answer}`);
+    if (pairs.length >= MAX_EXTRA_OFFLINE_FACTS) break;
+  }
+  return dedupeStrings(pairs, MAX_EXTRA_OFFLINE_FACTS);
+}
+
 function buildProvenanceTag(provenance) {
   if (!provenance || typeof provenance !== "object") return "unknown";
   if (provenance.fileId && provenance.field) {
@@ -198,12 +244,12 @@ function buildProvenanceTag(provenance) {
   return "unknown";
 }
 
-function addField(fields, key, value, provenance) {
+function addField(fields, key, value, provenance, { maxListValues = MAX_FIELD_LIST_VALUES } = {}) {
   if (!fields || typeof fields !== "object") return;
   if (!key || typeof key !== "string") return;
 
   if (Array.isArray(value)) {
-    const normalizedList = dedupeStrings(value);
+    const normalizedList = dedupeStrings(value, maxListValues);
     if (normalizedList.length <= 0) return;
     fields[key] = {
       value: normalizedList,
@@ -233,6 +279,11 @@ function deriveCoreFields({ identityText, userText, styleText }) {
     fileId: "IDENTITY.md",
     field: "Name",
   });
+  addField(fields, "persona_profile_id", identityMap.get("persona profile"), {
+    sourceKind: "canonical_field",
+    fileId: "IDENTITY.md",
+    field: "Persona Profile",
+  });
   addField(fields, "pet_pronouns", identityMap.get("pronouns"), {
     sourceKind: "canonical_field",
     fileId: "IDENTITY.md",
@@ -248,6 +299,44 @@ function deriveCoreFields({ identityText, userText, styleText }) {
     fileId: "IDENTITY.md",
     field: "Creature",
   });
+  addField(fields, "pet_favorite_color", identityMap.get("favorite color"), {
+    sourceKind: "canonical_field",
+    fileId: "IDENTITY.md",
+    field: "Favorite color",
+  });
+  addField(fields, "pet_favorite_movie", identityMap.get("favorite movie"), {
+    sourceKind: "canonical_field",
+    fileId: "IDENTITY.md",
+    field: "Favorite movie",
+  });
+  addField(fields, "pet_favorite_song", identityMap.get("favorite song"), {
+    sourceKind: "canonical_field",
+    fileId: "IDENTITY.md",
+    field: "Favorite song",
+  });
+  addField(fields, "pet_favorite_book", identityMap.get("favorite book"), {
+    sourceKind: "canonical_field",
+    fileId: "IDENTITY.md",
+    field: "Favorite book",
+  });
+  addField(fields, "pet_hobby", identityMap.get("hobby"), {
+    sourceKind: "canonical_field",
+    fileId: "IDENTITY.md",
+    field: "Hobby",
+  });
+  addField(
+    fields,
+    "extra_offline_facts",
+    extractIdentityExtraOfflineFacts(identityBody || identityText),
+    {
+      sourceKind: "canonical_section",
+      fileId: "IDENTITY.md",
+      section: "Extra Offline Facts",
+    },
+    {
+      maxListValues: MAX_EXTRA_OFFLINE_FACTS,
+    }
+  );
   addField(fields, "companion_name", userMap.get("name"), {
     sourceKind: "canonical_field",
     fileId: "USER.md",
@@ -386,6 +475,20 @@ function flattenFieldValue(value) {
   return sanitizeValue(value);
 }
 
+function orderFieldKeysForExport(fieldKeys = []) {
+  const keys = Array.isArray(fieldKeys) ? fieldKeys.slice() : [];
+  return keys.sort((left, right) => {
+    const leftPriority = EXPORT_FACT_PRIORITY.indexOf(left);
+    const rightPriority = EXPORT_FACT_PRIORITY.indexOf(right);
+    if (leftPriority >= 0 && rightPriority >= 0) {
+      return leftPriority - rightPriority;
+    }
+    if (leftPriority >= 0) return -1;
+    if (rightPriority >= 0) return 1;
+    return left.localeCompare(right);
+  });
+}
+
 function buildExportSummary({ state, degradedReason, facts, styleHints, recentHighlights }) {
   if (state !== PERSONA_SNAPSHOT_STATES.ready) {
     return truncateText(`Persona context degraded (${degradedReason}).`, MAX_SUMMARY_LENGTH);
@@ -444,8 +547,7 @@ function buildPersonaExport({
           recentHighlights: [],
         };
 
-  const facts = Object.keys(normalizedSnapshot.fields || {})
-    .sort()
+  const facts = orderFieldKeysForExport(Object.keys(normalizedSnapshot.fields || {}))
     .slice(0, MAX_FACTS)
     .map((key) => {
       const field = normalizedSnapshot.fields[key] || {};
@@ -504,6 +606,7 @@ function buildPersonaExport({
 
 module.exports = {
   MAX_EXPORT_BYTES,
+  MAX_EXTRA_OFFLINE_FACTS,
   MAX_FACTS,
   MAX_HIGHLIGHTS,
   MAX_STYLE_HINTS,

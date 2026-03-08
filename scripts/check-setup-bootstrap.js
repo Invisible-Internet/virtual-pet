@@ -82,6 +82,15 @@ async function run() {
       birthday: "2026-03-04",
       companionName: "Mic",
       companionTimezone: "America/New_York",
+      petFavoriteColor: "teal",
+      petFavoriteMovie: "Kiki's Delivery Service",
+      petFavoriteSong: "Ocean Eyes",
+      petFavoriteBook: "The Hobbit",
+      petHobby: "origami",
+      extraInterestPairs: [
+        { question: "favorite snack", answer: "strawberries" },
+        { question: "dream trip", answer: "Kyoto in spring" },
+      ],
       starterNote: "Likes quiet mornings.",
       personaPresetId: "bookish_helper",
       seedHeartbeatFile: true,
@@ -122,6 +131,15 @@ async function run() {
       birthday: "2026-03-04",
       companionName: "Mic",
       companionTimezone: "America/New_York",
+      petFavoriteColor: "teal",
+      petFavoriteMovie: "Kiki's Delivery Service",
+      petFavoriteSong: "Ocean Eyes",
+      petFavoriteBook: "The Hobbit",
+      petHobby: "origami",
+      extraInterestPairs: [
+        { question: "favorite snack", answer: "strawberries" },
+        { question: "dream trip", answer: "Kyoto in spring" },
+      ],
       starterNote: "Likes quiet mornings.",
       personaPresetId: "bookish_helper",
       seedHeartbeatFile: true,
@@ -152,6 +170,15 @@ async function run() {
       companionName: "Mic",
       companionTimezone: "America/New_York",
       userGender: "boy",
+      petFavoriteColor: "gold",
+      petFavoriteMovie: "Spider-Verse",
+      petFavoriteSong: "Walking on Sunshine",
+      petFavoriteBook: "Treasure Island",
+      petHobby: "skateboarding",
+      extraInterestPairs: [
+        { question: "favorite game", answer: "Mario Kart" },
+        { question: "best weather", answer: "sunny afternoons" },
+      ],
       starterNote: "Now likes rainy afternoons.",
       personaPresetId: "bright_sidekick",
       petGender: "thing",
@@ -173,6 +200,17 @@ async function run() {
   assertEqual(updatedLocalSoul.split(MANAGED_BLOCK_START).length - 1, 1, "re-apply should keep a single managed block");
   const updatedIdentity = fs.readFileSync(path.join(localRoot, "IDENTITY.md"), "utf8");
   assert(updatedIdentity.includes("Pronouns: they/them/it"), "identity should include pet pronouns from pet gender");
+  assert(updatedIdentity.includes("Persona Profile: bright_sidekick"), "identity should persist explicit persona profile id");
+  assert(updatedIdentity.includes("Favorite color: gold"), "identity should persist favorite color");
+  assert(updatedIdentity.includes("Favorite movie: Spider-Verse"), "identity should persist favorite movie");
+  assert(updatedIdentity.includes("Favorite song: Walking on Sunshine"), "identity should persist favorite song");
+  assert(updatedIdentity.includes("Favorite book: Treasure Island"), "identity should persist favorite book");
+  assert(updatedIdentity.includes("Hobby: skateboarding"), "identity should persist hobby");
+  assert(
+    updatedIdentity.includes("## Extra Offline Facts") &&
+      updatedIdentity.includes("- Q: favorite game | A: Mario Kart"),
+    "identity should persist extra offline facts as Q/A rows"
+  );
   const updatedUser = fs.readFileSync(path.join(localRoot, "USER.md"), "utf8");
   assert(updatedUser.includes("Pronouns: he/him"), "user should include pronouns from user gender");
 
@@ -205,6 +243,36 @@ async function run() {
     recoveredDefaultsSnapshot.formDefaults.personaPresetId,
     "bright_sidekick",
     "snapshot should infer preset from recovered values"
+  );
+  assertEqual(
+    recoveredDefaultsSnapshot.formDefaults.petFavoriteColor,
+    "gold",
+    "snapshot should recover favorite color from managed identity"
+  );
+  assertEqual(
+    recoveredDefaultsSnapshot.formDefaults.petFavoriteMovie,
+    "Spider-Verse",
+    "snapshot should recover favorite movie from managed identity"
+  );
+  assertEqual(
+    recoveredDefaultsSnapshot.formDefaults.petFavoriteSong,
+    "Walking on Sunshine",
+    "snapshot should recover favorite song from managed identity"
+  );
+  assertEqual(
+    recoveredDefaultsSnapshot.formDefaults.petFavoriteBook,
+    "Treasure Island",
+    "snapshot should recover favorite book from managed identity"
+  );
+  assertEqual(
+    recoveredDefaultsSnapshot.formDefaults.petHobby,
+    "skateboarding",
+    "snapshot should recover hobby from managed identity"
+  );
+  assert(
+    Array.isArray(recoveredDefaultsSnapshot.formDefaults.extraInterestPairs) &&
+      recoveredDefaultsSnapshot.formDefaults.extraInterestPairs.length === 2,
+    "snapshot should recover extra offline fact pairs"
   );
   assertEqual(
     recoveredDefaultsSnapshot.formDefaults.userGender,

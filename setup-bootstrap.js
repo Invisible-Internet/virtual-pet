@@ -2,6 +2,10 @@
 
 const fs = require("fs");
 const path = require("path");
+const {
+  DEFAULT_PERSONA_PROFILE_ID,
+  loadPersonaProfiles,
+} = require("./persona-profiles");
 
 const SETUP_BOOTSTRAP_FILE_IDS = Object.freeze([
   "SOUL.md",
@@ -32,13 +36,21 @@ const TARGET_STATES = Object.freeze({
   disabled: "disabled",
   missingConfig: "missing_config",
 });
-const DEFAULT_PRESET_ID = "gentle_companion";
+const DEFAULT_PRESET_ID = DEFAULT_PERSONA_PROFILE_ID;
+const EXTRA_OFFLINE_FACTS_SECTION_TITLE = "Extra Offline Facts";
+const MAX_EXTRA_OFFLINE_FACTS_FOR_RUNTIME = 64;
 const DEFAULT_FORM_VALUES = Object.freeze({
   petName: "",
   birthday: "",
   companionName: "",
   companionTimezone: "",
   personaPresetId: DEFAULT_PRESET_ID,
+  petFavoriteColor: "",
+  petFavoriteMovie: "",
+  petFavoriteSong: "",
+  petFavoriteBook: "",
+  petHobby: "",
+  extraInterestPairs: Object.freeze([]),
   starterNote: "",
   userGender: "",
   companionPronouns: "",
@@ -266,6 +278,11 @@ const PRESETS = Object.freeze({
   }),
 });
 
+const PERSONA_PROFILE_REGISTRY = loadPersonaProfiles({
+  fallbackProfiles: PRESETS,
+});
+const ACTIVE_PRESETS = PERSONA_PROFILE_REGISTRY.byId;
+
 function toOptionalString(value, fallback = "") {
   if (typeof value !== "string") return fallback;
   const trimmed = value.trim();
@@ -363,15 +380,74 @@ function parseMarkdownKeyValueLines(content) {
   return map;
 }
 
+function sanitizeFactPairText(value) {
+  return toOptionalString(value, "").replace(/\|/g, "/").replace(/\s+/g, " ").trim();
+}
+
+function normalizeExtraInterestPairs(value, maxLength = Number.POSITIVE_INFINITY) {
+  const rawPairs = Array.isArray(value) ? value : [];
+  const normalized = [];
+  for (const pair of rawPairs) {
+    if (!pair || typeof pair !== "object") continue;
+    const question = sanitizeFactPairText(pair.question);
+    const answer = sanitizeFactPairText(pair.answer);
+    if (!question || !answer) continue;
+    normalized.push({
+      question,
+      answer,
+    });
+    if (normalized.length >= maxLength) break;
+  }
+  return normalized;
+}
+
+function extractExtraOfflineFacts(identityBody) {
+  const pairs = [];
+  const lines = String(identityBody || "").split(/\r?\n/);
+  let inSection = false;
+  for (const rawLine of lines) {
+    const line = toOptionalString(rawLine, "");
+    if (!line) {
+      if (inSection && pairs.length > 0) break;
+      continue;
+    }
+    if (!inSection) {
+      if (/^##\s+extra offline facts\s*$/i.test(line)) {
+        inSection = true;
+      }
+      continue;
+    }
+    if (/^##\s+/.test(line)) break;
+    const match = line.match(/^\s*-\s*Q:\s*(.+?)\s*\|\s*A:\s*(.+)\s*$/i);
+    if (!match) continue;
+    const question = sanitizeFactPairText(match[1]);
+    const answer = sanitizeFactPairText(match[2]);
+    if (!question || !answer) continue;
+    pairs.push({
+      question,
+      answer,
+    });
+  }
+  return normalizeExtraInterestPairs(pairs);
+}
+
 function inferPresetIdFromRecoveredDefaults(defaults) {
+  const explicitProfileId = toOptionalString(defaults?.personaPresetId, "");
+  if (explicitProfileId && ACTIVE_PRESETS[explicitProfileId]) {
+    return explicitProfileId;
+  }
   const signatureEmoji = toOptionalString(defaults?.signatureEmoji, "");
   if (signatureEmoji) {
-    const byEmoji = Object.values(PRESETS).find((preset) => preset.signatureEmoji === signatureEmoji);
+    const byEmoji = Object.values(ACTIVE_PRESETS).find(
+      (preset) => preset.signatureEmoji === signatureEmoji
+    );
     if (byEmoji) return byEmoji.id;
   }
   const creatureLabel = toOptionalString(defaults?.creatureLabel, "");
   if (creatureLabel) {
-    const byCreature = Object.values(PRESETS).find((preset) => preset.creatureLabel === creatureLabel);
+    const byCreature = Object.values(ACTIVE_PRESETS).find(
+      (preset) => preset.creatureLabel === creatureLabel
+    );
     if (byCreature) return byCreature.id;
   }
   return DEFAULT_PRESET_ID;
@@ -386,11 +462,18 @@ function readSetupDefaultsFromWorkspace(localRoot) {
   if (identityBody) {
     const identityMap = parseMarkdownKeyValueLines(identityBody);
     defaults.petName = sanitizeRecoveredValue(identityMap.get("name"));
+    defaults.personaPresetId = sanitizeRecoveredValue(identityMap.get("persona profile"));
     defaults.creatureLabel = sanitizeRecoveredValue(identityMap.get("creature"));
     defaults.petPronouns = sanitizeRecoveredValue(identityMap.get("pronouns"));
     defaults.signatureEmoji = sanitizeRecoveredValue(identityMap.get("emoji"));
     defaults.avatarPath = sanitizeRecoveredValue(identityMap.get("avatar"));
     defaults.birthday = sanitizeRecoveredValue(identityMap.get("birthday"));
+    defaults.petFavoriteColor = sanitizeRecoveredValue(identityMap.get("favorite color"));
+    defaults.petFavoriteMovie = sanitizeRecoveredValue(identityMap.get("favorite movie"));
+    defaults.petFavoriteSong = sanitizeRecoveredValue(identityMap.get("favorite song"));
+    defaults.petFavoriteBook = sanitizeRecoveredValue(identityMap.get("favorite book"));
+    defaults.petHobby = sanitizeRecoveredValue(identityMap.get("hobby"));
+    defaults.extraInterestPairs = extractExtraOfflineFacts(identityBody);
   }
 
   const userBody = extractManagedBlock(readFileIfReadable(path.join(root, "USER.md")));
@@ -417,11 +500,11 @@ function readSetupDefaultsFromWorkspace(localRoot) {
 }
 
 function getPreset(presetId) {
-  return PRESETS[presetId] || PRESETS[DEFAULT_PRESET_ID];
+  return ACTIVE_PRESETS[presetId] || ACTIVE_PRESETS[DEFAULT_PRESET_ID] || PRESETS[DEFAULT_PRESET_ID];
 }
 
 function buildPresetList() {
-  return Object.values(PRESETS).map((preset) => ({
+  return Object.values(ACTIVE_PRESETS).map((preset) => ({
     id: preset.id,
     label: preset.label,
     summary: preset.summary,
@@ -444,12 +527,19 @@ function normalizeInput(rawInput = {}) {
   const petPronouns = petGender
     ? pronounsFromPetGender(petGender)
     : rawPetPronouns;
+  const extraInterestPairs = normalizeExtraInterestPairs(rawInput.extraInterestPairs);
   return {
     petName: toOptionalString(rawInput.petName, ""),
     birthday: toOptionalString(rawInput.birthday, ""),
     companionName,
     companionTimezone: toOptionalString(rawInput.companionTimezone, ""),
     personaPresetId: preset.id,
+    petFavoriteColor: toOptionalString(rawInput.petFavoriteColor, ""),
+    petFavoriteMovie: toOptionalString(rawInput.petFavoriteMovie, ""),
+    petFavoriteSong: toOptionalString(rawInput.petFavoriteSong, ""),
+    petFavoriteBook: toOptionalString(rawInput.petFavoriteBook, ""),
+    petHobby: toOptionalString(rawInput.petHobby, ""),
+    extraInterestPairs,
     starterNote: toOptionalString(rawInput.starterNote, ""),
     userGender,
     companionPronouns,
@@ -663,6 +753,7 @@ function renderFiles(input) {
       fileId: "IDENTITY.md",
       body: [
         `- Name: ${normalized.petName || "{{pet_name}}"}`,
+        `- Persona Profile: ${normalized.personaPresetId}`,
         `- Creature: ${normalized.creatureLabel}`,
         `- Pronouns: ${normalized.petPronouns || "{{pet_pronouns}}"}`,
         `- Vibe: ${preset.vibe}`,
@@ -671,6 +762,18 @@ function renderFiles(input) {
         "",
         "## Known Facts",
         `- Birthday: ${normalized.birthday || "{{pet_birthday}}"}`,
+        `- Favorite color: ${normalized.petFavoriteColor || "none yet"}`,
+        `- Favorite movie: ${normalized.petFavoriteMovie || "none yet"}`,
+        `- Favorite song: ${normalized.petFavoriteSong || "none yet"}`,
+        `- Favorite book: ${normalized.petFavoriteBook || "none yet"}`,
+        `- Hobby: ${normalized.petHobby || "none yet"}`,
+        "",
+        `## ${EXTRA_OFFLINE_FACTS_SECTION_TITLE}`,
+        ...(Array.isArray(normalized.extraInterestPairs) && normalized.extraInterestPairs.length > 0
+          ? normalized.extraInterestPairs.map(
+              (pair) => `- Q: ${sanitizeFactPairText(pair.question)} | A: ${sanitizeFactPairText(pair.answer)}`
+            )
+          : ["- none yet."]),
       ].join("\n"),
     },
     {
@@ -839,9 +942,11 @@ module.exports = {
   DEFAULT_FORM_VALUES,
   MANAGED_BLOCK_END,
   MANAGED_BLOCK_START,
-  PRESETS,
+  PRESETS: ACTIVE_PRESETS,
+  PERSONA_PROFILE_WARNINGS: PERSONA_PROFILE_REGISTRY.warnings.slice(),
   SETUP_BOOTSTRAP_FILE_IDS,
   TARGET_STATES,
+  MAX_EXTRA_OFFLINE_FACTS_FOR_RUNTIME,
   buildSetupBootstrapSnapshot,
   previewSetupBootstrap,
   applySetupBootstrap,

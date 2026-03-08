@@ -386,7 +386,7 @@ function testUserMessageDialogFlow() {
         intent: "smalltalk",
         personaState: "ready",
         personaReason: "none",
-        personaMode: "gentle_helper",
+        personaMode: "gentle_companion",
       },
     }
   );
@@ -429,7 +429,7 @@ function testUserMessageDialogFlow() {
   );
   assertEqual(
     result.suggestions[0].personaMode,
-    "gentle_helper",
+    "gentle_companion",
     "user message persona mode should pass through bridge context"
   );
   assertIncludes(

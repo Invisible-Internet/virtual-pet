@@ -58,7 +58,7 @@ function run() {
         intent: "smalltalk",
         personaState: "ready",
         personaReason: "none",
-        personaMode: "gentle_helper",
+        personaMode: "gentle_companion",
         selectionHash: "abc12345",
         styleProfile: {
           warmth: "high",
