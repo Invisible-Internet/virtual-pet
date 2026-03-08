@@ -27,6 +27,12 @@ Planning status:
 - `12c-guarded-openclaw-pet-command-lane` is accepted and closed (`Spec/Build/Acceptance Gates passed`).
 - `12d-openclaw-plugin-and-skill-virtual-pet-lane` is accepted and closed (`Spec/Build/Acceptance Gates passed`).
 - `12e-guided-openclaw-connectivity-and-pairing` is accepted and closed (`Spec/Build/Acceptance Gates passed`).
+- `13a-offline-identity-and-recent-recall` is accepted and closed (`Spec/Build/Acceptance Gates passed`).
+- `13b-persona-snapshot-synthesis-and-provenance` is accepted and closed (`Spec/Build/Acceptance Gates passed`).
+- `13c-persona-aware-offline-dialog-and-proactive-behavior` is accepted and closed (`Spec/Build/Acceptance Gates passed`).
+- `13d-online-reflection-and-runtime-sync` is accepted and closed (`Spec/Build/Acceptance Gates passed`).
+- `14a-deliberate-roam-policy-and-monitor-avoidance` is now active in `specifying` (`Spec Gate` passed on `2026-03-08`; `Build/Acceptance` not started).
+- `14ab-active-window-avoidance` is queued as the immediate follow-on after `14a` with narrowed foreground-window-only scope.
 - Families `13` through `15` now use one cohesive execution sequence (`12c` through `15c`) with locked control-model decisions for family `14`.
 - All future work follows the post-v1 workflow in [`00-development-workflow.md`](./00-development-workflow.md).
 
@@ -42,8 +48,8 @@ Planning status:
 | --- | --- | --- | --- |
 | `11` | Observability / Setup / Provenance | Make the current OpenClaw, model, memory, and fallback setup visible and understandable inside the app. | `11a`/`11b`/`11c`/`11d` accepted and closed |
 | `12` | Conversation / Bridge | Make pet chat feel like real OpenClaw conversation, not narrow status/introspection. | `12a`/`12b`/`12c`/`12d`/`12e` accepted and closed |
-| `13` | Memory / Persona Continuity | Make online and offline feel like the same pet with recall and stable personality. | Rough with tightened sequencing notes (`13a` -> `13b` -> `13c`) |
-| `14` | Embodiment / Autonomy | Make the pet move and react more deliberately, unobtrusively, and believably. | Rough only |
+| `13` | Memory / Persona Continuity | Make online and offline feel like the same pet with recall and stable personality. | `13a`/`13b`/`13c`/`13d` accepted and closed |
+| `14` | Embodiment / Autonomy | Make the pet move and react more deliberately, unobtrusively, and believably. | `14a` active in `specifying`; `14ab` queued next |
 | `15` | Extension Showcase | Prove the extension system with a real add-on and a polished end-to-end flow. | Rough only |
 
 ## Cohesive Post-12b Execution Sequence (`12c`-`15c`)
@@ -55,12 +61,13 @@ Planning status:
 6. `13c-persona-aware-offline-dialog-and-proactive-behavior`
 7. `13d-online-reflection-and-runtime-sync`
 8. `14a-deliberate-roam-policy-and-monitor-avoidance`
-9. `14b-event-driven-watch-behavior`
-10. `14c-touch-and-gaze-reactions`
-11. `14d-mouse-tag-game`
-12. `15a-hero-extension-showcase-pack`
-13. `15b-extension-authoring-and-debug-visibility`
-14. `15c-extension-context-and-bridge-polish`
+9. `14ab-active-window-avoidance`
+10. `14b-event-driven-watch-behavior`
+11. `14c-touch-and-gaze-reactions`
+12. `14d-mouse-tag-game`
+13. `15a-hero-extension-showcase-pack`
+14. `15b-extension-authoring-and-debug-visibility`
+15. `15c-extension-context-and-bridge-polish`
 
 ### Cross-Family Contracts (Locked)
 - Offline mode must remain fully usable without OpenClaw connectivity.
@@ -342,6 +349,7 @@ The roam runtime works, but behavior policy still feels too repetitive and insuf
 
 ### Proposed Slices
 - `14a-deliberate-roam-policy-and-monitor-avoidance`
+- `14ab-active-window-avoidance`
 - `14b-event-driven-watch-behavior`
 - `14c-touch-and-gaze-reactions`
 - `14d-mouse-tag-game`
@@ -357,6 +365,16 @@ Improve roam behavior so the pet:
 - changes states less mechanically
 - stays unobtrusive unless something attracts it
 - temporarily avoids monitors or zones the user pushes it away from
+
+### `14ab` Tightened First-Slice Focus
+- active foreground window only
+- rectangular avoid mask + margin
+- deterministic fallback when no free roam area
+- explicit observability/degraded reasons
+- only after stability, add playful `window-edge inspect` states
+
+### `14ab` Rough Intent
+Add a narrow window-aware roam layer so the pet avoids the currently focused work window on a monitor without stalling movement, while exposing deterministic reason codes when detection is unavailable or no free roam area remains.
 
 ### `14b` Rough Intent
 Expand event-driven embodiment so media playback can drive more than music states:
@@ -469,6 +487,7 @@ These are roadmap placeholders, not final contracts.
 - Behavior stat snapshot contract (`events + time` deterministic updates).
 - Behavior decision trace contract (winner + suppressed candidates + gate reasons).
 - Utility->FSM state selection contract plus per-state micro-BT sequencing.
+- Foreground-window bounds provider contract and avoid-mask clipping semantics (queued `14ab`, Windows-first).
 - Required bespoke sprite-sheet validation policy for every new family-14 state.
 
 ### Planned for Family 15
@@ -481,7 +500,7 @@ These are roadmap placeholders, not final contracts.
 2. Read [`00-progress-tracker.md`](./00-progress-tracker.md).
 3. Read [`10-local-brain-and-personality-feasibility.md`](./10-local-brain-and-personality-feasibility.md).
 4. Use this roadmap rough-in to confirm the locked family order and assumptions.
-5. Resume from tracker/AGENTS (`13a` unless user reprioritizes).
+5. Resume from tracker/AGENTS (`14a` is the active deliverable unless reprioritized).
 6. Do not start coding on any slice until that slice passes `Spec Gate`.
 
 ## Test And Demo Anchors To Preserve
@@ -507,6 +526,7 @@ These are the minimum user-visible anchors we should remember when detailed plan
 ### Family 14
 - Deliberate roaming and unobtrusive behavior.
 - Temporary monitor avoidance after manual user correction.
+- Foreground active-window avoidance with explicit fallback when free roam area is exhausted.
 - Event-driven watching behavior.
 - Interactive touch/game behavior.
 
@@ -529,9 +549,9 @@ These are the minimum user-visible anchors we should remember when detailed plan
 - `12b-chat-shell-and-conversation-presence` is accepted and closed.
 - `12c-guarded-openclaw-pet-command-lane` is accepted and closed.
 - `12d` and `12e` are accepted and closed after `12c` acceptance.
-- `13a-offline-identity-and-recent-recall` is the next detailed target.
-- `13a` and `13b` should be specified before implementing `13c` so proactive style sits on a stable persona/read-model base.
-- `13d` follows `13c` and uses heartbeat + digest sync with log-first governance.
+- `13a` through `13d` are accepted and closed.
+- `14a-deliberate-roam-policy-and-monitor-avoidance` is the current detailed target (`specifying`, `Spec Gate` passed).
+- `14ab-active-window-avoidance` is the next queued target after `14a`.
 - Family `14` driver model is locked: utility scoring + FSM + per-state micro BT.
 - Family `14` art policy is locked: all new family-14 states require bespoke directional sheets.
 - `12` through `15` remain roadmap placeholders until slice-level deliverable files pass `Spec Gate`.

@@ -33,14 +33,14 @@ Historical v1 deliverables keep their original wording and remain archived histo
   - operator-visible demo passes and evidence is logged
 
 ## Current Deliverable
-- Current Deliverable: `none`
-- Workflow State: `queued`
-- Current Status: `queued`
+- Current Deliverable: `14a-deliberate-roam-policy-and-monitor-avoidance`
+- Workflow State: `specifying`
+- Current Status: `specifying`
 - Last Completed Deliverable: `13d-online-reflection-and-runtime-sync`
 - Next Detailed Target: `14a-deliberate-roam-policy-and-monitor-avoidance`
-- Next Queued Target: `14a-deliberate-roam-policy-and-monitor-avoidance`
+- Next Queued Target: `14ab-active-window-avoidance`
 - Current Gate State:
-  - `Spec Gate`: `not_started`
+  - `Spec Gate`: `passed` (`2026-03-08`)
   - `Build Gate`: `not_started`
   - `Acceptance Gate`: `not_started`
 
@@ -66,6 +66,8 @@ Planning state:
 - `13b-persona-snapshot-synthesis-and-provenance` is accepted and closed (`Spec/Build/Acceptance Gates passed`; Acceptance on `2026-03-07`).
 - `13c-persona-aware-offline-dialog-and-proactive-behavior` is accepted and closed (`Spec/Build/Acceptance Gates passed`; Acceptance on `2026-03-08`).
 - `13d-online-reflection-and-runtime-sync` is accepted and closed (`Spec/Build/Acceptance Gates passed`; Acceptance on `2026-03-08`).
+- `14a-deliberate-roam-policy-and-monitor-avoidance` is active in `specifying` (`Spec Gate` passed on `2026-03-08`; `Build/Acceptance` not started).
+- `14ab-active-window-avoidance` is queued as immediate follow-on after `14a` (foreground-window-only scope, fallback-first).
 - Families `13` through `15` now follow the cohesive `12c`-`15c` sequence in rough-in, with family-14 control/animation policy decisions locked.
 - Full family notes live in [`11-15-post-v1-roadmap-rough-in.md`](./11-15-post-v1-roadmap-rough-in.md).
 
@@ -78,14 +80,33 @@ Planning state:
 6. Pass `Spec Gate` before implementation begins.
 
 ## Next 3 Actions
-1. Start `14a-deliberate-roam-policy-and-monitor-avoidance` in `specifying` and lock showcase/demo/failure contracts.
-2. Pass `14a` `Spec Gate` before any implementation.
-3. Define deterministic checks + acceptance row plan for first `14a` slice.
+1. Implement first `14a` vertical slice: deterministic roam pacing + bounded monitor-avoidance memory in `main.js` via a dedicated policy helper.
+2. Add `14a` roam diagnostics visibility so operators can see active avoids, fallback reason, and re-entry eligibility.
+3. After `14a` acceptance, activate `14ab-active-window-avoidance` and pass its `Spec Gate` before beginning `14b`.
 
 ## Blockers
 - None currently.
 
 ## Last Session Summary
+- Rough-in added for post-`14a` follow-on `14ab-active-window-avoidance`:
+  - created [`14ab-active-window-avoidance.md`](./14ab-active-window-avoidance.md) as a queued deliverable after `14a`
+  - locked narrowed scope for first implementation pass:
+    - active foreground window only
+    - rectangular avoid mask + margin
+    - deterministic fallback when no free roam area
+    - explicit observability/degraded reasons
+    - defer playful `window-edge inspect` states until stability is proven
+  - tracker/roadmap/AGENTS sequencing updated so `14ab` is now the next queued target after `14a`
+  - shipped outcome note: `no visible app change` (planning/roadmap rough-in session).
+- Opened `14a-deliberate-roam-policy-and-monitor-avoidance` as the active deliverable and passed `Spec Gate`:
+  - created [`14a-deliberate-roam-policy-and-monitor-avoidance.md`](./14a-deliberate-roam-policy-and-monitor-avoidance.md) from the post-v1 template
+  - locked `14a` showcase promise, operator demo script, failure/recovery script, quick operator test card, and acceptance evidence checklist
+  - locked first-slice contracts for deterministic roam pacing, bounded monitor-avoidance memory, and explicit roam diagnostics signals
+  - gate outcome:
+    - `Spec Gate`: `passed` (`2026-03-08`)
+    - `Build Gate`: `not_started`
+    - `Acceptance Gate`: `not_started`
+  - shipped outcome note: `no visible app change` (spec-only session; implementation intentionally deferred until after spec lock).
 - Closed `13d-online-reflection-and-runtime-sync` as `accepted` after operator-confirmed pass:
   - operator confirmed happy-path and failure/recovery checks passed (`Status -> Memory Runtime` reflection flow)
   - acceptance matrix row `D13d-online-reflection-runtime-sync` passed

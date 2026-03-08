@@ -127,18 +127,18 @@ Historical v1 deliverables keep their original status wording and are not retrof
 - `accepted` is the only terminal state for future post-v1 deliverables.
 
 ### Current Workflow Snapshot
-- Current Deliverable: `none`
-- Workflow State: `queued`
-- Current Status: `queued`
+- Current Deliverable: `14a-deliberate-roam-policy-and-monitor-avoidance`
+- Workflow State: `specifying`
+- Current Status: `specifying`
 - Last Completed Deliverable: `13d-online-reflection-and-runtime-sync`
 - Next Detailed Target: `14a-deliberate-roam-policy-and-monitor-avoidance`
-- Next Queued Target: `14a-deliberate-roam-policy-and-monitor-avoidance`
+- Next Queued Target: `14ab-active-window-avoidance`
 - Current Gate State:
-  - `Spec Gate`: `not_started`
+  - `Spec Gate`: `passed` (`2026-03-08`)
   - `Build Gate`: `not_started`
   - `Acceptance Gate`: `not_started`
 - Current Session Shipped Outcome:
-  - `visible app/runtime change delivered and accepted` (`13d` reflection runtime/controller accepted; workflow queued for `14a` spec)
+  - `no visible app change` (`14ab` future-work rough-in added; roadmap/tracker sequencing updated after `14a`)
 - Historical Note:
   - D01-D10 are complete historical v1 records.
   - Detailed v1 session history lives in `docs/plan/archive/00-progress-tracker-v1-history.md`.
@@ -577,6 +577,13 @@ Historical v1 deliverables keep their original status wording and are not retrof
   - `13b-persona-snapshot-synthesis-and-provenance` is accepted and closed (`Spec/Build/Acceptance Gates passed`; Acceptance on `2026-03-07`).
   - `13c-persona-aware-offline-dialog-and-proactive-behavior` is accepted and closed (`Spec/Build/Acceptance Gates passed`; Acceptance on `2026-03-08`).
   - `13d-online-reflection-and-runtime-sync` is accepted and closed (`Spec/Build/Acceptance Gates passed`; Acceptance on `2026-03-08`).
+  - `14a-deliberate-roam-policy-and-monitor-avoidance` is active in `specifying` (`Spec Gate` passed on `2026-03-08`; Build/Acceptance not started).
+  - `14ab-active-window-avoidance` is queued as immediate follow-on after `14a` with narrowed scope:
+    - active foreground window only
+    - rectangular avoid mask + margin
+    - deterministic fallback when no free roam area
+    - explicit observability/degraded reasons
+    - defer playful `window-edge inspect` states until stability is proven
   - Families `13` through `15` now use the cohesive `12c` through `15c` sequence in rough-in.
   - Family `14` decisions are locked for downstream slices:
     - `Utility scoring -> FSM arbitration -> per-state micro BT`
