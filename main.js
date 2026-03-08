@@ -22,6 +22,7 @@ const {
   CALL_IDS: OPENCLAW_PLUGIN_SKILL_CALL_IDS,
   CONTRACT_VERSION: OPENCLAW_PLUGIN_SKILL_CONTRACT_VERSION,
   REJECT_REASONS: OPENCLAW_PLUGIN_SKILL_REJECT_REASONS,
+  RESULT_STATES: OPENCLAW_PLUGIN_SKILL_RESULT_STATES,
   STATUS_SCOPES: OPENCLAW_PLUGIN_SKILL_STATUS_SCOPES,
   VIRTUAL_PET_LANE_ACTION: OPENCLAW_PLUGIN_SKILL_ACTION_ID,
   createOpenClawPluginSkillLane,
@@ -128,6 +129,20 @@ const {
 } = require("./openclaw-pairing-guidance");
 const { buildPairingQrDataUrl } = require("./openclaw-pairing-qr");
 const { evaluateOpenClawDialogGate } = require("./openclaw-runtime-gate");
+const {
+  REFLECTION_CONTEXT_SOURCE,
+  REFLECTION_CYCLE_IDS,
+  REFLECTION_DEFAULTS,
+  REFLECTION_OUTCOMES,
+  REFLECTION_ROUTES,
+  applyRunHistoryEntries,
+  createInitialReflectionRuntimeState,
+  markCycleSuppressedInFlight,
+  markRunCompleted,
+  markRunStarted,
+  normalizeCycleId,
+  selectDueCycle,
+} = require("./online-reflection-runtime");
 
 // Master diagnostics toggle: controls console logs, file logs, and renderer overlay.
 let DIAGNOSTICS_ENABLED = false;
@@ -258,6 +273,15 @@ const PROACTIVE_CONVERSATION_CHECK_INTERVAL_MS = 2000;
 const BRIDGE_RECENT_DIALOG_TURNS_LIMIT = 6;
 const BRIDGE_RECENT_DIALOG_TEXT_LIMIT = 140;
 const BRIDGE_RECENT_DIALOG_SUMMARY_LIMIT = 360;
+const REFLECTION_SCHEDULER_TICK_MS = REFLECTION_DEFAULTS.schedulerTickMs;
+const REFLECTION_MAX_INTENTS_PER_CYCLE = REFLECTION_DEFAULTS.maxIntentsPerCycle;
+const REFLECTION_MAX_ACCEPTED_SUMMARY_CHARS = REFLECTION_DEFAULTS.maxAcceptedSummaryChars;
+const REFLECTION_LOG_OBSERVATION_TYPE = "online_reflection_run";
+const REFLECTION_HEARTBEAT_OBSERVATION_TYPE = "online_reflection_heartbeat";
+const REFLECTION_DIGEST_OBSERVATION_TYPE = "online_reflection_digest";
+const REFLECTION_ROUTER_SOURCE = "openclaw_reflection";
+const REFLECTION_RUNTIME_SCHEMA = "vp-reflection-runtime-v1";
+const REFLECTION_INTENT_SCHEMA = "vp-reflection-intent-v1";
 const OPENCLAW_PET_COMMAND_AUDIT_LIMIT = 50;
 const OPENCLAW_PLUGIN_SKILL_AUDIT_LIMIT = 50;
 const STATE_CATALOG_PATH = DEFAULT_STATE_CATALOG_PATH;
@@ -316,6 +340,7 @@ let cursorTimer = null;
 let localMediaPollTimer = null;
 let freshRssPollTimer = null;
 let proactiveConversationTimer = null;
+let reflectionSchedulerTimer = null;
 let dragClampLatch = createDragClampLatch();
 let activePetBoundsUpdatedAtMs = 0;
 let lastMotionPayload = null;
@@ -341,6 +366,7 @@ let latestPersonaSnapshot = null;
 let latestPersonaSnapshotRuntime = null;
 let latestPersonaExportSnapshot = null;
 let latestProactivePolicySnapshot = null;
+let latestReflectionRuntimeSnapshot = null;
 let latestIntegrationEvent = null;
 let stateRuntime = null;
 let latestStateSnapshot = null;
@@ -377,6 +403,15 @@ const dialogPresence = {
 let dialogUserMessageInFlightCount = 0;
 const proactiveConversationState = createInitialProactivePolicyState();
 latestProactivePolicySnapshot = buildProactivePolicySnapshot(proactiveConversationState, Date.now());
+const reflectionContextTokens = new Set();
+const reflectionRuntimeState = createInitialReflectionRuntimeState({
+  nowMs: Date.now(),
+  digestHourLocal: REFLECTION_DEFAULTS.digestHourLocal,
+  digestMinuteLocal: REFLECTION_DEFAULTS.digestMinuteLocal,
+});
+latestReflectionRuntimeSnapshot = {
+  ...reflectionRuntimeState,
+};
 
 const flingState = {
   active: false,
@@ -2722,6 +2757,29 @@ async function runObservabilityAction(actionId, subjectId) {
     };
   }
 
+  if (normalizedActionId === OBSERVABILITY_DETAIL_ACTION_IDS.runReflectionNow) {
+    const reflectionOutcome = await runReflectionCycle({
+      cycleId: REFLECTION_CYCLE_IDS.heartbeat,
+      trigger: "manual_action",
+      scheduledAtMs: Date.now(),
+      isRetry: false,
+    });
+    const refreshedSnapshot = buildCurrentObservabilitySnapshot();
+    const refreshedDetail = buildCurrentObservabilityDetail(
+      detail?.subject?.subjectId || DEFAULT_OBSERVABILITY_SUBJECT_ID,
+      refreshedSnapshot
+    );
+    return {
+      ok: true,
+      actionId: normalizedActionId,
+      subjectId: refreshedDetail?.subject?.subjectId || DEFAULT_OBSERVABILITY_SUBJECT_ID,
+      snapshot: refreshedSnapshot,
+      detail: refreshedDetail,
+      reflectionOutcome,
+      shellState: latestShellState || buildShellStateSnapshot(),
+    };
+  }
+
   if (normalizedActionId === OBSERVABILITY_DETAIL_ACTION_IDS.startPairingQr) {
     if (
       !openclawPairingGuidance ||
@@ -4980,6 +5038,7 @@ function initializeOpenClawPluginSkillLaneRuntime() {
     processCommandRequest: async (envelope, { correlationId }) =>
       executeOpenClawPetCommandRequest(envelope, correlationId),
     readStatus: async ({ scope }) => buildOpenClawPluginSkillStatusRead(scope),
+    submitMemorySyncIntent: async (intent) => submitReflectionMemorySyncIntent(intent),
     onAudit: appendOpenClawPluginSkillAudit,
   });
 }
@@ -5195,6 +5254,9 @@ function emitMemorySnapshot(snapshot) {
   }
   if (latestProactivePolicySnapshot && typeof latestProactivePolicySnapshot === "object") {
     mergedSnapshot.lastProactivePolicy = latestProactivePolicySnapshot;
+  }
+  if (latestReflectionRuntimeSnapshot && typeof latestReflectionRuntimeSnapshot === "object") {
+    mergedSnapshot.lastReflectionRuntime = latestReflectionRuntimeSnapshot;
   }
   latestMemorySnapshot = mergedSnapshot;
   emitToRenderer("pet:memory", {
@@ -5554,6 +5616,12 @@ async function initializeMemoryPipelineRuntime() {
     emitMemorySnapshot(latestMemorySnapshot);
     refreshPersonaSnapshotCache();
     emitMemorySnapshot(latestMemorySnapshot);
+    reflectionRuntimeState.runtimeState = "suppressed";
+    reflectionRuntimeState.runtimeReason = "memory_disabled";
+    reflectionRuntimeState.inFlight = null;
+    reflectionRuntimeState.retryAtMs.heartbeat = 0;
+    reflectionRuntimeState.retryAtMs.digest = 0;
+    refreshReflectionRuntimeSnapshot();
     logMemoryEvent("runtimeDisabled", latestMemorySnapshot);
     return;
   }
@@ -5586,6 +5654,7 @@ async function initializeMemoryPipelineRuntime() {
     emitMemorySnapshot(snapshot);
     refreshPersonaSnapshotCache();
     emitMemorySnapshot(snapshot);
+    await rehydrateReflectionRuntimeFromLogs("memory_runtime_start");
     logMemoryEvent("runtimeReady", snapshot);
   } catch (error) {
     console.warn(`[pet-memory] runtime initialization failed: ${error?.message || String(error)}`);
@@ -5604,6 +5673,12 @@ async function initializeMemoryPipelineRuntime() {
     emitMemorySnapshot(latestMemorySnapshot);
     refreshPersonaSnapshotCache();
     emitMemorySnapshot(latestMemorySnapshot);
+    reflectionRuntimeState.runtimeState = "degraded";
+    reflectionRuntimeState.runtimeReason = "memory_startup_failed";
+    reflectionRuntimeState.inFlight = null;
+    reflectionRuntimeState.retryAtMs.heartbeat = 0;
+    reflectionRuntimeState.retryAtMs.digest = 0;
+    refreshReflectionRuntimeSnapshot();
   }
 }
 
@@ -5686,6 +5761,713 @@ function createContractCorrelationId() {
     .toString(16)
     .padStart(6, "0");
   return `evt-${Date.now().toString(36)}-${randomPart}`;
+}
+
+function createReflectionCorrelationId(cycleId) {
+  const normalizedCycleId = normalizeCycleId(cycleId);
+  const randomPart = Math.floor(Math.random() * 0xffffff)
+    .toString(16)
+    .padStart(6, "0");
+  return `refl-${normalizedCycleId}-${Date.now().toString(36)}-${randomPart}`;
+}
+
+function createReflectionContextToken(cycleId) {
+  const normalizedCycleId = normalizeCycleId(cycleId);
+  const randomPart = Math.floor(Math.random() * 0xffffff)
+    .toString(16)
+    .padStart(6, "0");
+  return `${normalizedCycleId}-${Date.now().toString(36)}-${randomPart}`;
+}
+
+function truncateReflectionSummaryText(value, maxLength = 180) {
+  const normalized = asOptionalString(value, "") || "";
+  if (!normalized) return "";
+  const compact = normalized.replace(/\s+/g, " ");
+  if (compact.length <= maxLength) return compact;
+  return `${compact.slice(0, Math.max(1, maxLength - 3))}...`;
+}
+
+function buildReflectionRuntimeSnapshot() {
+  const nowMs = Date.now();
+  const heartbeatRun = reflectionRuntimeState.lastRuns?.heartbeat || null;
+  const digestRun = reflectionRuntimeState.lastRuns?.digest || null;
+  return {
+    schemaVersion: REFLECTION_RUNTIME_SCHEMA,
+    ts: nowMs,
+    state: asOptionalString(reflectionRuntimeState.runtimeState, "idle") || "idle",
+    reason: asOptionalString(reflectionRuntimeState.runtimeReason, "none") || "none",
+    lastRun:
+      reflectionRuntimeState.lastRun && typeof reflectionRuntimeState.lastRun === "object"
+        ? { ...reflectionRuntimeState.lastRun }
+        : null,
+    lastHeartbeatRunAtMs: Number.isFinite(Number(heartbeatRun?.completedAtMs))
+      ? Math.max(0, Math.round(Number(heartbeatRun.completedAtMs)))
+      : 0,
+    lastDigestRunAtMs: Number.isFinite(Number(digestRun?.completedAtMs))
+      ? Math.max(0, Math.round(Number(digestRun.completedAtMs)))
+      : 0,
+    nextHeartbeatAtMs: Number.isFinite(Number(reflectionRuntimeState.nextRunAtMs?.heartbeat))
+      ? Math.max(0, Math.round(Number(reflectionRuntimeState.nextRunAtMs.heartbeat)))
+      : 0,
+    nextDigestAtMs: Number.isFinite(Number(reflectionRuntimeState.nextRunAtMs?.digest))
+      ? Math.max(0, Math.round(Number(reflectionRuntimeState.nextRunAtMs.digest))
+      )
+      : 0,
+    retryHeartbeatAtMs: Number.isFinite(Number(reflectionRuntimeState.retryAtMs?.heartbeat))
+      ? Math.max(0, Math.round(Number(reflectionRuntimeState.retryAtMs.heartbeat)))
+      : 0,
+    retryDigestAtMs: Number.isFinite(Number(reflectionRuntimeState.retryAtMs?.digest))
+      ? Math.max(0, Math.round(Number(reflectionRuntimeState.retryAtMs.digest)))
+      : 0,
+    inFlight:
+      reflectionRuntimeState.inFlight && typeof reflectionRuntimeState.inFlight === "object"
+        ? { ...reflectionRuntimeState.inFlight }
+        : null,
+    rehydratedFromLogs: reflectionRuntimeState.rehydratedFromLogs === true,
+    rehydratedEntryCount: Number.isFinite(Number(reflectionRuntimeState.rehydratedEntryCount))
+      ? Math.max(0, Math.round(Number(reflectionRuntimeState.rehydratedEntryCount)))
+      : 0,
+  };
+}
+
+function refreshReflectionRuntimeSnapshot() {
+  latestReflectionRuntimeSnapshot = buildReflectionRuntimeSnapshot();
+  if (latestMemorySnapshot && typeof latestMemorySnapshot === "object") {
+    emitMemorySnapshot(latestMemorySnapshot);
+  }
+  return latestReflectionRuntimeSnapshot;
+}
+
+function getReflectionLogDirectoryPath() {
+  const snapshot =
+    latestMemorySnapshot ||
+    (memoryPipeline && typeof memoryPipeline.getSnapshot === "function"
+      ? memoryPipeline.getSnapshot()
+      : null);
+  const paths = snapshot?.paths && typeof snapshot.paths === "object" ? snapshot.paths : {};
+  const memoryDir = asOptionalString(paths.memoryDir, null);
+  if (memoryDir) return memoryDir;
+  const logsDir = asOptionalString(paths.logsDir, null);
+  if (logsDir) return logsDir;
+  return null;
+}
+
+function parseReflectionRunHistoryLine(line) {
+  if (typeof line !== "string" || line.indexOf(`| type=${REFLECTION_LOG_OBSERVATION_TYPE}`) < 0) {
+    return null;
+  }
+  const payloadMarker = "| payload=";
+  const payloadIndex = line.indexOf(payloadMarker);
+  if (payloadIndex < 0) return null;
+  const payloadText = line.slice(payloadIndex + payloadMarker.length).trim();
+  if (!payloadText) return null;
+  let payload = null;
+  try {
+    payload = JSON.parse(payloadText);
+  } catch {
+    return null;
+  }
+  if (!payload || typeof payload !== "object") return null;
+  const cycleId = normalizeCycleId(payload.cycleId || payload.kind, REFLECTION_CYCLE_IDS.heartbeat);
+  const completedAtMs = Number.isFinite(Number(payload.completedAtMs))
+    ? Math.max(0, Math.round(Number(payload.completedAtMs)))
+    : 0;
+  if (completedAtMs <= 0) return null;
+  return {
+    cycleId,
+    outcome:
+      asOptionalString(payload.outcome, REFLECTION_OUTCOMES.suppressed) ||
+      REFLECTION_OUTCOMES.suppressed,
+    reason: asOptionalString(payload.reason, "none") || "none",
+    completedAtMs,
+    startedAtMs: Number.isFinite(Number(payload.startedAtMs))
+      ? Math.max(0, Math.round(Number(payload.startedAtMs)))
+      : completedAtMs,
+    scheduledAtMs: Number.isFinite(Number(payload.scheduledAtMs))
+      ? Math.max(0, Math.round(Number(payload.scheduledAtMs)))
+      : 0,
+    acceptedIntentCount: Number.isFinite(Number(payload.acceptedIntentCount))
+      ? Math.max(0, Math.round(Number(payload.acceptedIntentCount)))
+      : 0,
+    deferredIntentCount: Number.isFinite(Number(payload.deferredIntentCount))
+      ? Math.max(0, Math.round(Number(payload.deferredIntentCount)))
+      : 0,
+    rejectedIntentCount: Number.isFinite(Number(payload.rejectedIntentCount))
+      ? Math.max(0, Math.round(Number(payload.rejectedIntentCount)))
+      : 0,
+    isRetry: payload.isRetry === true,
+  };
+}
+
+async function loadReflectionRunHistoryFromLogs({ maxEntries = 64, maxFiles = 14 } = {}) {
+  const logDir = getReflectionLogDirectoryPath();
+  if (!logDir || !fs.existsSync(logDir)) return [];
+  let entries = [];
+  try {
+    const files = (await fs.promises.readdir(logDir))
+      .filter((entry) => typeof entry === "string" && entry.toLowerCase().endsWith(".md"))
+      .sort((left, right) => right.localeCompare(left))
+      .slice(0, Math.max(1, Math.round(Number(maxFiles) || 14)));
+
+    for (const filename of files) {
+      const absolutePath = path.join(logDir, filename);
+      let text = "";
+      try {
+        text = await fs.promises.readFile(absolutePath, "utf8");
+      } catch {
+        continue;
+      }
+      const lines = text.split(/\r?\n/);
+      for (const line of lines) {
+        const parsed = parseReflectionRunHistoryLine(line);
+        if (parsed) {
+          entries.push(parsed);
+        }
+      }
+    }
+  } catch {
+    return [];
+  }
+
+  entries = entries
+    .sort((left, right) => left.completedAtMs - right.completedAtMs)
+    .slice(-Math.max(1, Math.round(Number(maxEntries) || 64)));
+  return entries;
+}
+
+async function rehydrateReflectionRuntimeFromLogs(trigger = "startup") {
+  const history = await loadReflectionRunHistoryFromLogs();
+  applyRunHistoryEntries(reflectionRuntimeState, history, Date.now());
+  reflectionRuntimeState.runtimeReason =
+    history.length > 0 ? `${trigger}_rehydrated` : `${trigger}_no_history`;
+  refreshReflectionRuntimeSnapshot();
+  return {
+    ok: true,
+    historyCount: history.length,
+  };
+}
+
+function getReflectionRouteForCycle(cycleId) {
+  const normalizedCycleId = normalizeCycleId(cycleId);
+  return normalizedCycleId === REFLECTION_CYCLE_IDS.digest
+    ? REFLECTION_ROUTES.digest
+    : REFLECTION_ROUTES.heartbeat;
+}
+
+function getReflectionObservationTypeForCycle(cycleId) {
+  const normalizedCycleId = normalizeCycleId(cycleId);
+  return normalizedCycleId === REFLECTION_CYCLE_IDS.digest
+    ? REFLECTION_DIGEST_OBSERVATION_TYPE
+    : REFLECTION_HEARTBEAT_OBSERVATION_TYPE;
+}
+
+function buildReflectionRequestPrompt(cycleId) {
+  const normalizedCycleId = normalizeCycleId(cycleId);
+  if (normalizedCycleId === REFLECTION_CYCLE_IDS.digest) {
+    return (
+      "Generate bounded nightly memory summary intents from current derived context. " +
+      "Use virtual_pet.memory.sync_intent only, keep summaries concise, and avoid direct identity mutation requests."
+    );
+  }
+  return (
+    "Generate bounded hourly reflection intents from current derived context. " +
+    "Use virtual_pet.memory.sync_intent only, keep summaries concise, and avoid direct identity mutation requests."
+  );
+}
+
+function buildReflectionRequestContext(cycleId) {
+  const personaContext = refreshPersonaSnapshotCache({
+    recordExportMode: "online_reflection",
+  });
+  const memorySnapshot =
+    latestMemorySnapshot ||
+    (memoryPipeline && typeof memoryPipeline.getSnapshot === "function"
+      ? memoryPipeline.getSnapshot()
+      : null) ||
+    {};
+  const stateSummary = summarizeDialogStateContext();
+  const memorySummary = [
+    `adapter=${asOptionalString(memorySnapshot?.activeAdapterMode, "unknown") || "unknown"}`,
+    `fallback=${asOptionalString(memorySnapshot?.fallbackReason, "none") || "none"}`,
+    `openclaw=${buildRuntimeSettingsSummary()?.openclaw?.enabled ? "enabled" : "disabled"}`,
+  ].join(" ");
+
+  if (latestMemorySnapshot && typeof latestMemorySnapshot === "object") {
+    emitMemorySnapshot(latestMemorySnapshot);
+  }
+
+  return {
+    currentState: deriveBridgeCurrentState(),
+    stateContextSummary: truncateBridgeDialogText(`${stateSummary} | ${memorySummary}`, 320),
+    activePropsSummary: truncateBridgeDialogText(buildActivePropsSummary(), 180),
+    extensionContextSummary: truncateBridgeDialogText(buildExtensionContextSummary(), 180),
+    recentDialogSummary: "",
+    recentDialogTurns: [],
+    personaExport: personaContext.personaExport,
+    source: deriveContractSource(),
+    reflectionCycle: normalizeCycleId(cycleId),
+  };
+}
+
+function isReflectionRetryEligibleReason(reason) {
+  const normalized = asOptionalString(reason, "unknown") || "unknown";
+  return (
+    normalized === "bridge_timeout" ||
+    normalized === "bridge_unavailable" ||
+    normalized === "bridge_auth_required" ||
+    normalized === "bridge_non_loopback_disabled" ||
+    normalized === "bridge_config_invalid"
+  );
+}
+
+async function recordReflectionRunObservation(entry = {}) {
+  if (!memoryPipeline || typeof memoryPipeline.recordObservation !== "function") {
+    return {
+      ok: false,
+      error: "memory_pipeline_unavailable",
+    };
+  }
+  const nowMs = Date.now();
+  const cycleId = normalizeCycleId(entry.cycleId);
+  const outcome = asOptionalString(entry.outcome, REFLECTION_OUTCOMES.suppressed) || REFLECTION_OUTCOMES.suppressed;
+  const reason = asOptionalString(entry.reason, "none") || "none";
+  const observation = {
+    observationType: REFLECTION_LOG_OBSERVATION_TYPE,
+    source: REFLECTION_ROUTER_SOURCE,
+    correlationId: asOptionalString(entry.correlationId, "n/a") || "n/a",
+    evidenceTag: `${cycleId}:${outcome}`.slice(0, 64),
+    payload: {
+      schemaVersion: REFLECTION_RUNTIME_SCHEMA,
+      cycleId,
+      outcome,
+      reason,
+      trigger: asOptionalString(entry.trigger, "schedule") || "schedule",
+      route: asOptionalString(entry.route, getReflectionRouteForCycle(cycleId)) || getReflectionRouteForCycle(cycleId),
+      startedAtMs: Number.isFinite(Number(entry.startedAtMs))
+        ? Math.max(0, Math.round(Number(entry.startedAtMs)))
+        : nowMs,
+      completedAtMs: Number.isFinite(Number(entry.completedAtMs))
+        ? Math.max(0, Math.round(Number(entry.completedAtMs)))
+        : nowMs,
+      scheduledAtMs: Number.isFinite(Number(entry.scheduledAtMs))
+        ? Math.max(0, Math.round(Number(entry.scheduledAtMs)))
+        : 0,
+      acceptedIntentCount: Number.isFinite(Number(entry.acceptedIntentCount))
+        ? Math.max(0, Math.round(Number(entry.acceptedIntentCount)))
+        : 0,
+      deferredIntentCount: Number.isFinite(Number(entry.deferredIntentCount))
+        ? Math.max(0, Math.round(Number(entry.deferredIntentCount)))
+        : 0,
+      rejectedIntentCount: Number.isFinite(Number(entry.rejectedIntentCount))
+        ? Math.max(0, Math.round(Number(entry.rejectedIntentCount)))
+        : 0,
+      proposedActionCount: Number.isFinite(Number(entry.proposedActionCount))
+        ? Math.max(0, Math.round(Number(entry.proposedActionCount)))
+        : 0,
+      isRetry: entry.isRetry === true,
+      summary: truncateReflectionSummaryText(entry.summary, 180),
+      retryEligible: entry.retryEligible === true,
+    },
+  };
+  return memoryPipeline.recordObservation(observation);
+}
+
+function isReflectionIntentConflict({ summary = "", context = {} } = {}) {
+  const normalizedSummary = asOptionalString(summary, "")?.toLowerCase() || "";
+  const targetSection = asOptionalString(context?.targetSection, "");
+  if (targetSection) return true;
+  if (context?.mutationRequested === true) return true;
+  if (context?.requestType === "identity_mutation") return true;
+  if (
+    normalizedSummary.includes("immutable core") ||
+    normalizedSummary.includes("identity.md") ||
+    normalizedSummary.includes("soul.md")
+  ) {
+    return true;
+  }
+  return false;
+}
+
+function getExpectedReflectionIntentType(cycleId) {
+  const normalizedCycleId = normalizeCycleId(cycleId, REFLECTION_CYCLE_IDS.heartbeat);
+  return normalizedCycleId === REFLECTION_CYCLE_IDS.digest
+    ? "memory_summary_request"
+    : "memory_reflection_request";
+}
+
+function isReflectionIntentTypeAllowedForCycle(cycleId, intentType) {
+  const expectedIntentType = getExpectedReflectionIntentType(cycleId);
+  const normalizedIntentType =
+    asOptionalString(intentType, expectedIntentType) || expectedIntentType;
+  return normalizedIntentType === expectedIntentType;
+}
+
+async function submitReflectionMemorySyncIntent(intent = {}) {
+  const context = intent?.context && typeof intent.context === "object" ? intent.context : {};
+  const contextSource = asOptionalString(context.source, "") || "";
+  const reflectionToken = asOptionalString(context.reflectionToken, null);
+  if (
+    contextSource !== REFLECTION_CONTEXT_SOURCE ||
+    !reflectionToken ||
+    !reflectionContextTokens.has(reflectionToken)
+  ) {
+    return {
+      result: OPENCLAW_PLUGIN_SKILL_RESULT_STATES.deferred,
+      reason: "memory_sync_reflection_only",
+    };
+  }
+
+  if (!memoryPipeline || typeof memoryPipeline.recordObservation !== "function") {
+    return {
+      result: OPENCLAW_PLUGIN_SKILL_RESULT_STATES.deferred,
+      reason: "memory_pipeline_unavailable",
+    };
+  }
+
+  const cycleId = normalizeCycleId(context.reflectionCycleId, REFLECTION_CYCLE_IDS.heartbeat);
+  const expectedIntentType = getExpectedReflectionIntentType(cycleId);
+  const intentType =
+    asOptionalString(intent.intentType, expectedIntentType) || expectedIntentType;
+  if (!isReflectionIntentTypeAllowedForCycle(cycleId, intentType)) {
+    return {
+      result: OPENCLAW_PLUGIN_SKILL_RESULT_STATES.rejected,
+      reason: "reflection_intent_type_mismatch",
+      cycleId,
+      intentType,
+      expectedIntentType,
+    };
+  }
+  const summary = asOptionalString(intent.summary, "") || "";
+  if (isReflectionIntentConflict({ summary, context })) {
+    return {
+      result: OPENCLAW_PLUGIN_SKILL_RESULT_STATES.rejected,
+      reason: "local_guard_conflict",
+      cycleId,
+      intentType,
+    };
+  }
+
+  const observationType = getReflectionObservationTypeForCycle(cycleId);
+  const observationOutcome = await memoryPipeline.recordObservation({
+    observationType,
+    source: REFLECTION_ROUTER_SOURCE,
+    correlationId: asOptionalString(intent.correlationId, "n/a") || "n/a",
+    evidenceTag: `${cycleId}:${intentType}`.slice(0, 64),
+    payload: {
+      schemaVersion: REFLECTION_INTENT_SCHEMA,
+      cycleId,
+      intentId: asOptionalString(intent.intentId, "intent-unknown") || "intent-unknown",
+      intentType,
+      summary: truncateReflectionSummaryText(summary, 240),
+      trigger: asOptionalString(context.reflectionTrigger, "schedule") || "schedule",
+    },
+  });
+  if (!observationOutcome?.ok) {
+    return {
+      result: OPENCLAW_PLUGIN_SKILL_RESULT_STATES.deferred,
+      reason: asOptionalString(observationOutcome?.error, "memory_observation_failed") || "memory_observation_failed",
+      cycleId,
+      intentType,
+    };
+  }
+
+  let promotionOutcome = null;
+  if (
+    intentType === "memory_summary_request" &&
+    typeof memoryPipeline.evaluatePromotionCandidate === "function"
+  ) {
+    promotionOutcome = await memoryPipeline.evaluatePromotionCandidate({
+      candidateType: "online_reflection_summary",
+      focusObservationType: observationType,
+    });
+  }
+
+  refreshPersonaSnapshotCache({
+    recordExportMode: "online_reflection",
+  });
+  refreshReflectionRuntimeSnapshot();
+
+  return {
+    result: OPENCLAW_PLUGIN_SKILL_RESULT_STATES.accepted,
+    reason: "reflection_intent_applied",
+    cycleId,
+    intentType,
+    observationPath: observationOutcome?.targetPath || null,
+    promotionDecisionId: promotionOutcome?.decision?.decisionId || null,
+  };
+}
+
+function buildReflectionLaneCall(callPayload = {}, cycleId, trigger, reflectionToken) {
+  const payload = callPayload && typeof callPayload === "object" ? callPayload : {};
+  const innerPayload = payload.payload && typeof payload.payload === "object" ? payload.payload : {};
+  const innerContext =
+    innerPayload.context && typeof innerPayload.context === "object" ? innerPayload.context : {};
+  return {
+    contractVersion:
+      asOptionalString(payload.contractVersion, OPENCLAW_PLUGIN_SKILL_CONTRACT_VERSION) ||
+      OPENCLAW_PLUGIN_SKILL_CONTRACT_VERSION,
+    call: asOptionalString(payload.call, OPENCLAW_PLUGIN_SKILL_CALL_IDS.memorySyncIntent),
+    correlationId: asOptionalString(payload.correlationId, createContractCorrelationId()) || createContractCorrelationId(),
+    payload: {
+      ...innerPayload,
+      context: {
+        ...innerContext,
+        source: REFLECTION_CONTEXT_SOURCE,
+        reflectionToken,
+        reflectionCycleId: normalizeCycleId(cycleId),
+        reflectionTrigger: asOptionalString(trigger, "schedule") || "schedule",
+      },
+    },
+  };
+}
+
+async function runReflectionCycle({
+  cycleId,
+  trigger = "schedule",
+  scheduledAtMs = 0,
+  isRetry = false,
+} = {}) {
+  const normalizedCycleId = normalizeCycleId(cycleId);
+  const nowMs = Date.now();
+  if (reflectionRuntimeState.inFlight) {
+    const suppressedAtMs = Date.now();
+    const suppressedEntry = {
+      cycleId: normalizedCycleId,
+      outcome: REFLECTION_OUTCOMES.suppressed,
+      reason: "suppressed_in_flight",
+      trigger,
+      route: getReflectionRouteForCycle(normalizedCycleId),
+      correlationId: createReflectionCorrelationId(normalizedCycleId),
+      startedAtMs: suppressedAtMs,
+      completedAtMs: suppressedAtMs,
+      scheduledAtMs: Number.isFinite(Number(scheduledAtMs))
+        ? Math.max(0, Math.round(Number(scheduledAtMs)))
+        : 0,
+      acceptedIntentCount: 0,
+      deferredIntentCount: 0,
+      rejectedIntentCount: 0,
+      proposedActionCount: 0,
+      isRetry: Boolean(isRetry),
+      retryEligible: false,
+      summary: "",
+    };
+    await recordReflectionRunObservation(suppressedEntry);
+    return {
+      ok: false,
+      ...suppressedEntry,
+    };
+  }
+  const correlationId = createReflectionCorrelationId(normalizedCycleId);
+  const route = getReflectionRouteForCycle(normalizedCycleId);
+
+  markRunStarted(reflectionRuntimeState, {
+    cycleId: normalizedCycleId,
+    nowMs,
+    correlationId,
+    isRetry: Boolean(isRetry),
+  });
+  refreshReflectionRuntimeSnapshot();
+
+  let outcome = REFLECTION_OUTCOMES.suppressed;
+  let reason = "unknown";
+  let retryEligible = false;
+  let acceptedIntentCount = 0;
+  let deferredIntentCount = 0;
+  let rejectedIntentCount = 0;
+  let proposedActionCount = 0;
+  let responseSummary = "";
+
+  try {
+    const settingsSummary = buildRuntimeSettingsSummary();
+    if (!settingsSummary?.openclaw?.enabled) {
+      outcome = REFLECTION_OUTCOMES.suppressed;
+      reason = "openclaw_disabled";
+    } else if (!memoryPipeline) {
+      outcome = REFLECTION_OUTCOMES.suppressed;
+      reason = "memory_pipeline_unavailable";
+    } else if (!openclawBridge || typeof openclawBridge.sendDialog !== "function") {
+      outcome = REFLECTION_OUTCOMES.failed;
+      reason = "bridge_unavailable_runtime";
+      retryEligible = true;
+    } else {
+      const bridgeResult = await requestWithTimeout(
+        openclawBridge.sendDialog({
+          correlationId,
+          route,
+          promptText: buildReflectionRequestPrompt(normalizedCycleId),
+          context: buildReflectionRequestContext(normalizedCycleId),
+        }),
+        getBridgeRequestTimeoutMs()
+      );
+      const responseText = asOptionalString(bridgeResult?.response?.text, "");
+      responseSummary = truncateReflectionSummaryText(responseText, 180);
+      const proposedActions = Array.isArray(bridgeResult?.response?.proposedActions)
+        ? bridgeResult.response.proposedActions
+        : [];
+      proposedActionCount = proposedActions.length;
+      const laneCalls = extractVirtualPetLaneCallPayloads(proposedActions);
+      const reflectionToken = createReflectionContextToken(normalizedCycleId);
+      reflectionContextTokens.add(reflectionToken);
+      let acceptedSummaryChars = 0;
+      try {
+        for (const callPayload of laneCalls) {
+          if (acceptedIntentCount >= REFLECTION_MAX_INTENTS_PER_CYCLE) {
+            rejectedIntentCount += 1;
+            continue;
+          }
+          if (
+            asOptionalString(callPayload?.call, "") !==
+            OPENCLAW_PLUGIN_SKILL_CALL_IDS.memorySyncIntent
+          ) {
+            rejectedIntentCount += 1;
+            continue;
+          }
+          const expectedIntentType = getExpectedReflectionIntentType(normalizedCycleId);
+          const laneIntentType =
+            asOptionalString(callPayload?.payload?.intentType, expectedIntentType) ||
+            expectedIntentType;
+          if (!isReflectionIntentTypeAllowedForCycle(normalizedCycleId, laneIntentType)) {
+            rejectedIntentCount += 1;
+            continue;
+          }
+          const summaryText = asOptionalString(callPayload?.payload?.summary, "") || "";
+          if (acceptedSummaryChars + summaryText.length > REFLECTION_MAX_ACCEPTED_SUMMARY_CHARS) {
+            rejectedIntentCount += 1;
+            continue;
+          }
+          const laneOutcome = await executeOpenClawPluginSkillLaneCall(
+            buildReflectionLaneCall(callPayload, normalizedCycleId, trigger, reflectionToken),
+            correlationId
+          );
+          if (laneOutcome?.result === OPENCLAW_PLUGIN_SKILL_RESULT_STATES.accepted) {
+            acceptedIntentCount += 1;
+            acceptedSummaryChars += summaryText.length;
+          } else if (laneOutcome?.result === OPENCLAW_PLUGIN_SKILL_RESULT_STATES.deferred) {
+            deferredIntentCount += 1;
+          } else {
+            rejectedIntentCount += 1;
+          }
+        }
+      } finally {
+        reflectionContextTokens.delete(reflectionToken);
+      }
+      outcome = REFLECTION_OUTCOMES.success;
+      reason = "request_success";
+    }
+  } catch (error) {
+    outcome = REFLECTION_OUTCOMES.failed;
+    reason = asOptionalString(error?.code, "bridge_unavailable") || "bridge_unavailable";
+    retryEligible = isReflectionRetryEligibleReason(reason);
+  }
+
+  const completedAtMs = Date.now();
+  markRunCompleted(reflectionRuntimeState, {
+    cycleId: normalizedCycleId,
+    outcome,
+    reason,
+    nowMs: completedAtMs,
+    startedAtMs: nowMs,
+    scheduledAtMs: Number.isFinite(Number(scheduledAtMs))
+      ? Math.max(0, Math.round(Number(scheduledAtMs)))
+      : 0,
+    acceptedIntentCount,
+    deferredIntentCount,
+    rejectedIntentCount,
+    isRetry: Boolean(isRetry),
+    retryEligible,
+  });
+  refreshReflectionRuntimeSnapshot();
+
+  const runEntry = {
+    cycleId: normalizedCycleId,
+    outcome,
+    reason,
+    trigger,
+    route,
+    correlationId,
+    startedAtMs: nowMs,
+    completedAtMs,
+    scheduledAtMs: Number.isFinite(Number(scheduledAtMs))
+      ? Math.max(0, Math.round(Number(scheduledAtMs)))
+      : 0,
+    acceptedIntentCount,
+    deferredIntentCount,
+    rejectedIntentCount,
+    proposedActionCount,
+    isRetry: Boolean(isRetry),
+    retryEligible,
+    summary: responseSummary,
+  };
+  await recordReflectionRunObservation(runEntry);
+  refreshReflectionRuntimeSnapshot();
+  return {
+    ok: outcome === REFLECTION_OUTCOMES.success,
+    ...runEntry,
+  };
+}
+
+async function runReflectionSchedulerTick(trigger = "interval") {
+  const nowMs = Date.now();
+  const due = selectDueCycle(reflectionRuntimeState, nowMs);
+  if (!due) return null;
+
+  if (reflectionRuntimeState.inFlight) {
+    const cycleId = normalizeCycleId(due.cycleId);
+    markCycleSuppressedInFlight(reflectionRuntimeState, {
+      cycleId,
+      nowMs,
+      reason: "suppressed_in_flight",
+    });
+    refreshReflectionRuntimeSnapshot();
+    await recordReflectionRunObservation({
+      cycleId,
+      outcome: REFLECTION_OUTCOMES.suppressed,
+      reason: "suppressed_in_flight",
+      trigger,
+      route: getReflectionRouteForCycle(cycleId),
+      correlationId: createReflectionCorrelationId(cycleId),
+      startedAtMs: nowMs,
+      completedAtMs: nowMs,
+      scheduledAtMs: due.dueAtMs,
+      acceptedIntentCount: 0,
+      deferredIntentCount: 0,
+      rejectedIntentCount: 0,
+      proposedActionCount: 0,
+      isRetry: due.isRetry === true,
+      retryEligible: false,
+    });
+    refreshReflectionRuntimeSnapshot();
+    return {
+      ok: false,
+      cycleId,
+      outcome: REFLECTION_OUTCOMES.suppressed,
+      reason: "suppressed_in_flight",
+      trigger,
+    };
+  }
+
+  return runReflectionCycle({
+    cycleId: due.cycleId,
+    trigger,
+    scheduledAtMs: due.dueAtMs,
+    isRetry: due.isRetry === true,
+  });
+}
+
+function startReflectionScheduler() {
+  if (reflectionSchedulerTimer) {
+    clearInterval(reflectionSchedulerTimer);
+    reflectionSchedulerTimer = null;
+  }
+  refreshReflectionRuntimeSnapshot();
+  void runReflectionSchedulerTick("startup").catch((error) => {
+    console.warn(`[pet-reflection] startup tick failed: ${error?.message || String(error)}`);
+  });
+  reflectionSchedulerTimer = setInterval(() => {
+    void runReflectionSchedulerTick("interval").catch((error) => {
+      console.warn(`[pet-reflection] interval tick failed: ${error?.message || String(error)}`);
+    });
+  }, REFLECTION_SCHEDULER_TICK_MS);
 }
 
 function normalizeUserCommandForBridge(payload) {
@@ -8290,6 +9072,7 @@ app.whenReady().then(async () => {
   cursorTimer = setInterval(emitCursorState, CURSOR_EMIT_INTERVAL_MS);
   initializeExtensionPackRuntime();
   initializeOpenClawBridgeRuntime();
+  startReflectionScheduler();
   initializeCapabilityRegistry();
   await startCapabilityRegistry();
   startLocalMediaPoller();
@@ -8347,6 +9130,10 @@ app.on("before-quit", () => {
   if (freshRssPollTimer) {
     clearInterval(freshRssPollTimer);
     freshRssPollTimer = null;
+  }
+  if (reflectionSchedulerTimer) {
+    clearInterval(reflectionSchedulerTimer);
+    reflectionSchedulerTimer = null;
   }
   if (shellTray) {
     shellTray.destroy();

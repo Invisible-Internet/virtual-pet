@@ -154,6 +154,13 @@ const CASES = Object.freeze([
     script: "scripts/check-persona-offline-proactive.js",
   },
   {
+    id: "D13d-online-reflection-runtime-sync",
+    deliverable: "13d-online-reflection-and-runtime-sync",
+    scenario:
+      "Reflection cadence, reflection-only intent gating, guarded apply caps, and memory-runtime observability remain deterministic.",
+    script: "scripts/check-online-reflection-runtime.js",
+  },
+  {
     id: "Layout-assets",
     deliverable: "core-renderer-assets",
     scenario: "Layout bounds and required sprite assets remain internally consistent.",

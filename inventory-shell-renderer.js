@@ -30,6 +30,7 @@ const OBSERVABILITY_ACTION_IDS = Object.freeze({
   copyPairingCode: "copy_pairing_code",
   retryPairing: "retry_pairing",
   runPairingProbe: "run_pairing_probe",
+  runReflectionNow: "run_reflection_now",
   copyPath: "copy_path",
   copyDetails: "copy_details",
 });
@@ -1449,6 +1450,11 @@ async function runObservabilityDetailAction(actionId) {
       const overallState = formatText(result?.pairingProbe?.overallState, "unknown");
       const tone = overallState === "ready" ? "ok" : overallState === "disabled" ? "muted" : "warning";
       setStatus(`Pairing probe result: ${formatReason(overallState)}.`, tone);
+    } else if (result.actionId === OBSERVABILITY_ACTION_IDS.runReflectionNow) {
+      const outcome = formatText(result?.reflectionOutcome?.outcome, "unknown");
+      const reason = formatReason(result?.reflectionOutcome?.reason || "none");
+      const tone = outcome === "success" ? "ok" : outcome === "suppressed" ? "muted" : "warning";
+      setStatus(`Reflection run result: ${formatReason(outcome)} (${reason}).`, tone);
     } else {
       setStatus("Status refreshed.", "ok");
     }

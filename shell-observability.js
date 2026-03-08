@@ -36,6 +36,7 @@ const OBSERVABILITY_DETAIL_ACTION_IDS = Object.freeze({
   copyPairingCode: "copy_pairing_code",
   retryPairing: "retry_pairing",
   runPairingProbe: "run_pairing_probe",
+  runReflectionNow: "run_reflection_now",
   copyPath: "copy_path",
   copyDetails: "copy_details",
 });
@@ -438,6 +439,69 @@ function normalizeProactivePolicy(value) {
   };
 }
 
+function normalizeReflectionRuntime(value) {
+  if (!value || typeof value !== "object") return null;
+  const lastRunRaw = value.lastRun && typeof value.lastRun === "object" ? value.lastRun : null;
+  const lastRun = lastRunRaw
+    ? {
+        cycleId: toOptionalString(lastRunRaw.cycleId, "heartbeat"),
+        outcome: toOptionalString(lastRunRaw.outcome, "suppressed"),
+        reason: toOptionalString(lastRunRaw.reason, "none"),
+        startedAtMs: Number.isFinite(Number(lastRunRaw.startedAtMs))
+          ? Math.max(0, Math.round(Number(lastRunRaw.startedAtMs)))
+          : 0,
+        completedAtMs: Number.isFinite(Number(lastRunRaw.completedAtMs))
+          ? Math.max(0, Math.round(Number(lastRunRaw.completedAtMs)))
+          : 0,
+        scheduledAtMs: Number.isFinite(Number(lastRunRaw.scheduledAtMs))
+          ? Math.max(0, Math.round(Number(lastRunRaw.scheduledAtMs)))
+          : 0,
+        acceptedIntentCount: Number.isFinite(Number(lastRunRaw.acceptedIntentCount))
+          ? Math.max(0, Math.round(Number(lastRunRaw.acceptedIntentCount)))
+          : 0,
+        deferredIntentCount: Number.isFinite(Number(lastRunRaw.deferredIntentCount))
+          ? Math.max(0, Math.round(Number(lastRunRaw.deferredIntentCount)))
+          : 0,
+        rejectedIntentCount: Number.isFinite(Number(lastRunRaw.rejectedIntentCount))
+          ? Math.max(0, Math.round(Number(lastRunRaw.rejectedIntentCount)))
+          : 0,
+        isRetry: lastRunRaw.isRetry === true,
+      }
+    : null;
+  return {
+    ts: Number.isFinite(Number(value.ts)) ? Math.max(0, Math.round(Number(value.ts))) : 0,
+    state: toOptionalString(value.state, "idle"),
+    reason: toOptionalString(value.reason, "none"),
+    nextHeartbeatAtMs: Number.isFinite(Number(value.nextHeartbeatAtMs))
+      ? Math.max(0, Math.round(Number(value.nextHeartbeatAtMs)))
+      : 0,
+    nextDigestAtMs: Number.isFinite(Number(value.nextDigestAtMs))
+      ? Math.max(0, Math.round(Number(value.nextDigestAtMs)))
+      : 0,
+    retryHeartbeatAtMs: Number.isFinite(Number(value.retryHeartbeatAtMs))
+      ? Math.max(0, Math.round(Number(value.retryHeartbeatAtMs)))
+      : 0,
+    retryDigestAtMs: Number.isFinite(Number(value.retryDigestAtMs))
+      ? Math.max(0, Math.round(Number(value.retryDigestAtMs)))
+      : 0,
+    inFlightCycleId: toOptionalString(value?.inFlight?.cycleId, null),
+    inFlightStartedAtMs: Number.isFinite(Number(value?.inFlight?.startedAtMs))
+      ? Math.max(0, Math.round(Number(value.inFlight.startedAtMs)))
+      : 0,
+    lastHeartbeatRunAtMs: Number.isFinite(Number(value.lastHeartbeatRunAtMs))
+      ? Math.max(0, Math.round(Number(value.lastHeartbeatRunAtMs)))
+      : 0,
+    lastDigestRunAtMs: Number.isFinite(Number(value.lastDigestRunAtMs))
+      ? Math.max(0, Math.round(Number(value.lastDigestRunAtMs)))
+      : 0,
+    rehydratedFromLogs: value.rehydratedFromLogs === true,
+    rehydratedEntryCount: Number.isFinite(Number(value.rehydratedEntryCount))
+      ? Math.max(0, Math.round(Number(value.rehydratedEntryCount)))
+      : 0,
+    lastRun,
+  };
+}
+
 function normalizePersonaSnapshot(value) {
   if (!value || typeof value !== "object") return null;
   const schemaVersion = toOptionalString(value.schemaVersion, null);
@@ -515,6 +579,7 @@ function buildMemoryRow({ settingsSummary, memorySnapshot }) {
   const lastPersonaSnapshot = normalizePersonaSnapshot(memorySnapshot?.lastPersonaSnapshot);
   const lastPersonaExport = normalizePersonaExport(memorySnapshot?.lastPersonaExport);
   const lastProactivePolicy = normalizeProactivePolicy(memorySnapshot?.lastProactivePolicy);
+  const lastReflectionRuntime = normalizeReflectionRuntime(memorySnapshot?.lastReflectionRuntime);
   const personaSnapshotDegraded =
     lastPersonaSnapshot && toOptionalString(lastPersonaSnapshot.state, "degraded") !== "ready";
   const personaSnapshotReason =
@@ -532,6 +597,7 @@ function buildMemoryRow({ settingsSummary, memorySnapshot }) {
       lastPersonaSnapshot,
       lastPersonaExport,
       lastProactivePolicy,
+      lastReflectionRuntime,
     };
   }
   if (fallbackReason !== "none" || activeAdapterMode !== requestedAdapterMode) {
@@ -547,6 +613,7 @@ function buildMemoryRow({ settingsSummary, memorySnapshot }) {
       lastPersonaSnapshot,
       lastPersonaExport,
       lastProactivePolicy,
+      lastReflectionRuntime,
     };
   }
   if (personaSnapshotDegraded) {
@@ -562,6 +629,7 @@ function buildMemoryRow({ settingsSummary, memorySnapshot }) {
       lastPersonaSnapshot,
       lastPersonaExport,
       lastProactivePolicy,
+      lastReflectionRuntime,
     };
   }
   return {
@@ -576,6 +644,7 @@ function buildMemoryRow({ settingsSummary, memorySnapshot }) {
     lastPersonaSnapshot,
     lastPersonaExport,
     lastProactivePolicy,
+    lastReflectionRuntime,
   };
 }
 
@@ -1158,6 +1227,10 @@ function buildRowDetail({
       row?.lastProactivePolicy && typeof row.lastProactivePolicy === "object"
         ? row.lastProactivePolicy
         : null;
+    const lastReflectionRuntime =
+      row?.lastReflectionRuntime && typeof row.lastReflectionRuntime === "object"
+        ? row.lastReflectionRuntime
+        : null;
     const lastPersonaSnapshot =
       row?.lastPersonaSnapshot && typeof row.lastPersonaSnapshot === "object"
         ? row.lastPersonaSnapshot
@@ -1305,6 +1378,115 @@ function buildRowDetail({
         suggestedSteps.length = 0;
         suggestedSteps.push(
           "Clear suppression conditions (close chat, stop typing, or wait cooldown), then press Refresh Status."
+        );
+      }
+    }
+    if (lastReflectionRuntime) {
+      provenance.push(
+        {
+          label: "Reflection Runtime State",
+          kind: "runtime",
+          value: toSentence(lastReflectionRuntime.state, "idle"),
+        },
+        {
+          label: "Reflection Runtime Reason",
+          kind: "runtime",
+          value: normalizeReasonLabel(lastReflectionRuntime.reason),
+        },
+        {
+          label: "Next Reflection Heartbeat At",
+          kind: "runtime",
+          value: formatEpochUtcMs(lastReflectionRuntime.nextHeartbeatAtMs),
+        },
+        {
+          label: "Next Reflection Digest At",
+          kind: "runtime",
+          value: formatEpochUtcMs(lastReflectionRuntime.nextDigestAtMs),
+        },
+        {
+          label: "Reflection Retry Heartbeat At",
+          kind: "runtime",
+          value: formatEpochUtcMs(lastReflectionRuntime.retryHeartbeatAtMs),
+        },
+        {
+          label: "Reflection Retry Digest At",
+          kind: "runtime",
+          value: formatEpochUtcMs(lastReflectionRuntime.retryDigestAtMs),
+        },
+        {
+          label: "Reflection Rehydrated Entries",
+          kind: "runtime",
+          value: String(
+            Number.isFinite(Number(lastReflectionRuntime.rehydratedEntryCount))
+              ? Math.max(0, Math.round(Number(lastReflectionRuntime.rehydratedEntryCount))
+              )
+              : 0
+          ),
+        }
+      );
+      if (lastReflectionRuntime.lastRun && typeof lastReflectionRuntime.lastRun === "object") {
+        const run = lastReflectionRuntime.lastRun;
+        provenance.push(
+          {
+            label: "Last Reflection Cycle",
+            kind: "runtime",
+            value: toSentence(run.cycleId, "heartbeat"),
+          },
+          {
+            label: "Last Reflection Outcome",
+            kind: "runtime",
+            value: toSentence(run.outcome, "suppressed"),
+          },
+          {
+            label: "Last Reflection Reason",
+            kind: "runtime",
+            value: normalizeReasonLabel(run.reason),
+          },
+          {
+            label: "Last Reflection Accepted",
+            kind: "runtime",
+            value: String(
+              Number.isFinite(Number(run.acceptedIntentCount))
+                ? Math.max(0, Math.round(Number(run.acceptedIntentCount)))
+                : 0
+            ),
+          },
+          {
+            label: "Last Reflection Deferred",
+            kind: "runtime",
+            value: String(
+              Number.isFinite(Number(run.deferredIntentCount))
+                ? Math.max(0, Math.round(Number(run.deferredIntentCount)))
+                : 0
+            ),
+          },
+          {
+            label: "Last Reflection Rejected",
+            kind: "runtime",
+            value: String(
+              Number.isFinite(Number(run.rejectedIntentCount))
+                ? Math.max(0, Math.round(Number(run.rejectedIntentCount)))
+                : 0
+            ),
+          },
+          {
+            label: "Last Reflection At",
+            kind: "runtime",
+            value: String(
+              Number.isFinite(Number(run.completedAtMs))
+                ? Math.max(0, Math.round(Number(run.completedAtMs)))
+                : 0
+            ),
+          }
+        );
+      }
+      if (
+        lastReflectionRuntime.state === "degraded" ||
+        lastReflectionRuntime.state === "suppressed"
+      ) {
+        suggestedSteps.length = 0;
+        suggestedSteps.push(
+          "Use Run Reflection Now to test heartbeat sync, then press Refresh Status."
         );
       }
     }
@@ -1457,6 +1639,22 @@ function buildRowDetail({
   const hasPath = provenance.some(
     (entry) => entry.kind === "path" && toOptionalString(entry.value, null)
   );
+  let actions = null;
+  if (rowId === OBSERVABILITY_SUBJECT_IDS.bridge) {
+    actions = buildBridgeDetailActions({ pairing, hasPath });
+  } else if (rowId === OBSERVABILITY_SUBJECT_IDS.memory) {
+    actions = [
+      buildDetailAction(
+        OBSERVABILITY_DETAIL_ACTION_IDS.runReflectionNow,
+        "Run Reflection Now",
+        "primary",
+        true
+      ),
+      ...buildDetailActions({ allowOpenSetup: false, hasPath }),
+    ];
+  } else {
+    actions = buildDetailActions({ allowOpenSetup: false, hasPath });
+  }
   return {
     subject: {
       subjectId: rowId,
@@ -1476,10 +1674,7 @@ function buildRowDetail({
     },
     provenance,
     suggestedSteps,
-    actions:
-      rowId === OBSERVABILITY_SUBJECT_IDS.bridge
-        ? buildBridgeDetailActions({ pairing, hasPath })
-        : buildDetailActions({ allowOpenSetup: false, hasPath }),
+    actions,
     pairing,
   };
 }

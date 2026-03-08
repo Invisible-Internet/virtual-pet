@@ -128,29 +128,57 @@ Historical v1 deliverables keep their original status wording and are not retrof
 
 ### Current Workflow Snapshot
 - Current Deliverable: `13d-online-reflection-and-runtime-sync`
-- Workflow State: `specifying`
-- Current Status: `specifying`
+- Workflow State: `implementing`
+- Current Status: `implementing`
 - Last Completed Deliverable: `13c-persona-aware-offline-dialog-and-proactive-behavior`
 - Next Detailed Target: `13d-online-reflection-and-runtime-sync`
 - Next Queued Target: `14a-deliberate-roam-policy-and-monitor-avoidance`
 - Current Gate State:
-  - `Spec Gate`: `not_started`
-  - `Build Gate`: `not_started`
+  - `Spec Gate`: `passed` (`2026-03-08`)
+  - `Build Gate`: `passed` (`2026-03-08`)
   - `Acceptance Gate`: `not_started`
 - Current Session Shipped Outcome:
-  - `no visible app change` (`13c` accepted/closed from operator evidence; workflow advanced to `13d` in `specifying`)
+  - `visible app/runtime change delivered` (`13d` first reflection runtime slice implemented with checks green; awaiting operator acceptance evidence)
 - Historical Note:
   - D01-D10 are complete historical v1 records.
   - Detailed v1 session history lives in `docs/plan/archive/00-progress-tracker-v1-history.md`.
-- Active `13d` specification outcome:
-  - Created `docs/plan/13d-online-reflection-and-runtime-sync.md` from template.
-  - Set workflow to `specifying` for `13d`.
-  - Locked first-pass scope around bounded online cadence (`hourly heartbeat`, `nightly digest`), log-first governance, guarded apply lane, and conflict precedence.
+- Active `13d` implementation outcome:
+  - Spec lock finalized in `docs/plan/13d-online-reflection-and-runtime-sync.md`:
+    - guarded apply only
+    - bridge-route transport only (`memory_reflection_heartbeat`, `memory_reflection_digest`)
+    - fixed cadence (`hourly`, `2:00 AM local`) with startup overdue catch-up
+    - overlap suppression (`suppressed_in_flight`)
+    - one bounded retry (`+10m` heartbeat, `+30m` digest)
+    - reflection-only memory-intent gate
+    - log-first persistence and startup rehydrate from logs
+    - Status-only visibility and no new Settings fields
+  - First implementation slice shipped:
+    - new scheduler/runtime helper: `online-reflection-runtime.js`
+    - `main.js` reflection scheduler tick + guarded apply lane + caps + observability action wiring
+    - `openclaw-bridge.js` reflection route stubs for bridge parity
+    - `shell-observability.js` + `inventory-shell-renderer.js` reflection detail/action visibility
+  - Guarded memory-intent contract:
+    - accepts only reflection-origin context tokens
+    - strict cadence-to-intent mapping:
+      - heartbeat -> `memory_reflection_request`
+      - digest -> `memory_summary_request`
+    - per-cycle caps:
+      - max `3` accepted intents
+      - max `900` accepted summary chars
+    - local guard conflicts rejected with explicit reason
+  - Deterministic coverage added/wired:
+    - `scripts/check-online-reflection-runtime.js`
+    - `package.json` check lanes include 13d runtime check
+    - acceptance row `D13d-online-reflection-runtime-sync`
+  - Verification run passed:
+    - `npm run check:syntax`
+    - `npm run check:contracts`
+    - `npm run check:acceptance` -> `26/26`
   - Gate outcome:
-    - `Spec Gate` not started
-    - `Build Gate` not started
+    - `Spec Gate` passed on `2026-03-08`
+    - `Build Gate` passed on `2026-03-08`
     - `Acceptance Gate` not started
-  - Shipped outcome: no visible app change (specification progression only).
+  - Shipped outcome: visible app/runtime change delivered; operator demo + evidence collection is next.
 - Active `13c` implementation outcome:
   - Created `docs/plan/13c-persona-aware-offline-dialog-and-proactive-behavior.md` from template and passed `Spec Gate`.
   - Implemented first runtime slice:

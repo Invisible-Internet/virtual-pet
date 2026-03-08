@@ -646,6 +646,60 @@ class OpenClawBridge {
       };
     }
 
+    if (request.route === "memory_reflection_heartbeat") {
+      const currentState = request?.context?.currentState || "Idle";
+      return {
+        source: "online",
+        text: `Reflection heartbeat generated for state=${currentState}.`,
+        proposedActions: [
+          {
+            type: "virtual_pet_lane_call",
+            route: "virtual_pet_lane_call",
+            payload: {
+              contractVersion: "vp-plugin-lane-v1",
+              call: "virtual_pet.memory.sync_intent",
+              correlationId: request.correlationId,
+              payload: {
+                intentId: `heartbeat-${request.correlationId}`,
+                intentType: "memory_reflection_request",
+                summary: `Heartbeat reflection captured state=${currentState}.`,
+                context: {
+                  source: "openclaw",
+                },
+              },
+            },
+          },
+        ],
+      };
+    }
+
+    if (request.route === "memory_reflection_digest") {
+      const currentState = request?.context?.currentState || "Idle";
+      return {
+        source: "online",
+        text: `Reflection digest generated for state=${currentState}.`,
+        proposedActions: [
+          {
+            type: "virtual_pet_lane_call",
+            route: "virtual_pet_lane_call",
+            payload: {
+              contractVersion: "vp-plugin-lane-v1",
+              call: "virtual_pet.memory.sync_intent",
+              correlationId: request.correlationId,
+              payload: {
+                intentId: `digest-summary-${request.correlationId}`,
+                intentType: "memory_summary_request",
+                summary: `Nightly digest summary for state=${currentState}.`,
+                context: {
+                  source: "openclaw",
+                },
+              },
+            },
+          },
+        ],
+      };
+    }
+
     if (request.route === "introspection_status") {
       const state = request.context.currentState || "Idle";
       return {

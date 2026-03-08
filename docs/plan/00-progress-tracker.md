@@ -34,14 +34,14 @@ Historical v1 deliverables keep their original wording and remain archived histo
 
 ## Current Deliverable
 - Current Deliverable: `13d-online-reflection-and-runtime-sync`
-- Workflow State: `specifying`
-- Current Status: `specifying`
+- Workflow State: `implementing`
+- Current Status: `implementing`
 - Last Completed Deliverable: `13c-persona-aware-offline-dialog-and-proactive-behavior`
 - Next Detailed Target: `13d-online-reflection-and-runtime-sync`
 - Next Queued Target: `14a-deliberate-roam-policy-and-monitor-avoidance`
 - Current Gate State:
-  - `Spec Gate`: `not_started`
-  - `Build Gate`: `not_started`
+  - `Spec Gate`: `passed` (`2026-03-08`)
+  - `Build Gate`: `passed` (`2026-03-08`)
   - `Acceptance Gate`: `not_started`
 
 ## Post-v1 Family Rough-In
@@ -77,14 +77,34 @@ Planning state:
 6. Pass `Spec Gate` before implementation begins.
 
 ## Next 3 Actions
-1. Complete `13d` spec details in [`13d-online-reflection-and-runtime-sync.md`](./13d-online-reflection-and-runtime-sync.md) and pass `Spec Gate`.
-2. Implement first bounded `13d` reflection slice (heartbeat/digest observability + guarded apply lane).
-3. Add deterministic checks and acceptance row for `13d`, then run syntax/contracts/acceptance verification.
+1. Run operator happy-path/failure-recovery demo for `13d` using `Status -> Memory Runtime` (`Run Reflection Now`) and capture evidence.
+2. Iterate `13d` only if operator feedback exposes gaps in cadence/gating/observability behavior.
+3. If operator evidence passes, mark `Acceptance Gate` passed and close `13d`, then move workflow to `14a` specification.
 
 ## Blockers
 - None currently.
 
 ## Last Session Summary
+- Implemented first `13d-online-reflection-and-runtime-sync` slice after locking the spec contract:
+  - delivered bounded reflection controller/runtime sync with:
+    - wall-clock cadence (`hourly heartbeat`, `2:00 AM local digest`)
+    - startup overdue catch-up, overlap suppression, one-retry policy
+    - reflection-only guarded memory-intent lane with strict cadence-to-intent mapping
+    - per-cycle caps (`3` intents, `900` accepted summary chars)
+    - log-first run persistence + startup rehydrate from logs
+    - `Status -> Memory Runtime` reflection provenance fields + bounded `Run Reflection Now` action
+  - deterministic coverage added:
+    - `scripts/check-online-reflection-runtime.js`
+    - acceptance row `D13d-online-reflection-runtime-sync`
+  - verification run passed:
+    - `npm run check:syntax`
+    - `npm run check:contracts`
+    - `npm run check:acceptance` -> `26/26 automated checks passed`
+  - gate outcome:
+    - `Spec Gate`: `passed` (`2026-03-08`)
+    - `Build Gate`: `passed` (`2026-03-08`)
+    - `Acceptance Gate`: `not_started`
+  - shipped outcome note: `visible app/runtime change delivered` (reflection runtime/controller and Memory Runtime action/detail are now live).
 - Closed `13c-persona-aware-offline-dialog-and-proactive-behavior` as accepted after operator-confirmed live run evidence:
   - operator explicitly confirmed readiness to move on
   - observed runtime evidence included:
