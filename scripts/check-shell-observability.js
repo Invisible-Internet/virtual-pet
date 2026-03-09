@@ -53,6 +53,40 @@ function run() {
       reentryReason: "none",
       monitorAvoidMs: 45000,
       nextDecisionAtMs: 1700000002200,
+      windowAvoidanceState: "healthy",
+      windowAvoidanceReason: "foreground_window_soft_inspect_only",
+      windowAvoidMarginPx: 24,
+      foregroundWindowBounds: {
+        x: 420,
+        y: 180,
+        width: 1080,
+        height: 760,
+      },
+      foregroundWindowWindowId: "0xABCD",
+      foregroundWindowRevision: 3,
+      windowInspectState: "active",
+      windowInspectReason: "foreground_window_inspect_bottom_edge_active",
+      windowInspectAnchorLane: "bottom_edge",
+      windowInspectAnchorPoint: {
+        x: 960,
+        y: 928,
+      },
+      windowInspectDwellMs: 2500,
+      avoidMaskBounds: {
+        x: 396,
+        y: 156,
+        width: 1128,
+        height: 808,
+      },
+      windowAvoidFallback: "none",
+      windowAvoidCooldownEntries: [
+        {
+          windowId: "0xABCD",
+          remainingMs: 92000,
+          expiresAtMs: 1700000094000,
+          sourceReason: "manual_drag_window_correction",
+        },
+      ],
       activeAvoidedDisplays: [
         {
           displayId: "1001",
@@ -271,6 +305,28 @@ function run() {
     ),
     "behavior detail should include avoided display provenance"
   );
+  assert(
+    behaviorDetail.provenance.some(
+      (entry) =>
+        entry.label === "Window Avoidance Reason" &&
+        entry.value === "foreground window soft inspect only"
+    ),
+    "behavior detail should include window avoidance reason provenance"
+  );
+  assert(
+    behaviorDetail.provenance.some(
+      (entry) =>
+        entry.label === "Window Inspect Reason" &&
+        entry.value === "foreground window inspect bottom edge active"
+    ),
+    "behavior detail should include window inspect reason provenance"
+  );
+  assert(
+    behaviorDetail.provenance.some(
+      (entry) => entry.label === "Window 0xABCD"
+    ),
+    "behavior detail should include window cooldown provenance"
+  );
 
   const personaSnapshotDegraded = buildObservabilitySnapshot({
     capabilitySnapshot: {
@@ -372,6 +428,20 @@ function run() {
       reentryReason: "none",
       monitorAvoidMs: 45000,
       nextDecisionAtMs: 1700000004200,
+      windowAvoidanceState: "healthy",
+      windowAvoidanceReason: "foreground_window_soft_inspect_only",
+      windowAvoidMarginPx: 24,
+      foregroundWindowBounds: null,
+      foregroundWindowWindowId: null,
+      foregroundWindowRevision: 0,
+      windowInspectState: "idle",
+      windowInspectReason: "none",
+      windowInspectAnchorLane: "none",
+      windowInspectAnchorPoint: null,
+      windowInspectDwellMs: 2500,
+      avoidMaskBounds: null,
+      windowAvoidFallback: "none",
+      windowAvoidCooldownEntries: [],
       activeAvoidedDisplays: [
         {
           displayId: "1001",
@@ -451,6 +521,92 @@ function run() {
     degraded.rows.paths.state,
     "degraded",
     "path warnings should degrade the paths row"
+  );
+
+  const windowDegraded = buildObservabilitySnapshot({
+    capabilitySnapshot: {
+      runtimeState: "degraded",
+      capabilities: [],
+    },
+    openclawCapabilityState: {
+      state: "healthy",
+      reason: "requestSuccess",
+    },
+    behaviorSnapshot: {
+      roamMode: "desktop",
+      roamPhase: "rest",
+      decisionReason: "foreground_window_nominal",
+      pacingReason: "pacing_rest_window",
+      pacingDelayMs: 3200,
+      fallbackReason: "none",
+      reentryReason: "none",
+      monitorAvoidMs: 45000,
+      nextDecisionAtMs: 1700000005200,
+      windowAvoidanceState: "degraded",
+      windowAvoidanceReason: "foreground_window_query_failed",
+      windowAvoidMarginPx: 24,
+      foregroundWindowBounds: null,
+      foregroundWindowWindowId: null,
+      foregroundWindowRevision: 0,
+      windowInspectState: "idle",
+      windowInspectReason: "none",
+      windowInspectAnchorLane: "none",
+      windowInspectAnchorPoint: null,
+      windowInspectDwellMs: 2500,
+      avoidMaskBounds: null,
+      windowAvoidFallback: "none",
+      windowAvoidCooldownEntries: [],
+      activeAvoidedDisplays: [],
+    },
+    memorySnapshot: {
+      requestedAdapterMode: "obsidian",
+      activeAdapterMode: "obsidian",
+      fallbackReason: "none",
+    },
+    settingsSummary: {
+      memory: {
+        enabled: true,
+        adapterMode: "obsidian",
+        writeLegacyJsonl: false,
+      },
+      openclaw: {
+        enabled: true,
+        transport: "http",
+        mode: "online",
+        agentId: "main",
+        baseUrl: "http://127.0.0.1:18789/bridge/dialog",
+        authTokenConfigured: false,
+      },
+      paths: {
+        localWorkspaceRoot: localRoot,
+        openClawWorkspaceRoot: null,
+        obsidianVaultRoot: "W:\\AI\\OpenClaw\\Memory\\Vault",
+      },
+    },
+    settingsSourceMap: {
+      baseConfig: "config/settings.json",
+    },
+    settingsFiles: {
+      baseConfigPath: "config/settings.json",
+    },
+    validationWarnings: [],
+    validationErrors: [],
+    resolvedPaths: {
+      localRoot,
+      openClawRoot: null,
+      obsidianRoot: "W:\\AI\\OpenClaw\\Memory\\Vault",
+    },
+    trayAvailable: true,
+  });
+  assertEqual(
+    windowDegraded.rows.behavior.state,
+    "degraded",
+    "behavior row should degrade when foreground-window provider is degraded"
+  );
+  assertEqual(
+    windowDegraded.rows.behavior.reason,
+    "foreground_window_query_failed",
+    "behavior row should surface foreground-window degraded reason"
   );
 
   const disabled = buildObservabilitySnapshot({

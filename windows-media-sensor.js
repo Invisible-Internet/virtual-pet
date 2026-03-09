@@ -226,17 +226,19 @@ function buildLocalMediaEventPayload(snapshot = {}) {
 
 function buildLocalMediaProbeKey(snapshot = {}) {
   const normalized = normalizeWindowsMediaProbePayload(snapshot);
+  const playbackClass = normalized.isPlaying
+    ? "playing"
+    : toOptionalString(normalized.playbackStatus, "idle")?.toLowerCase() || "idle";
   return JSON.stringify({
     ok: normalized.ok,
     isPlaying: normalized.isPlaying,
-    playbackStatus: normalized.playbackStatus,
+    playbackClass,
     title: normalized.title || "",
     artist: normalized.artist || "",
     album: normalized.album || "",
     provider: normalized.provider,
-    sourceAppUserModelId: normalized.sourceAppUserModelId || "",
+    sourceAppLabel: normalized.sourceAppLabel || "",
     outputRoute: normalized.outputRoute,
-    outputDeviceName: normalized.outputDeviceName,
   });
 }
 

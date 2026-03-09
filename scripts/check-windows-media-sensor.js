@@ -103,11 +103,36 @@ function testPayloadNormalization() {
   assertIncludes(key, "Wolf Like Me", "probe key should include title");
 }
 
+function testProbeKeyStabilityForPlaybackJitter() {
+  const base = normalizeWindowsMediaProbePayload({
+    ok: true,
+    source: "GSMTC",
+    isPlaying: true,
+    playbackStatus: "Playing",
+    sourceAppUserModelId: "MSEdgeHTM",
+    sourceAppLabel: "Microsoft Edge",
+    title: "Sample Video",
+    artist: "Creator",
+    album: "Episode 1",
+    outputDeviceName: "Headphones (Bluetooth Audio)",
+  });
+  const jitter = normalizeWindowsMediaProbePayload({
+    ...base,
+    playbackStatus: "Changing",
+    sourceAppUserModelId: "MSEdgeHTM_randomized_variant",
+    outputDeviceName: "Headphones (High Definition Audio Device)",
+  });
+  const baseKey = buildLocalMediaProbeKey(base);
+  const jitterKey = buildLocalMediaProbeKey(jitter);
+  assertEqual(baseKey, jitterKey, "probe key should ignore playback/output jitter for unchanged media");
+}
+
 function run() {
   testSettings();
   testRouteClassification();
   testSourceNormalization();
   testPayloadNormalization();
+  testProbeKeyStabilityForPlaybackJitter();
   console.log("[windows-media-sensor] checks passed");
 }
 

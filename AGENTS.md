@@ -127,35 +127,94 @@ Historical v1 deliverables keep their original status wording and are not retrof
 - `accepted` is the only terminal state for future post-v1 deliverables.
 
 ### Current Workflow Snapshot
-- Current Deliverable: `14ab-active-window-avoidance`
-- Workflow State: `specifying`
-- Current Status: `specifying`
-- Last Completed Deliverable: `14a-deliberate-roam-policy-and-monitor-avoidance`
-- Next Detailed Target: `14ab-active-window-avoidance`
-- Next Queued Target: `14b-event-driven-watch-behavior`
+- Current Deliverable: `none`
+- Workflow State: `idle`
+- Current Status: `accepted`
+- Last Completed Deliverable: `14ab-active-window-avoidance`
+- Next Detailed Target: `14b-event-driven-watch-behavior`
+- Next Queued Target: `none`
 - Current Gate State:
-  - `Spec Gate`: `passed` (`2026-03-08`)
-  - `Build Gate`: `not_started`
-  - `Acceptance Gate`: `not_started`
+  - `Spec Gate`: `not_started` (next deliverable not active yet)
+  - `Build Gate`: `not_started` (next deliverable not active yet)
+  - `Acceptance Gate`: `not_started` (next deliverable not active yet)
 - Current Session Shipped Outcome:
-  - `no visible app change` (`14ab` spec iterated to lock bottom-edge WatchMode anchoring + queued `14b` anchor policy aligned)
-- Active `14ab` spec outcome:
-  - spec lock finalized in `docs/plan/14ab-active-window-avoidance.md`:
-    - activation boundary locked (`Windows + desktop roam` only)
-    - foreground candidate eligibility filtering locked
-    - bounded edge-inspect behavior moved into first-slice scope with bottom-edge-only WatchMode anchoring
-    - bounded near-bottom on-window overlap contract locked for back-turned viewing illusion
-    - hard avoid explicitly gated by manual drag-off correction only
-    - focused-window resize/move recalculation contract locked (decision-boundary + throttled in-leg refresh)
-    - user-signaled manual window-avoid cooldown memory locked (prolonged avoid after drag-off correction)
-    - strict avoid-mask fallback locked (`foreground_window_no_free_area_fallback`)
-    - behavior-runtime observability fields and reason taxonomy expanded/locked
-    - explicit `14ab -> 14b` handoff contract added for media-aware watch expansion
-  - deliverable promoted from `queued` to active `specifying`
+  - `visible app/runtime change delivered and accepted` (`14ab` active-window avoidance closed)
+- Closed `14ab` implementation outcome:
+  - spec lock remains active in `docs/plan/14ab-active-window-avoidance.md`:
+    - activation boundary (`Windows + desktop roam` only)
+    - bottom-edge-only `WatchMode` inspect anchoring with bounded near-bottom overlap
+    - hard avoid gated by manual drag-off correction only
+    - focused-window resize/move recalculation + strict clipping fallback (`foreground_window_no_free_area_fallback`)
+  - first implementation slice shipped:
+    - new foreground-window runtime:
+      - `foreground-window-runtime.js`
+      - `scripts/foreground-window-probe.ps1`
+    - runtime integration + policy extension:
+      - `main.js` foreground poll/revision lane, inspect dwell lane, manual window avoid recording
+      - `roam-policy.js` window avoid memory, strict clipping planner, bottom-edge inspect anchor selection
+    - observability and shell summary updates:
+      - `shell-observability.js`
+      - `inventory-shell-renderer.js`
+    - deterministic coverage + acceptance wiring:
+      - `scripts/check-foreground-window-runtime.js`
+      - expanded `scripts/check-roam-policy.js`
+      - expanded `scripts/check-shell-observability.js`
+      - acceptance row `D14ab-active-window-avoidance`
+  - implementation iteration from operator runtime feedback:
+    - desktop ambient rest now defaults to `Idle` in desktop roam (no random `WatchMode` churn outside inspect flow)
+    - active-window inspect now uses cadence gates to reduce repetitive re-entry:
+      - focus stability minimum
+      - global cooldown
+      - per-window cooldown
+      - bounded trigger probability
+    - bottom-edge inspect anchor selection now uses closer-biased bounded randomness (not always center-first)
+    - fullscreen/lower-edge watch placement now uses bottom-edge grace allowance to avoid inspect/avoid thrash loops
+    - inspect dwell duration increased to `6000ms` for less erratic watch pacing
+    - manual window-avoid cooldown increased to `300000ms` and runtime wiring now uses the tuned cooldown value
+    - bottom-edge anchor weighting now prefers right/left corners while still mixing center/right/left outcomes
+    - media behavior arbitration tuned:
+      - `MusicChill` is ambient-eligible so roam/idle and other higher-priority states can still occur while music is active
+      - music playback now chooses `MusicDance` more often
+      - likely video playback now routes to `WatchMode` using provider/title/browser-window heuristics
+      - browser/video classification hardened so browser playback defaults to `WatchMode` unless explicit music hints are present; strong music hints (`music.youtube.com` / `YouTube Music`) still route to music states
+      - media-triggered `MusicDance` now has bounded short dwell (`5200ms`) and deterministic return to `Idle` to avoid long unvaried dance lock-in
+      - media-triggered `WatchMode` now routes through a bottom-edge anchor destination before watch dwell, preventing visual slide while idle/watch clips are active
+      - media watch no longer falls back to in-place `WatchMode`; when a bottom-edge anchor is unavailable the activation is skipped for that cycle
+      - media watch dwell is now longer (`30000ms`) so playback watch sessions stay stable instead of quickly bouncing back to roam
+      - unchanged local-media playback chatter is now suppressed via stable media-signature de-duplication and probe-key jitter hardening (`Playing`/`Changing`, volatile source-app id churn, and output-device-name noise no longer retrigger repeated responses)
+      - local-media stop handling now uses debounce (`8000ms`) so brief playback probe dropouts do not reset media signature / retrigger repeated media announcements
+      - media watch anchor recovery now retries anchor resolution across active-display clamp area, then full display bounds, then desktop sampling fallback before skipping activation
+      - media watch now holds by focused-window continuity:
+        - watch dwell extends in bounded chunks (`12000ms`) while focused-window id still matches the active media watch target
+        - focus-loss release guard (`1200ms`) exits watch quickly when focus shifts away
+        - stable local-media stop no longer forces immediate watch exit while focused-window hold is active
+      - media watch bottom-edge anchor selection now uses a corner-preferred profile (right/left strongly favored; center retained as occasional bounded variation/fallback)
+      - fixed startup-playing-media duplicate speech loop:
+        - removed forced `idle-resume` local-media contract routing during ambient Idle re-entry while media is already playing
+        - unchanged media payloads now stay de-duplicated through Idle/Roam cycling unless explicitly manual-probed
+  - operator validation status update:
+    - happy-path `14ab` checks passed (bottom-edge inspect, resize/move recalculation, manual window avoid cooldown, no-free-area fallback)
+    - failure/recovery evidence passed:
+      - in `Roam: zone`, behavior-runtime correctly reports `Window Avoidance State: disabled` with reason `roam_mode_not_desktop`
+      - in `Roam: desktop`, provider disable/restore yields expected `degraded` -> `healthy` recovery
+    - roam-direction stability tuned:
+      - immediate reverse-direction roam legs are suppressed for a short idle window after completing a roam leg
+      - manual drag/fling resets direction memory so post-correction heading remains unconstrained
+    - ambient pacing tuned:
+      - autonomous desktop roam now enforces an Idle-only minimum dwell gate (`5000ms` target) before starting the next roam leg
+      - ambient same-state short-circuit continues for non-Idle states, while Idle reassertion is allowed so Idle remains the most common ambient state
+    - roam locomotion tuned:
+      - `Run` selection now requires destination distance to meet run-threshold criteria
+      - short-distance roam legs always use `Walk` to prevent abrupt sprint-stop visuals
+      - run-threshold check now evaluates live leg-start distance instead of cached candidate distance
+  - verification run passed:
+    - `npm run check:syntax`
+    - `npm run check:contracts`
+    - `npm run check:acceptance` -> `28/28`
   - gate outcome:
     - `Spec Gate` passed on `2026-03-08`
-    - `Build Gate` not started
-    - `Acceptance Gate` not started
+    - `Build Gate` passed on `2026-03-09`
+    - `Acceptance Gate` passed on `2026-03-09` (operator-accepted closure)
 - Queued `14b` planning outcome:
   - created `docs/plan/14b-event-driven-watch-behavior.md` draft
   - locked queued rough contract for:
@@ -627,7 +686,7 @@ Historical v1 deliverables keep their original status wording and are not retrof
   - `13c-persona-aware-offline-dialog-and-proactive-behavior` is accepted and closed (`Spec/Build/Acceptance Gates passed`; Acceptance on `2026-03-08`).
   - `13d-online-reflection-and-runtime-sync` is accepted and closed (`Spec/Build/Acceptance Gates passed`; Acceptance on `2026-03-08`).
   - `14a-deliberate-roam-policy-and-monitor-avoidance` is accepted and closed (`Spec/Build/Acceptance Gates` passed on `2026-03-08`).
-  - `14ab-active-window-avoidance` is active in `specifying` (`Spec Gate` passed on `2026-03-08`; `Build/Acceptance` not started), with locked first-slice scope:
+- `14ab-active-window-avoidance` is accepted and closed (`Spec Gate` passed on `2026-03-08`; `Build Gate` passed on `2026-03-09`; `Acceptance Gate` passed on `2026-03-09`), with locked first-slice scope:
     - active foreground window only
     - bounded `window-edge inspect` behavior with bottom-edge-only WatchMode anchors
     - rectangular avoid mask + margin

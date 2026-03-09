@@ -1306,6 +1306,8 @@ function renderObservability() {
         [
           { label: "Roam Mode", value: formatText(rows.behavior?.roamMode, "desktop") },
           { label: "Decision", value: formatText(rows.behavior?.decisionReason, "none") },
+          { label: "Window Avoid", value: formatText(rows.behavior?.windowAvoidanceReason, "none") },
+          { label: "Inspect", value: formatText(rows.behavior?.windowInspectReason, "none") },
           {
             label: "Avoided Displays",
             value:
@@ -1317,6 +1319,7 @@ function renderObservability() {
                 : "none",
           },
           { label: "Fallback", value: formatText(rows.behavior?.fallbackReason, "none") },
+          { label: "Window Fallback", value: formatText(rows.behavior?.windowAvoidFallback, "none") },
         ],
         {
           subjectId: OBSERVABILITY_SUBJECT_IDS.behavior,

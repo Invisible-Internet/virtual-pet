@@ -82,6 +82,11 @@ const {
   probeWindowsMediaState,
 } = require("./windows-media-sensor");
 const {
+  WINDOWS_FOREGROUND_WINDOW_SOURCE,
+  buildForegroundWindowProbeKey,
+  probeForegroundWindowState,
+} = require("./foreground-window-runtime");
+const {
   MEMORY_ADAPTER_MODES,
   OPENCLAW_WORKSPACE_BOOTSTRAP_MODES,
   createMemoryPipeline,
@@ -108,10 +113,17 @@ const {
   ROAM_POLICY_DECISION_REASONS,
   applyRoamPacingDecision,
   buildRoamPolicySnapshot,
+  intersectBoundsRect,
+  isWindowAvoidActive,
+  listActiveAvoidedWindows,
+  normalizeBoundsRect,
   createInitialRoamPolicyState,
   markRoamPolicyDecision,
+  planActiveWindowAvoidanceSampling,
   planDesktopRoamSampling,
   recordManualDisplayAvoidance,
+  recordManualWindowAvoidance,
+  resolveBottomEdgeInspectAnchor,
   resolveRoamPacingDelay,
 } = require("./roam-policy");
 const {
@@ -207,9 +219,70 @@ const ROAM_WALK_SPEED_PX_PER_SEC = 88;
 const ROAM_RUN_SPEED_PX_PER_SEC = 224;
 const ROAM_RUN_DISTANCE_THRESHOLD_PX = 360;
 const ROAM_ZONE_ENTRY_DELAY_MS = 140;
+const IDLE_STATE_MIN_DWELL_MS = 5000;
+const ROAM_DIRECTION_REVERSAL_MIN_IDLE_MS = 6000;
+const ROAM_DIRECTION_REVERSAL_MIN_DISTANCE_PX = 140;
 const MIN_ROAM_ZONE_RECT_SIZE = 120;
 const ROAM_ZONE_INSET_RATIO = 0.22;
 const ROAM_DIAGONAL_DIRECTION_RATIO = 0.18;
+const ACTIVE_WINDOW_AVOID_MARGIN_PX = 24;
+const WINDOW_EDGE_INSPECT_DWELL_MS = 6000;
+const WINDOW_AVOID_MS = 300000;
+const WINDOW_WATCH_BOTTOM_BAND_PX = 64;
+const WINDOW_WATCH_BOTTOM_INSET_PX = 12;
+const WINDOW_WATCH_BOTTOM_GRACE_PX = 220;
+const WINDOW_INSPECT_MIN_FOCUS_MS = 1800;
+const WINDOW_INSPECT_GLOBAL_COOLDOWN_MS = 22000;
+const WINDOW_INSPECT_WINDOW_COOLDOWN_MS = 70000;
+const WINDOW_INSPECT_TRIGGER_PROBABILITY = 0.45;
+const FOREGROUND_WINDOW_POLL_MS = 250;
+const FOREGROUND_WINDOW_PROBE_TIMEOUT_MS = 800;
+const MEDIA_WATCHMODE_DWELL_MS = 30000;
+const MEDIA_WATCHMODE_FOCUS_HOLD_EXTENSION_MS = 12000;
+const MEDIA_WATCHMODE_FOCUS_LOSS_GRACE_MS = 1200;
+const LOCAL_MEDIA_STOP_DEBOUNCE_MS = 8000;
+const MUSIC_DANCE_DURATION_MS = 5200;
+const MEDIA_VIDEO_PROVIDERS = new Set(["youtube", "netflix"]);
+const MEDIA_BROWSER_PROVIDERS = new Set(["msedge", "chrome", "firefox"]);
+const MEDIA_BROWSER_PROVIDER_HINTS = ["msedge", "edge", "chrome", "firefox", "brave", "opera", "vivaldi"];
+const MEDIA_BROWSER_VIDEO_HINTS = [
+  "youtube",
+  "netflix",
+  "twitch",
+  "vimeo",
+  "prime video",
+  "disney",
+  "hulu",
+  "trailer",
+  "episode",
+  "watch",
+];
+const MEDIA_BROWSER_STRONG_MUSIC_HINTS = [
+  "music.youtube.com",
+  "youtube music",
+  "yt music",
+  "open.spotify.com",
+  "soundcloud",
+  "bandcamp",
+  "apple music",
+  "deezer",
+  "tidal",
+  "pandora",
+];
+const MEDIA_BROWSER_MUSIC_HINTS = [
+  "spotify",
+  "soundcloud",
+  "bandcamp",
+  "apple music",
+  "yt music",
+  "youtube music",
+  "deezer",
+  "tidal",
+  "pandora",
+  "radio",
+];
+const MEDIA_AUDIO_EXTENSIONS = [".mp3", ".wav", ".flac", ".aac", ".m4a", ".ogg", ".wma", ".opus"];
+const MEDIA_VIDEO_EXTENSIONS = [".mp4", ".mkv", ".avi", ".mov", ".wmv", ".webm", ".m4v", ".mpeg"];
 const REQUIRED_SPRITE_DIRECTIONS = Object.freeze([
   "Down",
   "DownRight",
@@ -393,7 +466,16 @@ let runtimeSettingsResolvedPaths = null;
 let runtimeSettingsFiles = null;
 let latestLocalMediaSnapshot = null;
 let lastLocalMediaEventKey = null;
+let lastLocalMediaContractSignature = null;
+let localMediaLastPlayingAtMs = 0;
+let localMediaStoppedSinceMs = 0;
+let localMediaPendingStopFromPlaying = false;
 let localMediaProbeInFlight = false;
+let idleStateDwellUntilMs = 0;
+let latestForegroundWindowSnapshot = null;
+let lastForegroundWindowProbeKey = null;
+let foregroundWindowProbeInFlight = false;
+let lastForegroundWindowPollRequestAtMs = 0;
 let spotifyBackgroundProbeInFlight = false;
 let freshRssBackgroundProbeInFlight = false;
 let lastSpotifyBackgroundProbeAt = 0;
@@ -435,6 +517,7 @@ const flingState = {
 const roamState = {
   phase: "idle",
   destination: null,
+  inspectAnchor: null,
   queuedDestination: null,
   roamBounds: null,
   petBounds: null,
@@ -443,14 +526,51 @@ const roamState = {
   direction: null,
   x: 0,
   y: 0,
+  legStartX: null,
+  legStartY: null,
+  lastLegVector: null,
+  lastLegCompletedAtMs: 0,
   lastStepMs: 0,
   nextDecisionAtMs: 0,
+  foregroundRevisionAtLegStart: 0,
+  mediaWatchFocusMismatchSinceMs: 0,
 };
 const roamPolicyState = createInitialRoamPolicyState({
   nowMs: Date.now(),
   monitorAvoidMs: DEFAULT_MONITOR_AVOID_MS,
+  windowAvoidMs: WINDOW_AVOID_MS,
 });
 let manualCorrectionStartDisplayId = null;
+let manualWindowCorrectionStartContext = null;
+
+const foregroundWindowRuntime = {
+  source: WINDOWS_FOREGROUND_WINDOW_SOURCE,
+  state: process.platform === "win32" ? "degraded" : "disabled",
+  reason:
+    process.platform === "win32"
+      ? ROAM_POLICY_DECISION_REASONS.foregroundWindowProviderUnavailable
+      : ROAM_POLICY_DECISION_REASONS.windowAvoidanceNotSupportedPlatform,
+  decisionReason: "none",
+  fallbackReason: "none",
+  avoidMaskBounds: null,
+  avoidMarginPx: ACTIVE_WINDOW_AVOID_MARGIN_PX,
+  foregroundWindowBounds: null,
+  foregroundWindowWindowId: null,
+  foregroundWindowRevision: 0,
+  windowInspectState: "idle",
+  windowInspectReason: "none",
+  windowInspectAnchorLane: "none",
+  windowInspectAnchorPoint: null,
+  windowInspectDwellMs: WINDOW_EDGE_INSPECT_DWELL_MS,
+};
+
+const windowInspectPolicy = {
+  focusedWindowId: null,
+  focusedSinceMs: 0,
+  lastInspectAtMs: 0,
+  lastInspectWindowId: null,
+  byWindowLastInspectAtMs: new Map(),
+};
 
 const PET_LAYOUT = computePetLayout(BASE_LAYOUT);
 const WINDOW_SIZE = PET_LAYOUT.windowSize;
@@ -727,6 +847,411 @@ function getLocalMediaSensorSettings() {
   };
 }
 
+function getForegroundWindowSensorSettings() {
+  return {
+    enabled: true,
+    backend: "powershell",
+    pollIntervalMs: FOREGROUND_WINDOW_POLL_MS,
+    probeTimeoutMs: FOREGROUND_WINDOW_PROBE_TIMEOUT_MS,
+  };
+}
+
+function createInitialForegroundWindowSnapshot(error = "probe_pending") {
+  return {
+    ok: false,
+    source: WINDOWS_FOREGROUND_WINDOW_SOURCE,
+    windowId: null,
+    processId: null,
+    processName: null,
+    title: null,
+    bounds: null,
+    ts: 0,
+    error,
+  };
+}
+
+function resolveForegroundWindowProbeReason(errorCode = "") {
+  const normalized = typeof errorCode === "string" ? errorCode.trim() : "";
+  if (normalized === "probe_script_missing" || normalized === "disabled_by_config") {
+    return ROAM_POLICY_DECISION_REASONS.foregroundWindowProviderUnavailable;
+  }
+  return ROAM_POLICY_DECISION_REASONS.foregroundWindowQueryFailed;
+}
+
+function isForegroundWindowAvoidanceSupported() {
+  return process.platform === "win32";
+}
+
+function isForegroundWindowAvoidanceDesktopMode() {
+  const roamMode = latestShellState?.roaming?.mode || ROAMING_MODES.desktop;
+  return roamMode === ROAMING_MODES.desktop;
+}
+
+function updateForegroundWindowRuntimeDisabled(reason) {
+  foregroundWindowRuntime.state = "disabled";
+  foregroundWindowRuntime.reason = reason;
+  foregroundWindowRuntime.decisionReason = reason;
+  foregroundWindowRuntime.fallbackReason = "none";
+  foregroundWindowRuntime.foregroundWindowBounds = null;
+  foregroundWindowRuntime.foregroundWindowWindowId = null;
+  foregroundWindowRuntime.avoidMaskBounds = null;
+  resetWindowInspectFocusTracking();
+  if (roamState.phase !== "inspect_dwell") {
+    foregroundWindowRuntime.windowInspectState = "idle";
+    foregroundWindowRuntime.windowInspectReason = "none";
+    foregroundWindowRuntime.windowInspectAnchorLane = "none";
+    foregroundWindowRuntime.windowInspectAnchorPoint = null;
+  }
+}
+
+function getForegroundWindowCenterPoint(bounds) {
+  const normalized = normalizeBoundsRect(bounds);
+  if (!normalized) return null;
+  return {
+    x: Math.round(normalized.x + normalized.width * 0.5),
+    y: Math.round(normalized.y + normalized.height * 0.5),
+  };
+}
+
+function getPetVisualCenterAtWindowPosition(windowX, windowY, petBounds = null) {
+  const safePetBounds = petBounds || getRoamPetBounds();
+  const normalized = normalizeBoundsRect(safePetBounds);
+  if (!normalized) return null;
+  return {
+    x: Math.round(windowX + normalized.x + normalized.width * 0.5),
+    y: Math.round(windowY + normalized.y + normalized.height * 0.5),
+  };
+}
+
+function resetWindowInspectFocusTracking() {
+  windowInspectPolicy.focusedWindowId = null;
+  windowInspectPolicy.focusedSinceMs = 0;
+}
+
+function updateWindowInspectFocusTracking(windowId, nowMs = Date.now()) {
+  const normalizedWindowId =
+    typeof windowId === "string" && windowId.trim().length > 0 ? windowId.trim() : null;
+  if (!normalizedWindowId) {
+    resetWindowInspectFocusTracking();
+    return null;
+  }
+  if (windowInspectPolicy.focusedWindowId !== normalizedWindowId) {
+    windowInspectPolicy.focusedWindowId = normalizedWindowId;
+    windowInspectPolicy.focusedSinceMs = nowMs;
+  }
+  return normalizedWindowId;
+}
+
+function pruneWindowInspectHistory(nowMs = Date.now()) {
+  const cutoffMs = nowMs - Math.max(WINDOW_INSPECT_WINDOW_COOLDOWN_MS * 3, WINDOW_AVOID_MS * 2);
+  for (const [windowId, lastAtMs] of windowInspectPolicy.byWindowLastInspectAtMs.entries()) {
+    if (!Number.isFinite(Number(lastAtMs)) || Number(lastAtMs) < cutoffMs) {
+      windowInspectPolicy.byWindowLastInspectAtMs.delete(windowId);
+    }
+  }
+}
+
+function canTriggerWindowInspect(windowId, nowMs = Date.now()) {
+  const normalizedWindowId = updateWindowInspectFocusTracking(windowId, nowMs);
+  if (!normalizedWindowId) {
+    return {
+      allowed: false,
+      reason: "window_id_missing",
+    };
+  }
+
+  pruneWindowInspectHistory(nowMs);
+
+  if (nowMs - windowInspectPolicy.focusedSinceMs < WINDOW_INSPECT_MIN_FOCUS_MS) {
+    return {
+      allowed: false,
+      reason: "focus_unstable",
+    };
+  }
+  if (nowMs - windowInspectPolicy.lastInspectAtMs < WINDOW_INSPECT_GLOBAL_COOLDOWN_MS) {
+    return {
+      allowed: false,
+      reason: "global_cooldown",
+    };
+  }
+  const lastInspectAtForWindow = Number(windowInspectPolicy.byWindowLastInspectAtMs.get(normalizedWindowId));
+  if (
+    Number.isFinite(lastInspectAtForWindow) &&
+    nowMs - lastInspectAtForWindow < WINDOW_INSPECT_WINDOW_COOLDOWN_MS
+  ) {
+    return {
+      allowed: false,
+      reason: "window_cooldown",
+    };
+  }
+  if (Math.random() > WINDOW_INSPECT_TRIGGER_PROBABILITY) {
+    return {
+      allowed: false,
+      reason: "random_defer",
+    };
+  }
+  return {
+    allowed: true,
+    reason: "eligible",
+  };
+}
+
+function recordWindowInspectActivation(windowId, nowMs = Date.now()) {
+  const normalizedWindowId =
+    typeof windowId === "string" && windowId.trim().length > 0 ? windowId.trim() : null;
+  if (!normalizedWindowId) return;
+  windowInspectPolicy.lastInspectAtMs = nowMs;
+  windowInspectPolicy.lastInspectWindowId = normalizedWindowId;
+  windowInspectPolicy.byWindowLastInspectAtMs.set(normalizedWindowId, nowMs);
+}
+
+function intersectsAnySamplingArea(bounds, samplingAreas = []) {
+  const normalizedBounds = normalizeBoundsRect(bounds);
+  if (!normalizedBounds) return false;
+  if (!Array.isArray(samplingAreas) || samplingAreas.length <= 0) return false;
+  return samplingAreas.some((entry) => Boolean(intersectBoundsRect(normalizedBounds, entry)));
+}
+
+function buildPetVisualWorldBoundsAt(windowX, windowY, nowMs = Date.now()) {
+  const petBounds = getRoamPetBounds(nowMs);
+  return normalizeBoundsRect({
+    x: Math.round(windowX + petBounds.x),
+    y: Math.round(windowY + petBounds.y),
+    width: petBounds.width,
+    height: petBounds.height,
+  });
+}
+
+async function pollForegroundWindowState({ force = false, trigger = "interval" } = {}) {
+  const sensorSettings = getForegroundWindowSensorSettings();
+  const nowMs = Date.now();
+  if (!isForegroundWindowAvoidanceSupported()) {
+    latestForegroundWindowSnapshot = createInitialForegroundWindowSnapshot("unsupported_platform");
+    updateForegroundWindowRuntimeDisabled(
+      ROAM_POLICY_DECISION_REASONS.windowAvoidanceNotSupportedPlatform
+    );
+    return {
+      ok: true,
+      snapshot: latestForegroundWindowSnapshot,
+      trigger,
+    };
+  }
+  if (!isForegroundWindowAvoidanceDesktopMode()) {
+    updateForegroundWindowRuntimeDisabled(
+      ROAM_POLICY_DECISION_REASONS.windowAvoidanceNotDesktopMode
+    );
+    return {
+      ok: true,
+      snapshot: latestForegroundWindowSnapshot || createInitialForegroundWindowSnapshot(),
+      trigger,
+    };
+  }
+  if (!sensorSettings.enabled) {
+    foregroundWindowRuntime.state = "degraded";
+    foregroundWindowRuntime.reason = ROAM_POLICY_DECISION_REASONS.foregroundWindowProviderUnavailable;
+    foregroundWindowRuntime.decisionReason = foregroundWindowRuntime.reason;
+    latestForegroundWindowSnapshot = createInitialForegroundWindowSnapshot("disabled_by_config");
+    return {
+      ok: false,
+      snapshot: latestForegroundWindowSnapshot,
+      error: "disabled_by_config",
+      trigger,
+    };
+  }
+  if (
+    !force &&
+    nowMs - lastForegroundWindowPollRequestAtMs <
+      Math.max(100, Math.round(Number(sensorSettings.pollIntervalMs) || FOREGROUND_WINDOW_POLL_MS))
+  ) {
+    return {
+      ok: true,
+      snapshot: latestForegroundWindowSnapshot || createInitialForegroundWindowSnapshot(),
+      trigger,
+    };
+  }
+  if (foregroundWindowProbeInFlight) {
+    return {
+      ok: true,
+      snapshot: latestForegroundWindowSnapshot || createInitialForegroundWindowSnapshot(),
+      trigger,
+    };
+  }
+
+  lastForegroundWindowPollRequestAtMs = nowMs;
+  foregroundWindowProbeInFlight = true;
+  try {
+    const snapshot = await probeForegroundWindowState({
+      settings: sensorSettings,
+    });
+    latestForegroundWindowSnapshot = snapshot;
+    const nextProbeKey = buildForegroundWindowProbeKey(snapshot);
+    const changed = force || nextProbeKey !== lastForegroundWindowProbeKey;
+    if (changed) {
+      lastForegroundWindowProbeKey = nextProbeKey;
+      if (snapshot.ok) {
+        foregroundWindowRuntime.foregroundWindowRevision += 1;
+      }
+    }
+    if (snapshot.ok) {
+      foregroundWindowRuntime.state = "healthy";
+      foregroundWindowRuntime.reason = ROAM_POLICY_DECISION_REASONS.foregroundWindowNominal;
+      foregroundWindowRuntime.foregroundWindowWindowId = snapshot.windowId || null;
+      foregroundWindowRuntime.foregroundWindowBounds = normalizeBoundsRect(snapshot.bounds);
+      if (changed && roamState.phase === "moving" && roamState.foregroundRevisionAtLegStart > 0) {
+        const currentRevision = foregroundWindowRuntime.foregroundWindowRevision;
+        if (currentRevision > roamState.foregroundRevisionAtLegStart) {
+          markRoamPolicyDecision(
+            roamPolicyState,
+            ROAM_POLICY_DECISION_REASONS.foregroundWindowBoundsUpdated,
+            Date.now()
+          );
+          finishRoamLeg("foreground_window_bounds_updated", Date.now());
+        }
+      }
+      return {
+        ok: true,
+        snapshot,
+        changed,
+        trigger,
+      };
+    }
+
+    foregroundWindowRuntime.state = "degraded";
+    foregroundWindowRuntime.reason = resolveForegroundWindowProbeReason(snapshot.error);
+    foregroundWindowRuntime.decisionReason = foregroundWindowRuntime.reason;
+    foregroundWindowRuntime.foregroundWindowWindowId = null;
+    foregroundWindowRuntime.foregroundWindowBounds = null;
+    foregroundWindowRuntime.avoidMaskBounds = null;
+    if (roamState.phase !== "inspect_dwell") {
+      foregroundWindowRuntime.windowInspectState = "idle";
+      foregroundWindowRuntime.windowInspectReason = "none";
+      foregroundWindowRuntime.windowInspectAnchorLane = "none";
+      foregroundWindowRuntime.windowInspectAnchorPoint = null;
+    }
+    return {
+      ok: false,
+      snapshot,
+      changed,
+      error: snapshot.error || "probe_failed",
+      trigger,
+    };
+  } finally {
+    foregroundWindowProbeInFlight = false;
+  }
+}
+
+function requestForegroundWindowPoll(trigger = "interval", force = false) {
+  void pollForegroundWindowState({
+    force,
+    trigger,
+  });
+}
+
+function resolveForegroundWindowCandidate({
+  samplingAreas = [],
+  nowMs = Date.now(),
+} = {}) {
+  if (!isForegroundWindowAvoidanceSupported()) {
+    updateForegroundWindowRuntimeDisabled(
+      ROAM_POLICY_DECISION_REASONS.windowAvoidanceNotSupportedPlatform
+    );
+    return {
+      state: "disabled",
+      reason: ROAM_POLICY_DECISION_REASONS.windowAvoidanceNotSupportedPlatform,
+      candidate: null,
+    };
+  }
+  if (!isForegroundWindowAvoidanceDesktopMode()) {
+    updateForegroundWindowRuntimeDisabled(
+      ROAM_POLICY_DECISION_REASONS.windowAvoidanceNotDesktopMode
+    );
+    return {
+      state: "disabled",
+      reason: ROAM_POLICY_DECISION_REASONS.windowAvoidanceNotDesktopMode,
+      candidate: null,
+    };
+  }
+
+  const snapshot = latestForegroundWindowSnapshot || createInitialForegroundWindowSnapshot();
+  if (!snapshot.ok) {
+    foregroundWindowRuntime.state = "degraded";
+    foregroundWindowRuntime.reason = resolveForegroundWindowProbeReason(snapshot.error);
+    foregroundWindowRuntime.decisionReason = foregroundWindowRuntime.reason;
+    foregroundWindowRuntime.foregroundWindowBounds = null;
+    foregroundWindowRuntime.foregroundWindowWindowId = null;
+    foregroundWindowRuntime.avoidMaskBounds = null;
+    return {
+      state: "degraded",
+      reason: foregroundWindowRuntime.reason,
+      candidate: null,
+    };
+  }
+
+  const normalizedBounds = normalizeBoundsRect(snapshot.bounds);
+  if (!normalizedBounds) {
+    foregroundWindowRuntime.state = "healthy";
+    foregroundWindowRuntime.reason = ROAM_POLICY_DECISION_REASONS.foregroundWindowNominal;
+    foregroundWindowRuntime.decisionReason = ROAM_POLICY_DECISION_REASONS.foregroundWindowNominal;
+    foregroundWindowRuntime.foregroundWindowBounds = null;
+    foregroundWindowRuntime.foregroundWindowWindowId = null;
+    return {
+      state: "healthy",
+      reason: ROAM_POLICY_DECISION_REASONS.foregroundWindowNominal,
+      candidate: null,
+    };
+  }
+
+  if (Number.isFinite(Number(snapshot.processId)) && Math.round(Number(snapshot.processId)) === process.pid) {
+    foregroundWindowRuntime.state = "healthy";
+    foregroundWindowRuntime.reason = ROAM_POLICY_DECISION_REASONS.foregroundWindowNominal;
+    foregroundWindowRuntime.decisionReason = ROAM_POLICY_DECISION_REASONS.foregroundWindowNominal;
+    foregroundWindowRuntime.foregroundWindowBounds = null;
+    foregroundWindowRuntime.foregroundWindowWindowId = null;
+    return {
+      state: "healthy",
+      reason: ROAM_POLICY_DECISION_REASONS.foregroundWindowNominal,
+      candidate: null,
+    };
+  }
+
+  if (!intersectsAnySamplingArea(normalizedBounds, samplingAreas)) {
+    foregroundWindowRuntime.state = "healthy";
+    foregroundWindowRuntime.reason = ROAM_POLICY_DECISION_REASONS.foregroundWindowNominal;
+    foregroundWindowRuntime.decisionReason = ROAM_POLICY_DECISION_REASONS.foregroundWindowNominal;
+    foregroundWindowRuntime.foregroundWindowBounds = null;
+    foregroundWindowRuntime.foregroundWindowWindowId = null;
+    return {
+      state: "healthy",
+      reason: ROAM_POLICY_DECISION_REASONS.foregroundWindowNominal,
+      candidate: null,
+    };
+  }
+
+  const center = getForegroundWindowCenterPoint(normalizedBounds);
+  const display = center ? screen.getDisplayNearestPoint(center) : null;
+  const displayId = Number.isFinite(Number(display?.id)) ? String(Math.round(Number(display.id))) : null;
+  foregroundWindowRuntime.state = "healthy";
+  foregroundWindowRuntime.reason = ROAM_POLICY_DECISION_REASONS.foregroundWindowNominal;
+  foregroundWindowRuntime.decisionReason = ROAM_POLICY_DECISION_REASONS.foregroundWindowNominal;
+  foregroundWindowRuntime.foregroundWindowBounds = normalizedBounds;
+  foregroundWindowRuntime.foregroundWindowWindowId = snapshot.windowId || null;
+  return {
+    state: "healthy",
+    reason: ROAM_POLICY_DECISION_REASONS.foregroundWindowNominal,
+    candidate: {
+      windowId: snapshot.windowId,
+      bounds: normalizedBounds,
+      displayId,
+      processId: Number.isFinite(Number(snapshot.processId))
+        ? Math.round(Number(snapshot.processId))
+        : null,
+      processName: snapshot.processName || null,
+      title: snapshot.title || null,
+      ts: Number.isFinite(Number(snapshot.ts)) ? Math.round(Number(snapshot.ts)) : nowMs,
+    },
+  };
+}
+
 function getSpotifyBackgroundPollCadenceMs() {
   const cadenceMinutes = Number(runtimeSettings?.integrations?.spotify?.pollCadenceMinutes);
   if (!Number.isFinite(cadenceMinutes)) return 10 * 60 * 1000;
@@ -807,6 +1332,222 @@ function applyPreferredOutputContext(nowPlaying, preferredOutputContext) {
         ? nowPlaying.outputDeviceType
         : preferred.outputDeviceType || "unknown",
   };
+}
+
+function normalizeLowerText(value) {
+  if (typeof value !== "string") return "";
+  return value.trim().toLowerCase();
+}
+
+function hasAnyHint(text, hints = []) {
+  const normalized = normalizeLowerText(text);
+  if (!normalized) return false;
+  return hints.some((hint) => normalized.includes(normalizeLowerText(hint)));
+}
+
+function hasKnownMediaExtension(text, extensions = []) {
+  const normalized = normalizeLowerText(text);
+  if (!normalized) return false;
+  return extensions.some((ext) => normalized.includes(normalizeLowerText(ext)));
+}
+
+function stableStringHash(value) {
+  const input = typeof value === "string" ? value : String(value || "");
+  let hash = 2166136261;
+  for (let index = 0; index < input.length; index += 1) {
+    hash ^= input.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+function hashUnitFromString(value) {
+  return (stableStringHash(value) % 1000000) / 1000000;
+}
+
+function chooseMusicSuggestedState(snapshot = {}) {
+  const provider = normalizeLowerText(snapshot.provider || snapshot.sourceAppLabel || "local_media");
+  const outputRoute = normalizeLowerText(snapshot.outputRoute || "unknown");
+  const identity = [
+    provider,
+    normalizeLowerText(snapshot.sourceAppLabel || ""),
+    normalizeLowerText(snapshot.title || ""),
+    normalizeLowerText(snapshot.artist || ""),
+    normalizeLowerText(snapshot.album || ""),
+    outputRoute,
+  ].join("|");
+  const unit = hashUnitFromString(identity);
+  let danceBias = 0.62;
+  if (provider.includes("spotify")) danceBias += 0.1;
+  if (outputRoute === "speaker") danceBias += 0.12;
+  if (outputRoute === "headphones") danceBias += 0.05;
+  danceBias = Math.max(0.2, Math.min(0.9, danceBias));
+  return unit < danceBias ? "MusicDance" : "MusicChill";
+}
+
+function getForegroundCoverageRatio(bounds) {
+  const normalizedBounds = normalizeBoundsRect(bounds);
+  if (!normalizedBounds) return 0;
+  const center = getForegroundWindowCenterPoint(normalizedBounds);
+  const display = center ? screen.getDisplayNearestPoint(center) : null;
+  const area = display ? getClampArea(display) : null;
+  const normalizedArea = normalizeBoundsRect(area);
+  if (!normalizedArea) return 0;
+  const overlap = intersectBoundsRect(normalizedBounds, normalizedArea);
+  if (!overlap) return 0;
+  const overlapArea = overlap.width * overlap.height;
+  const displayArea = normalizedArea.width * normalizedArea.height;
+  if (displayArea <= 0) return 0;
+  return Math.max(0, Math.min(1, overlapArea / displayArea));
+}
+
+function deriveMediaPlaybackSuggestion(snapshot = {}, options = {}) {
+  const mediaSnapshot = snapshot && typeof snapshot === "object" ? snapshot : {};
+  if (!mediaSnapshot.isPlaying) {
+    return {
+      mediaKind: "idle",
+      suggestedState: "Idle",
+      reason: "not_playing",
+    };
+  }
+
+  const provider = normalizeLowerText(mediaSnapshot.provider || "local_media");
+  const sourceAppLabel = normalizeLowerText(mediaSnapshot.sourceAppLabel || "");
+  const sourceAppUserModelId = normalizeLowerText(mediaSnapshot.sourceAppUserModelId || "");
+  const title = normalizeLowerText(mediaSnapshot.title || "");
+  const foregroundSnapshot =
+    options.foregroundSnapshot && typeof options.foregroundSnapshot === "object"
+      ? options.foregroundSnapshot
+      : latestForegroundWindowSnapshot;
+  const foregroundTitle = normalizeLowerText(foregroundSnapshot?.title || "");
+  const foregroundProcessName = normalizeLowerText(foregroundSnapshot?.processName || "");
+  const sourceIdentity = `${provider} ${sourceAppLabel} ${sourceAppUserModelId} ${foregroundProcessName}`.trim();
+  const combined = `${sourceIdentity} ${title} ${foregroundTitle}`.trim();
+  const titleLooksAudio = hasKnownMediaExtension(title, MEDIA_AUDIO_EXTENSIONS);
+  const titleLooksVideo = hasKnownMediaExtension(title, MEDIA_VIDEO_EXTENSIONS);
+  const sourceLooksBrowser =
+    MEDIA_BROWSER_PROVIDERS.has(provider) || hasAnyHint(sourceIdentity, MEDIA_BROWSER_PROVIDER_HINTS);
+  const browserStrongMusicHint = hasAnyHint(combined, MEDIA_BROWSER_STRONG_MUSIC_HINTS);
+  const browserMusicHint = hasAnyHint(combined, MEDIA_BROWSER_MUSIC_HINTS);
+  const browserVideoHint = hasAnyHint(combined, MEDIA_BROWSER_VIDEO_HINTS);
+
+  if (MEDIA_VIDEO_PROVIDERS.has(provider)) {
+    return {
+      mediaKind: "video",
+      suggestedState: "WatchMode",
+      reason: "video_provider",
+    };
+  }
+  if (provider === "spotify") {
+    return {
+      mediaKind: "music",
+      suggestedState: chooseMusicSuggestedState(mediaSnapshot),
+      reason: "spotify_music",
+    };
+  }
+  if (provider === "vlc" || sourceAppLabel.includes("vlc")) {
+    if (titleLooksAudio) {
+      return {
+        mediaKind: "music",
+        suggestedState: chooseMusicSuggestedState(mediaSnapshot),
+        reason: "vlc_audio_track",
+      };
+    }
+    return {
+      mediaKind: "video",
+      suggestedState: "WatchMode",
+      reason: titleLooksVideo ? "vlc_video_track" : "vlc_default_video",
+    };
+  }
+  if (
+    sourceAppLabel.includes("windows media player") ||
+    sourceAppLabel.includes("media player")
+  ) {
+    if (titleLooksAudio) {
+      return {
+        mediaKind: "music",
+        suggestedState: chooseMusicSuggestedState(mediaSnapshot),
+        reason: "wmp_audio_track",
+      };
+    }
+    if (titleLooksVideo) {
+      return {
+        mediaKind: "video",
+        suggestedState: "WatchMode",
+        reason: "wmp_video_track",
+      };
+    }
+  }
+  if (sourceLooksBrowser) {
+    if (browserStrongMusicHint) {
+      return {
+        mediaKind: "music",
+        suggestedState: chooseMusicSuggestedState(mediaSnapshot),
+        reason: "browser_music_strong_hint",
+      };
+    }
+    if (browserVideoHint) {
+      return {
+        mediaKind: "video",
+        suggestedState: "WatchMode",
+        reason: "browser_video_hint",
+      };
+    }
+    if (browserMusicHint) {
+      return {
+        mediaKind: "music",
+        suggestedState: chooseMusicSuggestedState(mediaSnapshot),
+        reason: "browser_music_hint",
+      };
+    }
+    if (getForegroundCoverageRatio(foregroundSnapshot?.bounds) >= 0.55) {
+      return {
+        mediaKind: "video",
+        suggestedState: "WatchMode",
+        reason: "browser_large_foreground_window",
+      };
+    }
+    return {
+      mediaKind: "video",
+      suggestedState: "WatchMode",
+      reason: "browser_default_video",
+    };
+  }
+  if (titleLooksVideo) {
+    return {
+      mediaKind: "video",
+      suggestedState: "WatchMode",
+      reason: "video_extension_hint",
+    };
+  }
+  if (titleLooksAudio) {
+    return {
+      mediaKind: "music",
+      suggestedState: chooseMusicSuggestedState(mediaSnapshot),
+      reason: "audio_extension_hint",
+    };
+  }
+  return {
+    mediaKind: "music",
+    suggestedState: chooseMusicSuggestedState(mediaSnapshot),
+    reason: "default_music_fallback",
+  };
+}
+
+function buildLocalMediaContractSignature(snapshot = {}, mediaSuggestion = {}) {
+  const normalizedSnapshot = snapshot && typeof snapshot === "object" ? snapshot : {};
+  const normalizedSuggestion = mediaSuggestion && typeof mediaSuggestion === "object" ? mediaSuggestion : {};
+  return JSON.stringify({
+    playing: Boolean(normalizedSnapshot.isPlaying),
+    provider: normalizeLowerText(normalizedSnapshot.provider || "local_media"),
+    sourceAppLabel: normalizeLowerText(normalizedSnapshot.sourceAppLabel || ""),
+    title: normalizeLowerText(normalizedSnapshot.title || ""),
+    artist: normalizeLowerText(normalizedSnapshot.artist || ""),
+    album: normalizeLowerText(normalizedSnapshot.album || ""),
+    outputRoute: normalizeLowerText(normalizedSnapshot.outputRoute || "unknown"),
+    mediaKind: normalizeLowerText(normalizedSuggestion.mediaKind || "music"),
+    suggestedState: normalizeLowerText(normalizedSuggestion.suggestedState || "MusicChill"),
+  });
 }
 
 function summarizeDisplays() {
@@ -1043,8 +1784,10 @@ function cancelFling(reason = "cancelled") {
     if (reason === "belowStopSpeed") {
       maybeExitZoneRoamAfterManualMove("manual_fling_exit_zone");
       maybeRecordManualMonitorAvoidance("manual_fling_monitor_correction");
+      manualWindowCorrectionStartContext = null;
     } else {
       manualCorrectionStartDisplayId = null;
+      manualWindowCorrectionStartContext = null;
     }
   }
 }
@@ -1108,6 +1851,7 @@ function maybeStartFlingFromSamples() {
   const [winX, winY] = win.getPosition();
   flingState.x = winX;
   flingState.y = winY;
+  resetRoamDirectionMemory();
   flingTick = 0;
 
   const payload = {
@@ -1321,7 +2065,6 @@ function emitStateSnapshot(snapshot) {
     latestLocalMediaSnapshot?.isPlaying
   ) {
     void pollLocalMediaState({
-      force: true,
       trigger: "idle-resume",
     });
   } else if (
@@ -2505,11 +3248,55 @@ function buildCurrentBehaviorRuntimeSnapshot(nowMs = Date.now()) {
     roamMode,
     nowMs: safeNow || Date.now(),
   });
+  const activeAvoidedWindows = listActiveAvoidedWindows(roamPolicyState, safeNow || Date.now());
+  const windowAvoidanceState = !isForegroundWindowAvoidanceSupported()
+    ? "disabled"
+    : roamMode !== ROAMING_MODES.desktop
+      ? "disabled"
+      : foregroundWindowRuntime.state || "unknown";
+  const windowAvoidanceReason = !isForegroundWindowAvoidanceSupported()
+    ? ROAM_POLICY_DECISION_REASONS.windowAvoidanceNotSupportedPlatform
+    : roamMode !== ROAMING_MODES.desktop
+      ? ROAM_POLICY_DECISION_REASONS.windowAvoidanceNotDesktopMode
+      : foregroundWindowRuntime.reason || "none";
   return {
     ...snapshot,
     roamPhase: typeof roamState.phase === "string" ? roamState.phase : "idle",
     nextDecisionAtMs: Math.max(0, Math.round(Number(roamState.nextDecisionAtMs) || 0)),
     hasQueuedDestination: Boolean(roamState.queuedDestination),
+    windowAvoidanceState,
+    windowAvoidanceReason,
+    windowAvoidMarginPx: ACTIVE_WINDOW_AVOID_MARGIN_PX,
+    foregroundWindowBounds: foregroundWindowRuntime.foregroundWindowBounds
+      ? summarizeBounds(foregroundWindowRuntime.foregroundWindowBounds)
+      : null,
+    foregroundWindowWindowId: foregroundWindowRuntime.foregroundWindowWindowId || null,
+    foregroundWindowRevision: Math.max(
+      0,
+      Math.round(Number(foregroundWindowRuntime.foregroundWindowRevision) || 0)
+    ),
+    windowInspectState: foregroundWindowRuntime.windowInspectState || "idle",
+    windowInspectReason: foregroundWindowRuntime.windowInspectReason || "none",
+    windowInspectAnchorLane: foregroundWindowRuntime.windowInspectAnchorLane || "none",
+    windowInspectAnchorPoint:
+      foregroundWindowRuntime.windowInspectAnchorPoint &&
+      Number.isFinite(Number(foregroundWindowRuntime.windowInspectAnchorPoint.x)) &&
+      Number.isFinite(Number(foregroundWindowRuntime.windowInspectAnchorPoint.y))
+        ? {
+            x: Math.round(Number(foregroundWindowRuntime.windowInspectAnchorPoint.x)),
+            y: Math.round(Number(foregroundWindowRuntime.windowInspectAnchorPoint.y)),
+          }
+        : null,
+    windowInspectDwellMs: Math.max(
+      0,
+      Math.round(Number(foregroundWindowRuntime.windowInspectDwellMs) || WINDOW_EDGE_INSPECT_DWELL_MS)
+    ),
+    avoidMaskBounds: foregroundWindowRuntime.avoidMaskBounds
+      ? summarizeBounds(foregroundWindowRuntime.avoidMaskBounds)
+      : null,
+    windowAvoidFallback: foregroundWindowRuntime.fallbackReason || "none",
+    windowAvoidCooldownEntries: activeAvoidedWindows,
+    windowAvoidCooldownCount: activeAvoidedWindows.length,
   };
 }
 
@@ -3263,7 +4050,12 @@ function getRoamPetBounds(nowMs = Date.now()) {
 }
 
 function isAmbientStateId(stateId) {
-  return stateId === "Idle" || stateId === "Roam" || stateId === "WatchMode";
+  return (
+    stateId === "Idle" ||
+    stateId === "Roam" ||
+    stateId === "WatchMode" ||
+    stateId === "MusicChill"
+  );
 }
 
 function isDialogSurfaceOpen() {
@@ -3341,8 +4133,12 @@ function buildProactiveConversationPrompt(nowMs = Date.now()) {
   });
 }
 
-function pickAmbientRestStateId() {
-  return Math.random() < 0.55 ? "WatchMode" : "Idle";
+function pickAmbientRestStateId(snapshot = latestShellState) {
+  const roamMode = snapshot?.roaming?.mode || ROAMING_MODES.desktop;
+  if (roamMode === ROAMING_MODES.zone) {
+    return "WatchMode";
+  }
+  return "Idle";
 }
 
 function getBoundsUnion(boundsList) {
@@ -3569,8 +4365,94 @@ function maybeRecordManualMonitorAvoidance(reason = "manual_monitor_correction")
   });
 }
 
+function buildWindowAvoidMaskForCandidate(candidateBounds, samplingAreas, petBounds) {
+  const plan = planActiveWindowAvoidanceSampling({
+    samplingAreas,
+    activeWindowBounds: candidateBounds,
+    avoidMarginPx: ACTIVE_WINDOW_AVOID_MARGIN_PX,
+    petBounds,
+    strictAvoidActive: false,
+  });
+  return plan?.avoidMaskBounds || null;
+}
+
+function maybeRecordManualWindowAvoidance(reason = "manual_window_correction") {
+  const start = manualWindowCorrectionStartContext;
+  manualWindowCorrectionStartContext = null;
+  if (!start || !start.startedInsideMask) return null;
+  const roamMode = latestShellState?.roaming?.mode || ROAMING_MODES.desktop;
+  if (roamMode !== ROAMING_MODES.desktop) return null;
+  if (!win || win.isDestroyed()) return null;
+
+  const nowMs = Date.now();
+  const [winX, winY] = win.getPosition();
+  const petWorldBounds = buildPetVisualWorldBoundsAt(winX, winY, nowMs);
+  const maskBounds = normalizeBoundsRect(start.maskBounds);
+  if (!petWorldBounds || !maskBounds) return null;
+  const endedInsideMask = Boolean(intersectBoundsRect(petWorldBounds, maskBounds));
+  if (endedInsideMask) return null;
+
+  const outcome = recordManualWindowAvoidance(roamPolicyState, {
+    windowId: start.windowId,
+    nowMs,
+    sourceReason: reason,
+  });
+  if (outcome?.recorded) {
+    foregroundWindowRuntime.windowInspectState = "suppressed";
+    foregroundWindowRuntime.windowInspectReason =
+      ROAM_POLICY_DECISION_REASONS.windowAvoidCooldownActive;
+    foregroundWindowRuntime.windowInspectAnchorLane = "none";
+    foregroundWindowRuntime.windowInspectAnchorPoint = null;
+    foregroundWindowRuntime.decisionReason = ROAM_POLICY_DECISION_REASONS.manualWindowAvoidRecorded;
+    roamPolicyState.windowDecisionReason = ROAM_POLICY_DECISION_REASONS.manualWindowAvoidRecorded;
+  }
+  return outcome;
+}
+
+function resetRoamDirectionMemory() {
+  roamState.lastLegVector = null;
+  roamState.lastLegCompletedAtMs = 0;
+}
+
+function getPrimaryHorizontalDirectionSign(vector) {
+  if (!vector || typeof vector !== "object") return 0;
+  const dx = Number(vector.x);
+  const dy = Number(vector.y);
+  if (!Number.isFinite(dx) || !Number.isFinite(dy)) return 0;
+  if (Math.abs(dx) < Math.max(60, Math.abs(dy) * 1.1)) return 0;
+  return dx > 0 ? 1 : -1;
+}
+
+function shouldAvoidImmediateReverseRoamDirection(candidate, {
+  fromX,
+  fromY,
+  nowMs = Date.now(),
+} = {}) {
+  if (!candidate || !roamState.lastLegVector) return false;
+  if (
+    !Number.isFinite(Number(roamState.lastLegCompletedAtMs)) ||
+    nowMs - Number(roamState.lastLegCompletedAtMs) >= ROAM_DIRECTION_REVERSAL_MIN_IDLE_MS
+  ) {
+    return false;
+  }
+
+  const previousDirectionSign = getPrimaryHorizontalDirectionSign(roamState.lastLegVector);
+  if (!previousDirectionSign) return false;
+  const candidateVector = {
+    x: Number(candidate.x) - Number(fromX),
+    y: Number(candidate.y) - Number(fromY),
+  };
+  const candidateDirectionSign = getPrimaryHorizontalDirectionSign(candidateVector);
+  if (!candidateDirectionSign) return false;
+  if (candidateDirectionSign !== -previousDirectionSign) return false;
+
+  const candidateDistance = Math.hypot(candidateVector.x, candidateVector.y);
+  return candidateDistance >= ROAM_DIRECTION_REVERSAL_MIN_DISTANCE_PX;
+}
+
 function chooseRoamDestination(nowMs = Date.now(), options = {}) {
   if (!win || win.isDestroyed()) return null;
+  requestForegroundWindowPoll("decision_boundary");
   const [currentWinX, currentWinY] = win.getPosition();
   const winX = Number.isFinite(Number(options.fromX)) ? Math.round(Number(options.fromX)) : currentWinX;
   const winY = Number.isFinite(Number(options.fromY)) ? Math.round(Number(options.fromY)) : currentWinY;
@@ -3593,15 +4475,171 @@ function chooseRoamDestination(nowMs = Date.now(), options = {}) {
     options.roamBounds ||
     desktopRoamLayout?.bounds ||
     getRoamBounds(display, roamMode, roamZone, roamZoneRect);
-  const samplingAreas =
+  const baseSamplingAreas =
     Array.isArray(options.samplingAreas) && options.samplingAreas.length > 0
       ? options.samplingAreas
       : desktopSamplingPlan?.samplingAreas || desktopRoamLayout?.areas || [roamBounds];
   const petBounds = options.petBounds || getRoamPetBounds();
+  let samplingAreas = baseSamplingAreas;
+  let inspectDestination = null;
+
+  if (roamMode === ROAMING_MODES.desktop) {
+    const foregroundContext = resolveForegroundWindowCandidate({
+      samplingAreas: baseSamplingAreas,
+      nowMs,
+    });
+    if (foregroundContext.candidate) {
+      const windowId = updateWindowInspectFocusTracking(foregroundContext.candidate.windowId, nowMs);
+      const strictAvoidActive = isWindowAvoidActive(roamPolicyState, windowId, nowMs);
+      const clippingPlan = planActiveWindowAvoidanceSampling({
+        samplingAreas: baseSamplingAreas,
+        activeWindowBounds: foregroundContext.candidate.bounds,
+        avoidMarginPx: ACTIVE_WINDOW_AVOID_MARGIN_PX,
+        petBounds,
+        strictAvoidActive,
+      });
+      if (Array.isArray(clippingPlan.samplingAreas) && clippingPlan.samplingAreas.length > 0) {
+        samplingAreas = clippingPlan.samplingAreas;
+      }
+      foregroundWindowRuntime.avoidMaskBounds = clippingPlan.avoidMaskBounds
+        ? summarizeBounds(clippingPlan.avoidMaskBounds)
+        : null;
+      foregroundWindowRuntime.fallbackReason = clippingPlan.fallbackReason || "none";
+      roamPolicyState.windowFallbackReason = clippingPlan.fallbackReason || "none";
+
+      if (strictAvoidActive) {
+        foregroundWindowRuntime.decisionReason =
+          ROAM_POLICY_DECISION_REASONS.foregroundWindowAvoidanceActive;
+        roamPolicyState.windowDecisionReason =
+          ROAM_POLICY_DECISION_REASONS.foregroundWindowAvoidanceActive;
+        markRoamPolicyDecision(
+          roamPolicyState,
+          ROAM_POLICY_DECISION_REASONS.foregroundWindowAvoidanceActive,
+          nowMs
+        );
+        foregroundWindowRuntime.windowInspectState = "suppressed";
+        foregroundWindowRuntime.windowInspectReason =
+          ROAM_POLICY_DECISION_REASONS.windowAvoidCooldownActive;
+        foregroundWindowRuntime.windowInspectAnchorLane = "none";
+        foregroundWindowRuntime.windowInspectAnchorPoint = null;
+      } else {
+        foregroundWindowRuntime.decisionReason =
+          ROAM_POLICY_DECISION_REASONS.foregroundWindowSoftInspectOnly;
+        roamPolicyState.windowDecisionReason =
+          ROAM_POLICY_DECISION_REASONS.foregroundWindowSoftInspectOnly;
+        const inspectEligibility = canTriggerWindowInspect(windowId, nowMs);
+        const currentPetPoint = getPetVisualCenterAtWindowPosition(winX, winY, petBounds);
+        const anchorResult = resolveBottomEdgeInspectAnchor({
+          windowBounds: foregroundContext.candidate.bounds,
+          samplingAreas,
+          petBounds,
+          bottomBandPx: WINDOW_WATCH_BOTTOM_BAND_PX,
+          bottomInsetPx: WINDOW_WATCH_BOTTOM_INSET_PX,
+          bottomGracePx: WINDOW_WATCH_BOTTOM_GRACE_PX,
+          currentPetPoint,
+          randomUnit: Math.random(),
+        });
+        if (anchorResult?.anchor && inspectEligibility.allowed) {
+          const destination = anchorResult.anchor.destination;
+          const distance = Math.hypot(destination.x - winX, destination.y - winY);
+          inspectDestination = {
+            x: destination.x,
+            y: destination.y,
+            distance,
+            bounds: roamBounds,
+            petBounds,
+            preferRun: false,
+            inspectAnchor: {
+              windowId,
+              lane: anchorResult.anchor.lane,
+              key: anchorResult.anchor.key,
+              point: anchorResult.anchor.point,
+              dwellMs: WINDOW_EDGE_INSPECT_DWELL_MS,
+            },
+          };
+          foregroundWindowRuntime.windowInspectState = "pending";
+          foregroundWindowRuntime.windowInspectReason =
+            ROAM_POLICY_DECISION_REASONS.foregroundWindowInspectEdgePending;
+          foregroundWindowRuntime.windowInspectAnchorLane = anchorResult.anchor.lane;
+          foregroundWindowRuntime.windowInspectAnchorPoint = {
+            x: Math.round(anchorResult.anchor.point.x),
+            y: Math.round(anchorResult.anchor.point.y),
+          };
+          markRoamPolicyDecision(
+            roamPolicyState,
+            ROAM_POLICY_DECISION_REASONS.foregroundWindowInspectEdgePending,
+            nowMs
+          );
+        } else if (anchorResult?.anchor) {
+          foregroundWindowRuntime.windowInspectState = "idle";
+          foregroundWindowRuntime.windowInspectReason =
+            ROAM_POLICY_DECISION_REASONS.foregroundWindowSoftInspectOnly;
+          foregroundWindowRuntime.windowInspectAnchorLane = "none";
+          foregroundWindowRuntime.windowInspectAnchorPoint = null;
+          markRoamPolicyDecision(
+            roamPolicyState,
+            ROAM_POLICY_DECISION_REASONS.foregroundWindowSoftInspectOnly,
+            nowMs
+          );
+        } else {
+          foregroundWindowRuntime.windowInspectState = "suppressed";
+          foregroundWindowRuntime.windowInspectReason =
+            ROAM_POLICY_DECISION_REASONS.foregroundWindowInspectAnchorUnavailable;
+          foregroundWindowRuntime.windowInspectAnchorLane = "none";
+          foregroundWindowRuntime.windowInspectAnchorPoint = null;
+          markRoamPolicyDecision(
+            roamPolicyState,
+            ROAM_POLICY_DECISION_REASONS.foregroundWindowSoftInspectOnly,
+            nowMs
+          );
+        }
+      }
+    } else {
+      resetWindowInspectFocusTracking();
+      foregroundWindowRuntime.avoidMaskBounds = null;
+      foregroundWindowRuntime.fallbackReason = "none";
+      foregroundWindowRuntime.decisionReason = foregroundContext.reason || "none";
+      roamPolicyState.windowDecisionReason = foregroundContext.reason || "none";
+      roamPolicyState.windowFallbackReason = "none";
+      markRoamPolicyDecision(
+        roamPolicyState,
+        ROAM_POLICY_DECISION_REASONS.foregroundWindowNominal,
+        nowMs
+      );
+      if (roamState.phase !== "inspect_dwell") {
+        foregroundWindowRuntime.windowInspectState = "idle";
+        foregroundWindowRuntime.windowInspectReason = "none";
+        foregroundWindowRuntime.windowInspectAnchorLane = "none";
+        foregroundWindowRuntime.windowInspectAnchorPoint = null;
+      }
+    }
+  } else {
+    updateForegroundWindowRuntimeDisabled(
+      ROAM_POLICY_DECISION_REASONS.windowAvoidanceNotDesktopMode
+    );
+    foregroundWindowRuntime.avoidMaskBounds = null;
+    foregroundWindowRuntime.fallbackReason = "none";
+    roamPolicyState.windowFallbackReason = "none";
+    roamPolicyState.windowDecisionReason =
+      ROAM_POLICY_DECISION_REASONS.windowAvoidanceNotDesktopMode;
+    if (roamState.phase !== "inspect_dwell") {
+      foregroundWindowRuntime.windowInspectState = "idle";
+      foregroundWindowRuntime.windowInspectReason = "none";
+      foregroundWindowRuntime.windowInspectAnchorLane = "none";
+      foregroundWindowRuntime.windowInspectAnchorPoint = null;
+    }
+  }
+
+  if (inspectDestination) {
+    return inspectDestination;
+  }
+
   const minDistancePx = Number.isFinite(Number(options.minDistancePx))
     ? Math.max(0, Math.round(Number(options.minDistancePx)))
     : ROAM_TARGET_MIN_DISTANCE_PX;
   let bestCandidate = null;
+  let bestNonReverseCandidate = null;
+  let reverseFallbackCandidate = null;
   for (let attempt = 0; attempt < ROAM_TARGET_RETRY_COUNT; attempt += 1) {
     const samplingArea = pickRoamSamplingArea(samplingAreas) || roamBounds;
     const range = computeRoamWindowRange(samplingArea, petBounds);
@@ -3610,22 +4648,40 @@ function chooseRoamDestination(nowMs = Date.now(), options = {}) {
       y: Math.round(randomBetween(range.minY, range.maxY)),
     };
     const distance = Math.hypot(candidate.x - winX, candidate.y - winY);
-    if (distance >= minDistancePx) {
-      return {
-        ...candidate,
-        distance,
-        bounds: roamBounds,
-        petBounds,
-      };
+    const candidateRecord = {
+      ...candidate,
+      distance,
+      bounds: roamBounds,
+      petBounds,
+    };
+    const reverseRejected = shouldAvoidImmediateReverseRoamDirection(candidate, {
+      fromX: winX,
+      fromY: winY,
+      nowMs,
+    });
+
+    if (!reverseRejected && distance >= minDistancePx) {
+      return candidateRecord;
+    }
+    if (reverseRejected && distance >= minDistancePx) {
+      if (!reverseFallbackCandidate || distance > reverseFallbackCandidate.distance) {
+        reverseFallbackCandidate = candidateRecord;
+      }
+    }
+    if (!reverseRejected && (!bestNonReverseCandidate || distance > bestNonReverseCandidate.distance)) {
+      bestNonReverseCandidate = candidateRecord;
     }
     if (!bestCandidate || distance > bestCandidate.distance) {
       bestCandidate = {
-        ...candidate,
-        distance,
-        bounds: roamBounds,
-        petBounds,
+        ...candidateRecord,
       };
     }
+  }
+  if (bestNonReverseCandidate) {
+    return bestNonReverseCandidate;
+  }
+  if (reverseFallbackCandidate) {
+    return reverseFallbackCandidate;
   }
   return bestCandidate;
 }
@@ -3659,12 +4715,160 @@ function buildRoamModeEntryDestination(snapshot = latestShellState) {
   };
 }
 
+function buildMediaWatchInspectDestination(payload = {}, nowMs = Date.now()) {
+  if (!win || win.isDestroyed()) return null;
+  if (!isForegroundWindowAvoidanceSupported()) return null;
+  if (!isForegroundWindowAvoidanceDesktopMode()) return null;
+  if (!latestShellState) return null;
+  const roamMode = latestShellState.roaming?.mode || ROAMING_MODES.desktop;
+  if (roamMode !== ROAMING_MODES.desktop) return null;
+
+  const desktopRoamLayout = getDesktopRoamLayout();
+  const desktopSamplingPlan = planDesktopRoamSampling(roamPolicyState, {
+    displayAreas: desktopRoamLayout?.displayAreas || [],
+    nowMs,
+  });
+  const display = getWindowDisplay(win, getPetWindowSize());
+  const roamBounds =
+    desktopRoamLayout?.bounds ||
+    getRoamBounds(
+      display,
+      roamMode,
+      getRoamZoneLabel(latestShellState),
+      latestShellState.roaming?.zoneRect || null
+    );
+  const samplingAreas =
+    desktopSamplingPlan?.samplingAreas || desktopRoamLayout?.areas || [roamBounds];
+  const foregroundContext = resolveForegroundWindowCandidate({
+    samplingAreas,
+    nowMs,
+  });
+  if (!foregroundContext.candidate) return null;
+
+  const [winX, winY] = win.getPosition();
+  const petBounds = getRoamPetBounds(nowMs);
+  const currentPetPoint = getPetVisualCenterAtWindowPosition(winX, winY, petBounds);
+  const foregroundCenter = getForegroundWindowCenterPoint(foregroundContext.candidate.bounds);
+  const foregroundDisplay = foregroundCenter
+    ? screen.getDisplayNearestPoint(foregroundCenter)
+    : getWindowDisplay(win, getPetWindowSize());
+  const displayClampArea = normalizeBoundsRect(getClampArea(foregroundDisplay));
+  const displayFullBounds = normalizeBoundsRect(foregroundDisplay?.bounds);
+  const samplingPrioritySets = [];
+  if (displayClampArea) {
+    samplingPrioritySets.push({
+      roamBounds: displayClampArea,
+      samplingAreas: [displayClampArea],
+    });
+  }
+  if (
+    displayFullBounds &&
+    (!displayClampArea ||
+      displayFullBounds.x !== displayClampArea.x ||
+      displayFullBounds.y !== displayClampArea.y ||
+      displayFullBounds.width !== displayClampArea.width ||
+      displayFullBounds.height !== displayClampArea.height)
+  ) {
+    samplingPrioritySets.push({
+      roamBounds: displayFullBounds,
+      samplingAreas: [displayFullBounds],
+    });
+  }
+  if (Array.isArray(samplingAreas) && samplingAreas.length > 0) {
+    samplingPrioritySets.push({
+      roamBounds,
+      samplingAreas,
+    });
+  }
+
+  let selectedAnchorResult = null;
+  let selectedRoamBounds = roamBounds;
+  for (const samplingSet of samplingPrioritySets) {
+    const anchorResult = resolveBottomEdgeInspectAnchor({
+      windowBounds: foregroundContext.candidate.bounds,
+      samplingAreas: samplingSet.samplingAreas,
+      petBounds,
+      bottomBandPx: WINDOW_WATCH_BOTTOM_BAND_PX,
+      bottomInsetPx: WINDOW_WATCH_BOTTOM_INSET_PX,
+      bottomGracePx: WINDOW_WATCH_BOTTOM_GRACE_PX,
+      currentPetPoint,
+      randomUnit: Math.random(),
+      preferenceProfile: "corner_preferred_media_watch",
+    });
+    if (anchorResult?.anchor) {
+      selectedAnchorResult = anchorResult;
+      selectedRoamBounds = samplingSet.roamBounds;
+      break;
+    }
+  }
+  if (!selectedAnchorResult?.anchor) return null;
+
+  const destination = selectedAnchorResult.anchor.destination;
+  const title = typeof payload.title === "string" ? payload.title.trim() : "";
+  const artist = typeof payload.artist === "string" ? payload.artist.trim() : "";
+  const sourceAppLabel =
+    typeof payload.sourceAppLabel === "string" && payload.sourceAppLabel.trim().length > 0
+      ? payload.sourceAppLabel.trim()
+      : "media window";
+  const titleLabel = title
+    ? artist
+      ? `${title} by ${artist}`
+      : title
+    : "active media";
+
+  return {
+    x: destination.x,
+    y: destination.y,
+    distance: Math.hypot(destination.x - winX, destination.y - winY),
+    bounds: selectedRoamBounds,
+    petBounds,
+    preferRun: false,
+    inspectAnchor: {
+      windowId: foregroundContext.candidate.windowId || "unknown",
+      lane: selectedAnchorResult.anchor.lane,
+      key: selectedAnchorResult.anchor.key,
+      point: selectedAnchorResult.anchor.point,
+      dwellMs: MEDIA_WATCHMODE_DWELL_MS,
+      decisionReason: ROAM_POLICY_DECISION_REASONS.foregroundWindowInspectBottomEdgeActive,
+      stateReason: "media_playing_video_watch_mode",
+      stateTrigger: "media",
+      stateSource:
+        typeof payload.provider === "string" && payload.provider.trim().length > 0
+          ? payload.provider.trim()
+          : "media",
+      sourceAppLabel,
+      titleLabel,
+    },
+  };
+}
+
+function routeMediaWatchModeToBottomEdge(payload = {}, nowMs = Date.now()) {
+  if (!stateRuntime || !latestShellState || !win || win.isDestroyed()) return null;
+  const destination = buildMediaWatchInspectDestination(payload, nowMs);
+  if (!destination?.inspectAnchor) return null;
+
+  if (destination.distance <= ROAM_ARRIVAL_THRESHOLD_PX) {
+    roamState.inspectAnchor = {
+      ...destination.inspectAnchor,
+    };
+    const activated = beginWindowInspectDwell(nowMs);
+    return activated ? latestStateSnapshot : null;
+  }
+
+  const queued = queueRoamDestination(destination, "media_watch_anchor_pending");
+  if (!queued) return null;
+  roamState.nextDecisionAtMs = nowMs;
+  return beginRoamLeg(nowMs);
+}
+
 function queueRoamDestination(destination, reason = "roam_queue") {
   if (!destination) return false;
   const nowMs = Date.now();
   const [winX, winY] = win && !win.isDestroyed() ? win.getPosition() : [0, 0];
   roamState.phase = "rest";
   roamState.destination = null;
+  roamState.inspectAnchor = null;
+  roamState.mediaWatchFocusMismatchSinceMs = 0;
   roamState.queuedDestination = {
     x: Math.round(destination.x),
     y: Math.round(destination.y),
@@ -3674,6 +4878,12 @@ function queueRoamDestination(destination, reason = "roam_queue") {
     bounds: destination.bounds ? summarizeBounds(destination.bounds) : null,
     petBounds: destination.petBounds ? summarizeBounds(destination.petBounds) : null,
     preferRun: destination.preferRun === true,
+    inspectAnchor:
+      destination.inspectAnchor && typeof destination.inspectAnchor === "object"
+        ? {
+            ...destination.inspectAnchor,
+          }
+        : null,
     reason,
   };
   roamState.roamBounds = null;
@@ -3683,8 +4893,11 @@ function queueRoamDestination(destination, reason = "roam_queue") {
   roamState.direction = null;
   roamState.x = winX;
   roamState.y = winY;
+  roamState.legStartX = null;
+  roamState.legStartY = null;
   roamState.lastStepMs = nowMs;
   roamState.nextDecisionAtMs = nowMs + ROAM_ZONE_ENTRY_DELAY_MS;
+  roamState.foregroundRevisionAtLegStart = 0;
   return true;
 }
 
@@ -3698,6 +4911,8 @@ function cancelRoamMotion() {
   const shouldEmitStop = roamState.phase === "moving" && !dragging && !flingState.active;
   roamState.phase = "idle";
   roamState.destination = null;
+  roamState.inspectAnchor = null;
+  roamState.mediaWatchFocusMismatchSinceMs = 0;
   roamState.roamBounds = null;
   roamState.petBounds = null;
   roamState.speedPxPerSec = 0;
@@ -3705,8 +4920,17 @@ function cancelRoamMotion() {
   roamState.direction = null;
   roamState.x = winX;
   roamState.y = winY;
+  roamState.legStartX = null;
+  roamState.legStartY = null;
   roamState.lastStepMs = nowMs;
   roamState.nextDecisionAtMs = roamState.queuedDestination ? nowMs + ROAM_ZONE_ENTRY_DELAY_MS : 0;
+  roamState.foregroundRevisionAtLegStart = 0;
+  if (foregroundWindowRuntime.windowInspectState === "active" && roamState.phase !== "inspect_dwell") {
+    foregroundWindowRuntime.windowInspectState = "idle";
+    foregroundWindowRuntime.windowInspectReason = "none";
+    foregroundWindowRuntime.windowInspectAnchorLane = "none";
+    foregroundWindowRuntime.windowInspectAnchorPoint = null;
+  }
   if (shouldEmitStop) {
     resetMotionSampleFromWindow();
     emitMotionState({
@@ -3722,8 +4946,9 @@ function enterAmbientRestState(reason = "roam_rest", stateId = pickAmbientRestSt
   if (!stateRuntime || !latestShellState) return latestStateSnapshot;
   const currentState = latestStateSnapshot?.currentState || "Idle";
   if (!isAmbientStateId(currentState)) return latestStateSnapshot;
-  if (currentState === stateId) return latestStateSnapshot;
-  return stateRuntime.activateState(stateId, {
+  // Allow Idle re-activation so Idle remains the dominant ambient state and can be reasserted.
+  if (currentState === stateId && stateId !== "Idle") return latestStateSnapshot;
+  const snapshot = stateRuntime.activateState(stateId, {
     source: "shell",
     reason,
     trigger: "roam",
@@ -3732,6 +4957,10 @@ function enterAmbientRestState(reason = "roam_rest", stateId = pickAmbientRestSt
       roamZone: getRoamZoneLabel(latestShellState),
     },
   });
+  if (stateId === "Idle" && currentState !== "Idle") {
+    idleStateDwellUntilMs = Date.now() + IDLE_STATE_MIN_DWELL_MS;
+  }
+  return snapshot;
 }
 
 function scheduleRoamDecision(
@@ -3777,6 +5006,8 @@ function scheduleRoamDecision(
 
   roamState.phase = "rest";
   roamState.destination = null;
+  roamState.inspectAnchor = null;
+  roamState.mediaWatchFocusMismatchSinceMs = 0;
   roamState.queuedDestination = null;
   roamState.roamBounds = null;
   roamState.petBounds = null;
@@ -3785,8 +5016,17 @@ function scheduleRoamDecision(
   roamState.direction = null;
   roamState.x = winX;
   roamState.y = winY;
+  roamState.legStartX = null;
+  roamState.legStartY = null;
   roamState.lastStepMs = nowMs;
   roamState.nextDecisionAtMs = nowMs + Math.max(0, Math.round(pacingDecision.delayMs));
+  roamState.foregroundRevisionAtLegStart = 0;
+  if (foregroundWindowRuntime.windowInspectState !== "active") {
+    foregroundWindowRuntime.windowInspectState = "idle";
+    foregroundWindowRuntime.windowInspectReason = "none";
+    foregroundWindowRuntime.windowInspectAnchorLane = "none";
+    foregroundWindowRuntime.windowInspectAnchorPoint = null;
+  }
   if (latestStateSnapshot?.currentState === "Roam") {
     enterAmbientRestState(reason);
   }
@@ -3799,6 +5039,7 @@ function scheduleInitialRoamDecision(reason = "roam_initial_schedule", force = f
 
 function beginRoamLeg(nowMs = Date.now()) {
   if (!stateRuntime || !latestShellState) return latestStateSnapshot;
+  idleStateDwellUntilMs = 0;
   const [winX, winY] = win.getPosition();
   const queuedDestination = roamState.queuedDestination;
   const destination =
@@ -3806,20 +5047,44 @@ function beginRoamLeg(nowMs = Date.now()) {
     chooseRoamDestination(nowMs, {
       petBounds: getRoamPetBounds(),
     });
+  const isInspectDestination = Boolean(destination?.inspectAnchor);
+  const legDistance =
+    destination && Number.isFinite(Number(destination.x)) && Number.isFinite(Number(destination.y))
+      ? Math.hypot(Number(destination.x) - winX, Number(destination.y) - winY)
+      : 0;
+  const minDistanceThreshold = isInspectDestination
+    ? ROAM_ARRIVAL_THRESHOLD_PX
+    : queuedDestination
+      ? ROAM_ARRIVAL_THRESHOLD_PX
+      : ROAM_TARGET_MIN_DISTANCE_PX;
+  if (destination && isInspectDestination && legDistance < ROAM_ARRIVAL_THRESHOLD_PX) {
+    roamState.inspectAnchor =
+      destination.inspectAnchor && typeof destination.inspectAnchor === "object"
+        ? {
+            ...destination.inspectAnchor,
+          }
+        : null;
+    roamState.mediaWatchFocusMismatchSinceMs = 0;
+    beginWindowInspectDwell(nowMs);
+    return latestStateSnapshot;
+  }
   if (
     !destination ||
-    destination.distance <
-      (queuedDestination ? ROAM_ARRIVAL_THRESHOLD_PX : ROAM_TARGET_MIN_DISTANCE_PX)
+    legDistance < minDistanceThreshold
   ) {
     roamState.queuedDestination = null;
+    roamState.inspectAnchor = null;
+    roamState.mediaWatchFocusMismatchSinceMs = 0;
     markRoamPolicyDecision(roamPolicyState, ROAM_POLICY_DECISION_REASONS.roamLegRetry, nowMs);
     scheduleRoamDecision("roam_leg_retry", null, true, "retry");
     enterAmbientRestState("roam_leg_retry");
     return latestStateSnapshot;
   }
+  const canRunDistance = legDistance >= ROAM_RUN_DISTANCE_THRESHOLD_PX;
   const shouldRun =
-    queuedDestination?.preferRun === true ||
-    (destination.distance >= ROAM_RUN_DISTANCE_THRESHOLD_PX && Math.random() < 0.55);
+    !isInspectDestination &&
+    canRunDistance &&
+    (queuedDestination?.preferRun === true || Math.random() < 0.55);
   const roamBounds =
     destination.bounds ||
     getRoamBounds(
@@ -3839,6 +5104,13 @@ function beginRoamLeg(nowMs = Date.now()) {
     x: destination.x,
     y: destination.y,
   };
+  roamState.inspectAnchor =
+    destination.inspectAnchor && typeof destination.inspectAnchor === "object"
+      ? {
+          ...destination.inspectAnchor,
+        }
+      : null;
+  roamState.mediaWatchFocusMismatchSinceMs = 0;
   roamState.queuedDestination = null;
   roamState.roamBounds = summarizeBounds(roamBounds);
   roamState.petBounds = summarizeBounds(petBounds);
@@ -3847,9 +5119,18 @@ function beginRoamLeg(nowMs = Date.now()) {
   roamState.direction = direction;
   roamState.x = winX;
   roamState.y = winY;
+  roamState.legStartX = winX;
+  roamState.legStartY = winY;
   roamState.lastStepMs = nowMs;
   roamState.nextDecisionAtMs = 0;
-  markRoamPolicyDecision(roamPolicyState, ROAM_POLICY_DECISION_REASONS.roamLegStarted, nowMs);
+  roamState.foregroundRevisionAtLegStart = foregroundWindowRuntime.foregroundWindowRevision;
+  markRoamPolicyDecision(
+    roamPolicyState,
+    isInspectDestination
+      ? ROAM_POLICY_DECISION_REASONS.foregroundWindowInspectEdgePending
+      : ROAM_POLICY_DECISION_REASONS.roamLegStarted,
+    nowMs
+  );
   return stateRuntime.activateState("Roam", {
     source: "shell",
     reason: "roam_leg_start",
@@ -3857,7 +5138,7 @@ function beginRoamLeg(nowMs = Date.now()) {
     context: {
       roamMode: latestShellState.roaming?.mode || ROAMING_MODES.desktop,
       roamZone: getRoamZoneLabel(latestShellState),
-      roamDistance: Math.round(destination.distance),
+      roamDistance: Math.round(legDistance),
     },
     visualOverrides: {
       clip: roamState.clip,
@@ -3866,7 +5147,186 @@ function beginRoamLeg(nowMs = Date.now()) {
   });
 }
 
+function beginWindowInspectDwell(nowMs = Date.now()) {
+  if (!stateRuntime) return false;
+  const inspectAnchor = roamState.inspectAnchor;
+  if (!inspectAnchor) return false;
+  const dwellMs = Number.isFinite(Number(inspectAnchor.dwellMs))
+    ? Math.max(100, Math.round(Number(inspectAnchor.dwellMs)))
+    : WINDOW_EDGE_INSPECT_DWELL_MS;
+  const decisionReason =
+    typeof inspectAnchor.decisionReason === "string" && inspectAnchor.decisionReason.trim().length > 0
+      ? inspectAnchor.decisionReason.trim()
+      : ROAM_POLICY_DECISION_REASONS.foregroundWindowInspectBottomEdgeActive;
+  const stateReason =
+    typeof inspectAnchor.stateReason === "string" && inspectAnchor.stateReason.trim().length > 0
+      ? inspectAnchor.stateReason.trim()
+      : "foreground_window_inspect_bottom_edge_active";
+  const stateSource =
+    typeof inspectAnchor.stateSource === "string" && inspectAnchor.stateSource.trim().length > 0
+      ? inspectAnchor.stateSource.trim()
+      : "shell";
+  const stateTrigger =
+    typeof inspectAnchor.stateTrigger === "string" && inspectAnchor.stateTrigger.trim().length > 0
+      ? inspectAnchor.stateTrigger.trim()
+      : "roam";
+  roamState.phase = "inspect_dwell";
+  roamState.destination = null;
+  roamState.roamBounds = null;
+  roamState.petBounds = null;
+  roamState.speedPxPerSec = 0;
+  roamState.clip = "Walk";
+  roamState.direction = "Up";
+  roamState.legStartX = null;
+  roamState.legStartY = null;
+  roamState.lastStepMs = nowMs;
+  roamState.nextDecisionAtMs = nowMs + dwellMs;
+  roamState.mediaWatchFocusMismatchSinceMs = 0;
+  roamState.foregroundRevisionAtLegStart = foregroundWindowRuntime.foregroundWindowRevision;
+  foregroundWindowRuntime.windowInspectState = "active";
+  foregroundWindowRuntime.windowInspectReason = decisionReason;
+  foregroundWindowRuntime.windowInspectAnchorLane = inspectAnchor.lane || "bottom_edge";
+  foregroundWindowRuntime.windowInspectAnchorPoint =
+    inspectAnchor.point && Number.isFinite(Number(inspectAnchor.point.x)) && Number.isFinite(Number(inspectAnchor.point.y))
+      ? {
+          x: Math.round(Number(inspectAnchor.point.x)),
+          y: Math.round(Number(inspectAnchor.point.y)),
+        }
+      : null;
+  foregroundWindowRuntime.windowInspectDwellMs = dwellMs;
+  foregroundWindowRuntime.decisionReason = decisionReason;
+  roamPolicyState.windowDecisionReason = decisionReason;
+  markRoamPolicyDecision(
+    roamPolicyState,
+    decisionReason,
+    nowMs
+  );
+  recordWindowInspectActivation(inspectAnchor.windowId, nowMs);
+  stateRuntime.activateState("WatchMode", {
+    source: stateSource,
+    reason: stateReason,
+    trigger: stateTrigger,
+    durationMs: dwellMs,
+    context: {
+      roamMode: latestShellState?.roaming?.mode || ROAMING_MODES.desktop,
+      windowId: inspectAnchor.windowId || "unknown",
+      anchorKey: inspectAnchor.key || "bottom_center",
+      ...(inspectAnchor.sourceAppLabel ? { sourceAppLabel: inspectAnchor.sourceAppLabel } : {}),
+      ...(inspectAnchor.titleLabel ? { titleLabel: inspectAnchor.titleLabel } : {}),
+    },
+    visualOverrides: {
+      clip: "IdleReady",
+      direction: "Up",
+    },
+  });
+  emitMotionState({
+    velocityOverride: {
+      vx: 0,
+      vy: 0,
+    },
+    collided: {
+      x: false,
+      y: false,
+    },
+    impact: {
+      triggered: false,
+      strength: 0,
+    },
+  });
+  return true;
+}
+
+function normalizeWindowIdForComparison(value) {
+  if (typeof value !== "string") return "";
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed.toLowerCase() : "";
+}
+
+function isMediaWatchInspectAnchor(inspectAnchor = roamState.inspectAnchor) {
+  if (!inspectAnchor || typeof inspectAnchor !== "object") return false;
+  return normalizeLowerText(inspectAnchor.stateReason || "") === "media_playing_video_watch_mode";
+}
+
+function isFocusedWindowMatchingInspectAnchor(inspectAnchor = roamState.inspectAnchor) {
+  const anchorWindowId = normalizeWindowIdForComparison(inspectAnchor?.windowId);
+  if (!anchorWindowId) return false;
+  const focusedWindowId = normalizeWindowIdForComparison(
+    foregroundWindowRuntime.foregroundWindowWindowId || latestForegroundWindowSnapshot?.windowId
+  );
+  if (!focusedWindowId) return false;
+  return focusedWindowId === anchorWindowId;
+}
+
+function shouldHoldMediaWatchInspectByFocus(inspectAnchor = roamState.inspectAnchor) {
+  if (!isMediaWatchInspectAnchor(inspectAnchor)) return false;
+  if (!isFocusedWindowMatchingInspectAnchor(inspectAnchor)) return false;
+  return true;
+}
+
+function extendMediaWatchInspectDwell(nowMs = Date.now()) {
+  if (!stateRuntime) return false;
+  const inspectAnchor = roamState.inspectAnchor;
+  if (!shouldHoldMediaWatchInspectByFocus(inspectAnchor)) return false;
+  const extensionMs = Math.max(1000, Math.round(MEDIA_WATCHMODE_FOCUS_HOLD_EXTENSION_MS));
+  roamState.nextDecisionAtMs = nowMs + extensionMs;
+  roamState.mediaWatchFocusMismatchSinceMs = 0;
+  foregroundWindowRuntime.windowInspectState = "active";
+  foregroundWindowRuntime.windowInspectReason =
+    ROAM_POLICY_DECISION_REASONS.foregroundWindowInspectBottomEdgeActive;
+  foregroundWindowRuntime.windowInspectDwellMs = extensionMs;
+  if (
+    latestStateSnapshot?.currentState !== "WatchMode" ||
+    latestStateSnapshot?.reason !== "media_playing_video_watch_mode"
+  ) {
+    stateRuntime.activateState("WatchMode", {
+      source: typeof inspectAnchor.stateSource === "string" ? inspectAnchor.stateSource : "media",
+      reason: "media_playing_video_watch_mode",
+      trigger: "media",
+      durationMs: extensionMs,
+      context: {
+        roamMode: latestShellState?.roaming?.mode || ROAMING_MODES.desktop,
+        windowId: inspectAnchor.windowId || "unknown",
+        anchorKey: inspectAnchor.key || "bottom_center",
+        ...(inspectAnchor.sourceAppLabel ? { sourceAppLabel: inspectAnchor.sourceAppLabel } : {}),
+        ...(inspectAnchor.titleLabel ? { titleLabel: inspectAnchor.titleLabel } : {}),
+      },
+      visualOverrides: {
+        clip: "IdleReady",
+        direction: "Up",
+      },
+    });
+  }
+  return true;
+}
+
+function finishWindowInspectDwell(reason = "foreground_window_inspect_complete") {
+  foregroundWindowRuntime.windowInspectState = "idle";
+  foregroundWindowRuntime.windowInspectReason =
+    ROAM_POLICY_DECISION_REASONS.foregroundWindowSoftInspectOnly;
+  foregroundWindowRuntime.windowInspectAnchorLane = "none";
+  foregroundWindowRuntime.windowInspectAnchorPoint = null;
+  roamState.inspectAnchor = null;
+  roamState.mediaWatchFocusMismatchSinceMs = 0;
+  scheduleRoamDecision(reason, null, true, "rest");
+  enterAmbientRestState(reason);
+}
+
 function finishRoamLeg(reason = "roam_leg_complete", nowMs = Date.now()) {
+  if (roamState.phase === "moving" && roamState.destination) {
+    const startX = Number.isFinite(Number(roamState.legStartX)) ? Number(roamState.legStartX) : Number(roamState.x);
+    const startY = Number.isFinite(Number(roamState.legStartY)) ? Number(roamState.legStartY) : Number(roamState.y);
+    const dx = Number(roamState.destination.x) - startX;
+    const dy = Number(roamState.destination.y) - startY;
+    const distance = Math.hypot(dx, dy);
+    if (distance >= ROAM_DIRECTION_REVERSAL_MIN_DISTANCE_PX) {
+      roamState.lastLegVector = {
+        x: dx,
+        y: dy,
+        distance,
+      };
+      roamState.lastLegCompletedAtMs = nowMs;
+    }
+  }
   const queuedDestination = roamState.queuedDestination ? { ...roamState.queuedDestination } : null;
   const [winX, winY] = win && !win.isDestroyed() ? win.getPosition() : [0, 0];
   scheduleRoamDecision(reason, null, true, "rest");
@@ -3878,6 +5338,8 @@ function finishRoamLeg(reason = "roam_leg_complete", nowMs = Date.now()) {
   enterAmbientRestState(reason);
   roamState.x = winX;
   roamState.y = winY;
+  roamState.legStartX = null;
+  roamState.legStartY = null;
   roamState.lastStepMs = nowMs;
   resetMotionSampleFromWindow();
   emitMotionState({
@@ -3892,6 +5354,13 @@ function shouldRoamAutonomously() {
   if (!win || win.isDestroyed()) return false;
   if (dragging || flingState.active) return false;
   if (isConversationHoldActive()) return false;
+  if (
+    roamState.phase !== "inspect_dwell" &&
+    latestStateSnapshot?.currentState === "WatchMode" &&
+    latestStateSnapshot?.reason === "media_playing_video_watch_mode"
+  ) {
+    return false;
+  }
   return isAmbientStateId(latestStateSnapshot?.currentState || "Idle");
 }
 
@@ -3910,6 +5379,32 @@ function stepRoam() {
   }
 
   const nowMs = Date.now();
+  if (
+    isForegroundWindowAvoidanceSupported() &&
+    isForegroundWindowAvoidanceDesktopMode() &&
+    nowMs - lastForegroundWindowPollRequestAtMs >= FOREGROUND_WINDOW_POLL_MS
+  ) {
+    requestForegroundWindowPoll("roam_tick");
+  }
+  if (roamState.phase === "inspect_dwell") {
+    if (isMediaWatchInspectAnchor(roamState.inspectAnchor)) {
+      if (shouldHoldMediaWatchInspectByFocus(roamState.inspectAnchor)) {
+        roamState.mediaWatchFocusMismatchSinceMs = 0;
+      } else if (roamState.mediaWatchFocusMismatchSinceMs <= 0) {
+        roamState.mediaWatchFocusMismatchSinceMs = nowMs;
+      } else if (nowMs - roamState.mediaWatchFocusMismatchSinceMs >= MEDIA_WATCHMODE_FOCUS_LOSS_GRACE_MS) {
+        finishWindowInspectDwell("media_watch_focus_released");
+        return;
+      }
+    }
+    if (nowMs >= roamState.nextDecisionAtMs) {
+      if (extendMediaWatchInspectDwell(nowMs)) {
+        return;
+      }
+      finishWindowInspectDwell("foreground_window_inspect_complete");
+    }
+    return;
+  }
   if (roamState.phase !== "moving") {
     if (roamState.nextDecisionAtMs <= 0) {
       if (roamState.queuedDestination) {
@@ -3920,6 +5415,15 @@ function stepRoam() {
       return;
     }
     if (nowMs >= roamState.nextDecisionAtMs) {
+      if (
+        !roamState.queuedDestination &&
+        latestStateSnapshot?.currentState === "Idle" &&
+        idleStateDwellUntilMs > nowMs
+      ) {
+        roamState.phase = "rest";
+        roamState.nextDecisionAtMs = idleStateDwellUntilMs;
+        return;
+      }
       beginRoamLeg(nowMs);
     }
     return;
@@ -3927,6 +5431,13 @@ function stepRoam() {
 
   if (!roamState.destination) {
     finishRoamLeg("roam_missing_destination", nowMs);
+    return;
+  }
+  if (
+    roamState.foregroundRevisionAtLegStart > 0 &&
+    foregroundWindowRuntime.foregroundWindowRevision > roamState.foregroundRevisionAtLegStart
+  ) {
+    finishRoamLeg("foreground_window_bounds_updated", nowMs);
     return;
   }
 
@@ -3945,6 +5456,9 @@ function stepRoam() {
     applyWindowBounds(roamState.destination.x, roamState.destination.y);
     roamState.x = roamState.destination.x;
     roamState.y = roamState.destination.y;
+    if (roamState.inspectAnchor && beginWindowInspectDwell(nowMs)) {
+      return;
+    }
     finishRoamLeg("roam_arrived", nowMs);
     return;
   }
@@ -3995,6 +5509,9 @@ function stepRoam() {
     applyWindowBounds(roamState.destination.x, roamState.destination.y);
     roamState.x = roamState.destination.x;
     roamState.y = roamState.destination.y;
+    if (roamState.inspectAnchor && beginWindowInspectDwell(nowMs)) {
+      return;
+    }
     finishRoamLeg("roam_arrived", nowMs);
   }
 }
@@ -7602,6 +9119,41 @@ function queueMemoryObservation(observation) {
     });
 }
 
+function normalizeSuggestedStateId(value, fallback = "MusicChill") {
+  if (typeof value !== "string") return fallback;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : fallback;
+}
+
+function applyMediaSuggestedState(payload = {}) {
+  if (!stateRuntime) return null;
+  const suggestedStateId = normalizeSuggestedStateId(payload.suggestedState, "MusicChill");
+  if (suggestedStateId === "WatchMode") {
+    const mediaWatchSnapshot = routeMediaWatchModeToBottomEdge(payload, Date.now());
+    if (mediaWatchSnapshot) {
+      return mediaWatchSnapshot;
+    }
+    return latestStateSnapshot || stateRuntime.getSnapshot();
+  }
+
+  if (suggestedStateId === "MusicDance") {
+    return stateRuntime.applyMusicState({
+      ...payload,
+      suggestedState: "MusicDance",
+      durationMs: MUSIC_DANCE_DURATION_MS,
+      onCompleteStateId: "Idle",
+    });
+  }
+
+  return stateRuntime.applyMusicState({
+    ...payload,
+    suggestedState:
+      suggestedStateId === "MusicDance" || suggestedStateId === "MusicChill"
+        ? suggestedStateId
+        : "MusicChill",
+  });
+}
+
 function applyStateRuntimeForEvent(eventType, payload, result) {
   if (!stateRuntime) return null;
   if (eventType === "MEDIA") {
@@ -7609,7 +9161,13 @@ function applyStateRuntimeForEvent(eventType, payload, result) {
       ? result.intents.find((entry) => entry?.type === "INTENT_STATE_MUSIC_MODE")
       : null;
     if (!intent) return null;
-    return stateRuntime.applyMusicState(payload);
+    return applyMediaSuggestedState({
+      ...payload,
+      suggestedState: normalizeSuggestedStateId(
+        payload?.suggestedState,
+        normalizeSuggestedStateId(intent?.payload?.suggestedState, "MusicChill")
+      ),
+    });
   }
   return null;
 }
@@ -7812,6 +9370,18 @@ async function probeSpotifyIntegration(options = {}) {
     });
   }
 
+  const mediaSuggestion = nowPlaying
+    ? deriveMediaPlaybackSuggestion({
+        isPlaying: Boolean(nowPlaying.isPlaying),
+        provider: "spotify",
+        sourceAppLabel: latestLocalMediaSnapshot?.sourceAppLabel || "Spotify",
+        title: nowPlaying.trackName || "",
+        artist: nowPlaying.artistName || "",
+        album: nowPlaying.albumName || "",
+        outputRoute: nowPlaying.outputRoute || "unknown",
+      })
+    : null;
+
   const mediaEventPayload = nowPlaying
     ? {
         playing: Boolean(nowPlaying.isPlaying),
@@ -7821,7 +9391,9 @@ async function probeSpotifyIntegration(options = {}) {
         title: nowPlaying.trackName,
         artist: nowPlaying.artistName,
         album: nowPlaying.albumName,
-        suggestedState: "MusicChill",
+        suggestedState: mediaSuggestion?.suggestedState || "MusicChill",
+        mediaKind: mediaSuggestion?.mediaKind || "music",
+        mediaKindReason: mediaSuggestion?.reason || "spotify_music",
         activeProp:
           nowPlaying.outputRoute === "speaker"
             ? "speaker"
@@ -7847,7 +9419,7 @@ async function probeSpotifyIntegration(options = {}) {
         correlationId,
         source: succeeded ? "online" : "offline",
         mediaResponseText: responseText,
-        mediaSuggestedState: "MusicChill",
+        mediaSuggestedState: mediaEventPayload.suggestedState || "MusicChill",
         integrationFallbackMode: fallbackMode,
       }
     );
@@ -8102,6 +9674,11 @@ async function pollLocalMediaState(options = {}) {
     disabledSnapshot.playbackStatus = "Disabled";
     disabledSnapshot.error = "disabled_by_config";
     latestLocalMediaSnapshot = disabledSnapshot;
+    localMediaLastPlayingAtMs = 0;
+    localMediaStoppedSinceMs = 0;
+    localMediaPendingStopFromPlaying = false;
+    lastLocalMediaContractSignature = null;
+    lastLocalMediaEventKey = null;
     if (force) {
       emitIntegrationEvent(buildLocalMediaIntegrationEvent(disabledSnapshot, { correlationId }));
     }
@@ -8126,33 +9703,83 @@ async function pollLocalMediaState(options = {}) {
     const snapshot = await probeWindowsMediaState({
       settings: sensorSettings,
     });
+    const nowMs = Date.now();
+    if (snapshot.ok && snapshot.isPlaying) {
+      localMediaLastPlayingAtMs = nowMs;
+      localMediaStoppedSinceMs = 0;
+      localMediaPendingStopFromPlaying = false;
+    } else if (snapshot.ok && !snapshot.isPlaying) {
+      if (previousSnapshot.ok && previousSnapshot.isPlaying) {
+        localMediaPendingStopFromPlaying = true;
+      }
+      if (localMediaStoppedSinceMs <= 0) {
+        localMediaStoppedSinceMs = nowMs;
+      }
+    }
+    const mediaStopStable =
+      snapshot.ok &&
+      !snapshot.isPlaying &&
+      localMediaStoppedSinceMs > 0 &&
+      nowMs - localMediaStoppedSinceMs >= LOCAL_MEDIA_STOP_DEBOUNCE_MS;
     latestLocalMediaSnapshot = snapshot;
     emitIntegrationEvent(buildLocalMediaIntegrationEvent(snapshot, { correlationId }));
 
     const nextEventKey = buildLocalMediaProbeKey(snapshot);
     const changed = force || nextEventKey !== lastLocalMediaEventKey;
+    let effectiveChanged = changed;
     let contractResult = null;
     if (changed) {
-      lastLocalMediaEventKey = nextEventKey;
-
       if (snapshot.ok && snapshot.isPlaying) {
+        lastLocalMediaEventKey = nextEventKey;
         const payload = buildLocalMediaEventPayload(snapshot);
-        contractResult = await processPetContractEvent("MEDIA", payload, {
-          correlationId,
-          source: "local",
-          mediaResponseText: buildLocalMediaResponseText(snapshot),
-          mediaSuggestedState: "MusicChill",
-          integrationFallbackMode: "none",
-        });
+        const mediaSuggestion = deriveMediaPlaybackSuggestion(snapshot);
+        payload.suggestedState = mediaSuggestion.suggestedState || "MusicChill";
+        payload.mediaKind = mediaSuggestion.mediaKind || "music";
+        payload.mediaKindReason = mediaSuggestion.reason || "default_music_fallback";
+        const contractSignature = buildLocalMediaContractSignature(snapshot, mediaSuggestion);
+        const allowDuplicateContract = force && trigger === "manual";
+        const reapplyStateOnly = force && trigger === "idle-resume";
+        if (
+          !allowDuplicateContract &&
+          contractSignature &&
+          contractSignature === lastLocalMediaContractSignature
+        ) {
+          effectiveChanged = false;
+          if (reapplyStateOnly) {
+            applyMediaSuggestedState(payload);
+          }
+        } else {
+          lastLocalMediaContractSignature = contractSignature;
+          contractResult = await processPetContractEvent("MEDIA", payload, {
+            correlationId,
+            source: "local",
+            mediaResponseText: buildLocalMediaResponseText(snapshot),
+            mediaSuggestedState: payload.suggestedState,
+            integrationFallbackMode: "none",
+          });
+        }
+      } else if (!force && snapshot.ok && !snapshot.isPlaying && !mediaStopStable) {
+        // Ignore short probe stop jitter so media announcements do not retrigger on resume.
+        effectiveChanged = false;
+      } else {
+        lastLocalMediaEventKey = nextEventKey;
       }
     }
 
+    const holdMediaWatchOnFocusedWindow =
+      mediaStopStable && shouldHoldMediaWatchInspectByFocus(roamState.inspectAnchor);
+
     if (
-      previousSnapshot.ok &&
-      previousSnapshot.isPlaying &&
-      snapshot.ok &&
-      !snapshot.isPlaying &&
-      isMusicStateId(latestStateSnapshot?.currentState) &&
+      localMediaPendingStopFromPlaying &&
+      mediaStopStable &&
+      !holdMediaWatchOnFocusedWindow &&
+      (
+        isMusicStateId(latestStateSnapshot?.currentState) ||
+        (
+          latestStateSnapshot?.currentState === "WatchMode" &&
+          latestStateSnapshot?.reason === "media_playing_video_watch_mode"
+        )
+      ) &&
       stateRuntime
     ) {
       stateRuntime.activateState("Idle", {
@@ -8160,14 +9787,20 @@ async function pollLocalMediaState(options = {}) {
         reason: "local_media_stopped",
         trigger: "local-media",
       });
+      localMediaPendingStopFromPlaying = false;
     }
 
     if (snapshot.isPlaying) {
       void runBackgroundSpotifyEnrichment(snapshot, `local-media-${trigger}`);
+    } else if (mediaStopStable && !holdMediaWatchOnFocusedWindow) {
+      localMediaLastPlayingAtMs = 0;
+      localMediaStoppedSinceMs = 0;
+      localMediaPendingStopFromPlaying = false;
+      lastLocalMediaContractSignature = null;
     }
 
     return {
-      ok: snapshot.ok && (!changed || !snapshot.isPlaying || Boolean(contractResult) || force),
+      ok: snapshot.ok && (!effectiveChanged || !snapshot.isPlaying || Boolean(contractResult) || force),
       snapshot,
       contractResult,
       error: snapshot.error || null,
@@ -8384,13 +10017,39 @@ ipcMain.on("pet:beginDrag", () => {
   if (!win) return;
 
   cancelFling("grabbed");
+  resetRoamDirectionMemory();
   clearDragSamples();
   manualCorrectionStartDisplayId = getCurrentPetDisplayId();
+  requestForegroundWindowPoll("manual_drag_begin");
+  manualWindowCorrectionStartContext = null;
 
   const cursor = screen.getCursorScreenPoint();
   const [winX, winY] = win.getPosition();
+  const nowMs = Date.now();
   const windowBounds = win.getBounds();
   const displayDecision = resolveDragDisplay(cursor);
+  const desktopRoamLayout = getDesktopRoamLayout();
+  const foregroundContext = resolveForegroundWindowCandidate({
+    samplingAreas: desktopRoamLayout?.areas || [],
+    nowMs,
+  });
+  if (foregroundContext?.candidate) {
+    const petWorldBounds = buildPetVisualWorldBoundsAt(winX, winY, nowMs);
+    const petBounds = getRoamPetBounds(nowMs);
+    const maskBounds = buildWindowAvoidMaskForCandidate(
+      foregroundContext.candidate.bounds,
+      desktopRoamLayout?.areas || [],
+      petBounds
+    );
+    if (petWorldBounds && maskBounds) {
+      manualWindowCorrectionStartContext = {
+        windowId: foregroundContext.candidate.windowId,
+        startedInsideMask: Boolean(intersectBoundsRect(petWorldBounds, maskBounds)),
+        maskBounds: summarizeBounds(maskBounds),
+        startedAtMs: nowMs,
+      };
+    }
+  }
 
   dragOffset = {
     x: cursor.x - winX,
@@ -8438,11 +10097,15 @@ ipcMain.on("pet:endDrag", () => {
   maybeStartFlingFromSamples();
   if (!flingState.active) {
     maybeRecordManualMonitorAvoidance("manual_drag_monitor_correction");
+    maybeRecordManualWindowAvoidance("manual_drag_window_correction");
     emitMotionState({
       velocityOverride: { vx: 0, vy: 0 },
       collided: { x: false, y: false },
       impact: { triggered: false, strength: 0 },
     });
+  }
+  if (flingState.active) {
+    manualWindowCorrectionStartContext = null;
   }
   clearDragSamples();
 });
@@ -9188,6 +10851,7 @@ app.whenReady().then(async () => {
   await startCapabilityRegistry();
   startLocalMediaPoller();
   startBackgroundFreshRssPoller();
+  requestForegroundWindowPoll("startup", true);
 
   screen.on("display-added", (_event, display) => {
     if (!DIAGNOSTICS_ENABLED) return;

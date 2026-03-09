@@ -168,6 +168,13 @@ const CASES = Object.freeze([
     script: "scripts/check-roam-policy.js",
   },
   {
+    id: "D14ab-active-window-avoidance",
+    deliverable: "14ab-active-window-avoidance",
+    scenario:
+      "Foreground-window inspect anchors, manual drag-off window cooldown memory, and strict avoid clipping fallback remain deterministic.",
+    script: "scripts/check-roam-policy.js",
+  },
+  {
     id: "Layout-assets",
     deliverable: "core-renderer-assets",
     scenario: "Layout bounds and required sprite assets remain internally consistent.",

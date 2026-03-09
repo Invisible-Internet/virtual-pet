@@ -426,10 +426,16 @@ class StateRuntime {
     const album = normalizeOptionalText(payload.album);
     const sourceAppLabel = normalizeOptionalText(payload.sourceAppLabel);
     const titleLabel = title ? (artist ? `${title} by ${artist}` : title) : null;
+    const durationMs = Number.isFinite(Number(payload.durationMs))
+      ? asPositiveInteger(payload.durationMs, null, 100)
+      : null;
+    const onCompleteStateId = normalizeOptionalText(payload.onCompleteStateId);
     return this.activateState(resolvedStateId, {
       source: normalizeText(payload.provider, "media"),
       reason: "media_playing_music_mode",
       trigger: "media",
+      ...(Number.isFinite(durationMs) ? { durationMs } : {}),
+      ...(onCompleteStateId ? { onCompleteStateId } : {}),
       context: {
         ...(titleLabel ? { titleLabel } : {}),
         ...(title ? { title } : {}),

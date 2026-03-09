@@ -33,16 +33,16 @@ Historical v1 deliverables keep their original wording and remain archived histo
   - operator-visible demo passes and evidence is logged
 
 ## Current Deliverable
-- Current Deliverable: `14ab-active-window-avoidance`
-- Workflow State: `specifying`
-- Current Status: `specifying`
-- Last Completed Deliverable: `14a-deliberate-roam-policy-and-monitor-avoidance`
-- Next Detailed Target: `14ab-active-window-avoidance`
-- Next Queued Target: `14b-event-driven-watch-behavior`
+- Current Deliverable: `none`
+- Workflow State: `idle`
+- Current Status: `accepted`
+- Last Completed Deliverable: `14ab-active-window-avoidance`
+- Next Detailed Target: `14b-event-driven-watch-behavior`
+- Next Queued Target: `none`
 - Current Gate State:
-  - `Spec Gate`: `passed` (`2026-03-08`)
-  - `Build Gate`: `not_started`
-  - `Acceptance Gate`: `not_started`
+  - `Spec Gate`: `not_started` (next deliverable not active yet)
+  - `Build Gate`: `not_started` (next deliverable not active yet)
+  - `Acceptance Gate`: `not_started` (next deliverable not active yet)
 
 ## Post-v1 Family Rough-In
 Locked family order:
@@ -67,7 +67,7 @@ Planning state:
 - `13c-persona-aware-offline-dialog-and-proactive-behavior` is accepted and closed (`Spec/Build/Acceptance Gates passed`; Acceptance on `2026-03-08`).
 - `13d-online-reflection-and-runtime-sync` is accepted and closed (`Spec/Build/Acceptance Gates passed`; Acceptance on `2026-03-08`).
 - `14a-deliberate-roam-policy-and-monitor-avoidance` is accepted and closed (`Spec/Build/Acceptance Gates` passed on `2026-03-08`).
-- `14ab-active-window-avoidance` is now active in `specifying` (`Spec Gate` passed on `2026-03-08`; `Build/Acceptance` not started).
+- `14ab-active-window-avoidance` is accepted and closed (`Spec Gate` passed on `2026-03-08`; `Build Gate` passed on `2026-03-09`; `Acceptance Gate` passed on `2026-03-09`).
 - `14b-event-driven-watch-behavior` now has a queued planning draft in `docs/plan/14b-event-driven-watch-behavior.md` (not active; `Spec Gate` not started).
 - Families `13` through `15` now follow the cohesive `12c`-`15c` sequence in rough-in, with family-14 control/animation policy decisions locked.
 - Full family notes live in [`11-15-post-v1-roadmap-rough-in.md`](./11-15-post-v1-roadmap-rough-in.md).
@@ -81,14 +81,214 @@ Planning state:
 6. Pass `Spec Gate` before implementation begins.
 
 ## Next 3 Actions
-1. Implement first `14ab` vertical slice with locked hard-rule: active-window hard avoid activates only after manual drag-off correction.
-2. Add deterministic coverage for `14ab` contracts (`foreground-window-runtime` checks, `roam-policy` clipping/inspect/avoid-memory expansion, acceptance row).
-3. After `14ab` acceptance, activate queued `14b` draft and pass `Spec Gate` for media-aware playful watch behavior with bottom-edge-only watch anchoring.
+1. Activate `14b-event-driven-watch-behavior` as the current deliverable and move status to `specifying`.
+2. Finalize `14b` spec gate artifacts (showcase promise, demo script, failure/recovery script, and operator test card).
+3. Pass `14b` `Spec Gate` before starting implementation.
 
 ## Blockers
 - None currently.
 
 ## Last Session Summary
+- Operator validation update on active `14ab-active-window-avoidance`:
+  - quick happy-path script passed in operator run:
+    - bottom-edge inspect activation observed
+    - focused-window resize/move recalculation observed
+    - manual drag-off window avoid cooldown observed
+    - no-free-area fallback observed without movement stall
+  - failure/recovery evidence captured and passed:
+    - in `Roam: zone`, runtime correctly reports `Window Avoidance State: disabled` with reason `roam_mode_not_desktop`
+    - in `Roam: desktop`, provider disable/restore produced expected `degraded` -> `healthy` recovery
+  - gate outcome updated:
+    - `Acceptance Gate`: `passed` (`2026-03-09`)
+  - workflow advanced:
+    - `Current Deliverable: none` (idle), next detailed target `14b-event-driven-watch-behavior`
+- Iterated active `14ab-active-window-avoidance` startup-playing-media loop from operator logs:
+  - identified repeated unchanged media speech loop source:
+    - `Idle` state re-entry while media playing was forcing local-media poll/contract routing (`trigger=idle-resume`)
+  - runtime fix:
+    - removed forced `idle-resume` media contract polling so ambient Idle cycles no longer retrigger unchanged `MEDIA` announcements
+    - kept unchanged-signature de-dup active for non-manual forced paths to prevent future duplicate chatter regressions
+  - expected operator-visible outcome:
+    - when a video is already playing before app launch, pet should not repeatedly re-announce the same title during `Roam`/`Idle` cycling
+  - verification run passed:
+    - `npm run check:contracts`
+    - `npm run check:acceptance` -> `28/28 automated checks passed`
+  - gate outcome unchanged:
+    - `Spec Gate`: `passed` (`2026-03-08`)
+    - `Build Gate`: `passed` (`2026-03-09`)
+    - `Acceptance Gate`: `not_started`
+  - shipped outcome note: `visible app/runtime change delivered` (pending operator acceptance evidence).
+- Iterated active `14ab-active-window-avoidance` media watch hold/anchor behavior from focused-window feedback:
+  - media watch inspect dwell now holds by focused-window continuity:
+    - while focused-window id matches current watch target window, watch dwell extends in `12000ms` chunks
+    - focus-loss release guard (`1200ms`) exits watch quickly when operator focus moves away
+    - stable media-stop handling no longer forces immediate watch exit while focus-hold is active
+  - media watch anchor selection now uses corner-preferred weighting for bottom-edge entries:
+    - strongly favors `bottom_right_quarter` / `bottom_left_quarter`
+    - keeps `bottom_center` as occasional bounded variation/fallback
+  - deterministic coverage update:
+    - expanded `scripts/check-roam-policy.js` with corner-preferred media-watch anchor assertions
+  - verification run passed:
+    - `npm run check:contracts`
+    - `npm run check:acceptance` -> `28/28 automated checks passed`
+  - gate outcome unchanged:
+    - `Spec Gate`: `passed` (`2026-03-08`)
+    - `Build Gate`: `passed` (`2026-03-09`)
+    - `Acceptance Gate`: `not_started`
+  - shipped outcome note: `visible app/runtime change delivered` (pending operator acceptance evidence).
+- Iterated active `14ab-active-window-avoidance` media-watch stability from operator terminal evidence:
+  - fixed watch-entry movement path so media-triggered `WatchMode` first routes to a bottom-edge anchor destination, then enters watch dwell at anchor (prevents sliding while visually idle/watch)
+  - removed in-place media-watch fallback: if no bottom-edge anchor can be resolved, the runtime skips that watch activation instead of entering `WatchMode` away from the window edge
+  - increased media watch dwell target to `30000ms` so video watch behavior holds for a longer interval before ambient roam resumes
+  - reduced unchanged playback chatter:
+    - local-media contract routing now de-duplicates unchanged playback on stable media signature
+    - local-media probe key now ignores playback jitter (`Playing` vs `Changing`), output-device-name noise, and volatile source-app id churn
+    - local-media stop handling now uses debounce (`8000ms`) so short probe dropouts do not reset signature and retrigger repeated media announcements
+  - strengthened media watch anchor recovery:
+    - media watch anchor selection now retries across active-display clamp area, then full display bounds, then desktop sampling fallback before skipping activation
+  - deterministic coverage update:
+    - expanded `scripts/check-windows-media-sensor.js` with probe-key jitter stability assertion
+  - verification run passed:
+    - `npm run check:contracts`
+    - `npm run check:acceptance` -> `28/28 automated checks passed`
+  - gate outcome unchanged:
+    - `Spec Gate`: `passed` (`2026-03-08`)
+    - `Build Gate`: `passed` (`2026-03-09`)
+    - `Acceptance Gate`: `not_started`
+  - shipped outcome note: `visible app/runtime change delivered` (pending operator acceptance evidence).
+- Iterated active `14ab-active-window-avoidance` media-state arbitration from operator playback feedback:
+  - hardened browser playback classification to reduce false `MusicDance` during YouTube/video viewing:
+    - browser-source detection now uses provider plus source/process hints (`edge/chrome/firefox/brave/opera/vivaldi`)
+    - browser lane now defaults to `WatchMode` unless explicit music hints are present; strong music hints (`music.youtube.com` / `YouTube Music`) still route to music states
+  - reduced long unvaried dance lock-in:
+    - media-triggered `MusicDance` now has bounded short dwell (`5200ms`) and deterministic fallback to `Idle`
+  - deterministic coverage update:
+    - extended `scripts/check-state-runtime.js` to verify music duration override + on-complete fallback behavior
+  - verification run passed:
+    - `npm run check:contracts`
+    - `npm run check:acceptance` -> `28/28 automated checks passed`
+  - gate outcome unchanged:
+    - `Spec Gate`: `passed` (`2026-03-08`)
+    - `Build Gate`: `passed` (`2026-03-09`)
+    - `Acceptance Gate`: `not_started`
+  - shipped outcome note: `visible app/runtime change delivered` (pending operator acceptance evidence).
+- Iterated active `14ab-active-window-avoidance` run-gating verification/fix from operator feedback:
+  - corrected run-threshold check to use live leg-start distance (`current position -> destination`) at `beginRoamLeg`
+  - removed dependency on cached candidate distance for run selection, preventing residual short-hop `Run` picks
+  - verification run passed:
+    - `npm run check:contracts`
+    - `npm run check:acceptance` -> `28/28 automated checks passed`
+  - gate outcome unchanged:
+    - `Spec Gate`: `passed` (`2026-03-08`)
+    - `Build Gate`: `passed` (`2026-03-09`)
+    - `Acceptance Gate`: `not_started`
+  - shipped outcome note: `visible app/runtime change delivered` (pending operator acceptance evidence).
+- Iterated active `14ab-active-window-avoidance` roam locomotion polish from operator feedback:
+  - tightened roam speed selection so `Run` is only chosen when destination distance meets the run-distance threshold
+  - short-distance legs now always use `Walk`, preventing abrupt sprint-stop behavior on short hops
+  - verification run passed:
+    - `npm run check:contracts`
+    - `npm run check:acceptance` -> `28/28 automated checks passed`
+  - gate outcome unchanged:
+    - `Spec Gate`: `passed` (`2026-03-08`)
+    - `Build Gate`: `passed` (`2026-03-09`)
+    - `Acceptance Gate`: `not_started`
+  - shipped outcome note: `visible app/runtime change delivered` (pending operator acceptance evidence).
+- Iterated active `14ab-active-window-avoidance` ambient pacing behavior from operator feedback:
+  - added Idle-only minimum dwell gate before autonomous roam-leg start (`5000ms` target)
+  - revised ambient rest same-state short-circuit behavior:
+    - non-Idle states remain short-circuited when unchanged
+    - `Idle` can now be reasserted so Idle remains the dominant/common ambient state
+  - verification run passed:
+    - `npm run check:contracts`
+    - `npm run check:acceptance` -> `28/28 automated checks passed`
+  - gate outcome unchanged:
+    - `Spec Gate`: `passed` (`2026-03-08`)
+    - `Build Gate`: `passed` (`2026-03-09`)
+    - `Acceptance Gate`: `not_started`
+  - shipped outcome note: `visible app/runtime change delivered` (pending operator acceptance evidence).
+- Iterated active `14ab-active-window-avoidance` runtime behavior from additional operator feedback:
+  - music-state behavior updates:
+    - `MusicChill` now participates in ambient eligibility so roam/idle and higher-priority states (for example `Reading`) are no longer blocked
+    - media suggestion lane now chooses `MusicDance` more often for music playback
+    - likely video playback (YouTube/Netflix/browser video hints + window-size heuristic) now routes to `WatchMode` instead of forcing `MusicChill`
+  - roam-direction behavior updates:
+    - added immediate reverse-direction suppression for consecutive autonomous roam legs
+    - reverse suppression clears on manual drag/fling so user corrections do not lock direction
+  - verification run passed:
+    - `npm run check:contracts`
+    - `npm run check:acceptance` -> `28/28 automated checks passed`
+  - gate outcome unchanged:
+    - `Spec Gate`: `passed` (`2026-03-08`)
+    - `Build Gate`: `passed` (`2026-03-09`)
+    - `Acceptance Gate`: `not_started`
+  - shipped outcome note: `visible app/runtime change delivered` (pending operator acceptance evidence).
+- Iterated active `14ab-active-window-avoidance` runtime tuning from operator behavior feedback:
+  - increased inspect dwell from `2500ms` to `6000ms` to reduce twitchy watch transitions
+  - increased manual window-avoid cooldown from `120000ms` to `300000ms`
+  - fixed policy wiring so runtime uses tuned window-avoid cooldown value (not default fallback)
+  - strengthened inspect cadence gates:
+    - focus stability `1800ms`
+    - global cooldown `22000ms`
+    - per-window cooldown `70000ms`
+    - trigger probability `0.45`
+  - updated bottom-edge anchor selection weighting to prefer right/left corners while still mixing center/right/left choices
+  - deterministic coverage updated (`scripts/check-roam-policy.js`) and rerun
+  - verification run passed:
+    - `npm run check:contracts`
+    - `npm run check:acceptance` -> `28/28 automated checks passed`
+  - gate outcome unchanged:
+    - `Spec Gate`: `passed` (`2026-03-08`)
+    - `Build Gate`: `passed` (`2026-03-09`)
+    - `Acceptance Gate`: `not_started`
+  - shipped outcome note: `visible app/runtime change delivered` (pending operator acceptance evidence).
+- Iterated active `14ab-active-window-avoidance` implementation from operator runtime feedback (looping WatchMode + fullscreen bottom-edge issues):
+  - adjusted `WatchMode` entry control:
+    - desktop ambient rest no longer randomly selects `WatchMode` outside explicit inspect flow
+    - inspect entry now uses bounded cadence gates (focus stability, global cooldown, per-window cooldown, bounded trigger probability)
+  - adjusted bottom-edge inspect anchor behavior:
+    - anchor choice now uses closer-biased bounded randomness across bottom-edge candidates instead of always center-first
+    - fullscreen/lower-edge windows now use bottom-edge grace allowance so inspect remains valid instead of thrashing between avoid/reposition loops
+  - deterministic coverage updated and rerun:
+    - `scripts/check-roam-policy.js` now asserts closer-biased anchor selection and fullscreen anchor viability
+  - verification run passed:
+    - `npm run check:contracts`
+    - `npm run check:acceptance` -> `28/28 automated checks passed`
+  - gate outcome unchanged:
+    - `Spec Gate`: `passed` (`2026-03-08`)
+    - `Build Gate`: `passed` (`2026-03-09`)
+    - `Acceptance Gate`: `not_started`
+  - shipped outcome note: `visible app/runtime change delivered` (behavior tuning iteration pending operator acceptance evidence).
+- Implemented first `14ab-active-window-avoidance` vertical slice and passed `Build Gate`:
+  - added Windows foreground-window provider runtime:
+    - `foreground-window-runtime.js`
+    - `scripts/foreground-window-probe.ps1`
+    - bounded normalization/error taxonomy with deterministic probe keying
+  - extended `roam-policy.js`:
+    - active-window avoid memory keyed by `windowId`
+    - strict area-clipping planner + deterministic fallback (`foreground_window_no_free_area_fallback`)
+    - bottom-edge inspect anchor resolver for `WatchMode`
+  - integrated `main.js` runtime lane:
+    - throttled foreground polling + bounds revision updates
+    - in-leg replan trigger on focused-window move/resize changes
+    - manual drag-off correction records prolonged window avoid cooldown
+    - inspect dwell phase with bottom-edge anchor contract
+  - added behavior observability fields:
+    - `shell-observability.js` + `inventory-shell-renderer.js` now expose window avoid/inspect/fallback state and cooldown detail
+  - deterministic coverage and acceptance wiring:
+    - new `scripts/check-foreground-window-runtime.js`
+    - expanded `scripts/check-roam-policy.js` and `scripts/check-shell-observability.js`
+    - acceptance row `D14ab-active-window-avoidance` in `scripts/run-acceptance-matrix.js`
+    - check lanes updated in `package.json`
+  - verification run passed:
+    - `npm run check:syntax`
+    - `npm run check:contracts`
+    - `npm run check:acceptance` -> `28/28 automated checks passed`
+  - gate outcome:
+    - `Spec Gate`: `passed` (`2026-03-08`)
+    - `Build Gate`: `passed` (`2026-03-09`)
+    - `Acceptance Gate`: `not_started`
+  - shipped outcome note: `visible app/runtime change delivered` (awaiting operator acceptance evidence).
 - Iterated active `14ab` watch posture contract to support back-turned screen-facing animation:
   - locked `WatchMode` inspect anchors to the active window bottom edge only
   - allowed bounded on-window overlap only within a near-bottom band (`WINDOW_WATCH_BOTTOM_BAND_PX` + inset target)

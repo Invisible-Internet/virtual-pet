@@ -687,6 +687,47 @@ function normalizeBehaviorManualCorrection(entry) {
   };
 }
 
+function normalizeBehaviorBounds(bounds) {
+  if (!bounds || typeof bounds !== "object") return null;
+  const x = Number(bounds.x);
+  const y = Number(bounds.y);
+  const width = Number(bounds.width);
+  const height = Number(bounds.height);
+  if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(width) || !Number.isFinite(height)) {
+    return null;
+  }
+  if (width <= 0 || height <= 0) return null;
+  return {
+    x: Math.round(x),
+    y: Math.round(y),
+    width: Math.round(width),
+    height: Math.round(height),
+  };
+}
+
+function normalizeBehaviorWindowCooldownEntries(entries = []) {
+  if (!Array.isArray(entries)) return [];
+  return entries
+    .map((entry) => {
+      const windowId = toOptionalString(entry?.windowId, null);
+      if (!windowId) return null;
+      const expiresAtMs = Number.isFinite(Number(entry?.expiresAtMs))
+        ? Math.max(0, Math.round(Number(entry.expiresAtMs)))
+        : 0;
+      const remainingMs = Number.isFinite(Number(entry?.remainingMs))
+        ? Math.max(0, Math.round(Number(entry.remainingMs)))
+        : 0;
+      return {
+        windowId,
+        expiresAtMs,
+        remainingMs,
+        sourceReason: toOptionalString(entry?.sourceReason, "manual_correction"),
+      };
+    })
+    .filter(Boolean)
+    .sort((left, right) => left.expiresAtMs - right.expiresAtMs);
+}
+
 function buildBehaviorRow({ settingsSummary, behaviorSnapshot = null }) {
   const roamMode =
     toOptionalString(behaviorSnapshot?.roamMode, null) ||
@@ -712,6 +753,41 @@ function buildBehaviorRow({ settingsSummary, behaviorSnapshot = null }) {
   const monitorAvoidMs = Number.isFinite(Number(behaviorSnapshot?.monitorAvoidMs))
     ? Math.max(0, Math.round(Number(behaviorSnapshot.monitorAvoidMs)))
     : 0;
+  const windowAvoidanceState =
+    toOptionalString(behaviorSnapshot?.windowAvoidanceState, "unknown") || "unknown";
+  const windowAvoidanceReason =
+    toOptionalString(behaviorSnapshot?.windowAvoidanceReason, "none") || "none";
+  const windowAvoidMarginPx = Number.isFinite(Number(behaviorSnapshot?.windowAvoidMarginPx))
+    ? Math.max(0, Math.round(Number(behaviorSnapshot.windowAvoidMarginPx)))
+    : 0;
+  const foregroundWindowBounds = normalizeBehaviorBounds(behaviorSnapshot?.foregroundWindowBounds);
+  const foregroundWindowWindowId =
+    toOptionalString(behaviorSnapshot?.foregroundWindowWindowId, null);
+  const foregroundWindowRevision = Number.isFinite(Number(behaviorSnapshot?.foregroundWindowRevision))
+    ? Math.max(0, Math.round(Number(behaviorSnapshot.foregroundWindowRevision)))
+    : 0;
+  const windowInspectState = toOptionalString(behaviorSnapshot?.windowInspectState, "idle") || "idle";
+  const windowInspectReason = toOptionalString(behaviorSnapshot?.windowInspectReason, "none") || "none";
+  const windowInspectAnchorLane =
+    toOptionalString(behaviorSnapshot?.windowInspectAnchorLane, "none") || "none";
+  const rawAnchorPoint = behaviorSnapshot?.windowInspectAnchorPoint;
+  const windowInspectAnchorPoint =
+    rawAnchorPoint &&
+    Number.isFinite(Number(rawAnchorPoint.x)) &&
+    Number.isFinite(Number(rawAnchorPoint.y))
+      ? {
+          x: Math.round(Number(rawAnchorPoint.x)),
+          y: Math.round(Number(rawAnchorPoint.y)),
+        }
+      : null;
+  const windowInspectDwellMs = Number.isFinite(Number(behaviorSnapshot?.windowInspectDwellMs))
+    ? Math.max(0, Math.round(Number(behaviorSnapshot.windowInspectDwellMs)))
+    : 0;
+  const avoidMaskBounds = normalizeBehaviorBounds(behaviorSnapshot?.avoidMaskBounds);
+  const windowAvoidFallback = toOptionalString(behaviorSnapshot?.windowAvoidFallback, "none") || "none";
+  const windowAvoidCooldownEntries = normalizeBehaviorWindowCooldownEntries(
+    behaviorSnapshot?.windowAvoidCooldownEntries
+  );
   const row = {
     state: OBSERVABILITY_ROW_STATES.healthy,
     reason: "roam_policy_active",
@@ -727,6 +803,21 @@ function buildBehaviorRow({ settingsSummary, behaviorSnapshot = null }) {
     hasQueuedDestination: Boolean(behaviorSnapshot?.hasQueuedDestination),
     activeAvoidedDisplays,
     avoidCount: activeAvoidedDisplays.length,
+    windowAvoidanceState,
+    windowAvoidanceReason,
+    windowAvoidMarginPx,
+    foregroundWindowBounds,
+    foregroundWindowWindowId,
+    foregroundWindowRevision,
+    windowInspectState,
+    windowInspectReason,
+    windowInspectAnchorLane,
+    windowInspectAnchorPoint,
+    windowInspectDwellMs,
+    avoidMaskBounds,
+    windowAvoidFallback,
+    windowAvoidCooldownEntries,
+    windowAvoidCooldownCount: windowAvoidCooldownEntries.length,
     lastManualCorrection: normalizeBehaviorManualCorrection(
       behaviorSnapshot?.lastManualCorrection
     ),
@@ -735,6 +826,16 @@ function buildBehaviorRow({ settingsSummary, behaviorSnapshot = null }) {
   if (roamMode !== "desktop") {
     row.state = OBSERVABILITY_ROW_STATES.disabled;
     row.reason = "roam_mode_not_desktop";
+    return row;
+  }
+  if (windowAvoidanceState === OBSERVABILITY_ROW_STATES.disabled) {
+    row.state = OBSERVABILITY_ROW_STATES.disabled;
+    row.reason = windowAvoidanceReason !== "none" ? windowAvoidanceReason : "window_avoidance_disabled";
+    return row;
+  }
+  if (windowAvoidanceState === OBSERVABILITY_ROW_STATES.degraded) {
+    row.state = OBSERVABILITY_ROW_STATES.degraded;
+    row.reason = windowAvoidanceReason !== "none" ? windowAvoidanceReason : "window_avoidance_degraded";
     return row;
   }
   if (fallbackReason !== "none") {
@@ -902,6 +1003,26 @@ function formatEpochUtcMs(value) {
   } catch {
     return String(rounded);
   }
+}
+
+function formatBounds(bounds) {
+  if (!bounds || typeof bounds !== "object") return "none";
+  const x = Number(bounds.x);
+  const y = Number(bounds.y);
+  const width = Number(bounds.width);
+  const height = Number(bounds.height);
+  if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(width) || !Number.isFinite(height)) {
+    return "none";
+  }
+  return `x=${Math.round(x)}, y=${Math.round(y)}, w=${Math.round(width)}, h=${Math.round(height)}`;
+}
+
+function formatPoint(point) {
+  if (!point || typeof point !== "object") return "none";
+  const x = Number(point.x);
+  const y = Number(point.y);
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return "none";
+  return `x=${Math.round(x)}, y=${Math.round(y)}`;
 }
 
 function toStatePill(state, fallback = OBSERVABILITY_ROW_STATES.unknown) {
@@ -1685,9 +1806,12 @@ function buildRowDetail({
   } else if (rowId === OBSERVABILITY_SUBJECT_IDS.behavior) {
     label = "Behavior Runtime";
     headline = `Roam behavior policy is ${normalizeStateLabel(state)}.`;
-    impact = "Behavior policy controls roam pacing and temporary monitor-avoidance memory.";
+    impact = "Behavior policy controls roam pacing, monitor-avoidance memory, and active-window inspect/avoid behavior.";
     const activeAvoidedDisplays = Array.isArray(row?.activeAvoidedDisplays)
       ? row.activeAvoidedDisplays
+      : [];
+    const windowAvoidCooldownEntries = Array.isArray(row?.windowAvoidCooldownEntries)
+      ? row.windowAvoidCooldownEntries
       : [];
     provenance.push(
       {
@@ -1739,11 +1863,94 @@ function buildRowDetail({
         label: "Next Decision At",
         kind: "runtime",
         value: formatEpochUtcMs(row?.nextDecisionAtMs),
+      },
+      {
+        label: "Window Avoidance State",
+        kind: "runtime",
+        value: toSentence(row?.windowAvoidanceState, "unknown"),
+      },
+      {
+        label: "Window Avoidance Reason",
+        kind: "runtime",
+        value: normalizeReasonLabel(row?.windowAvoidanceReason),
+      },
+      {
+        label: "Window Avoid Margin",
+        kind: "runtime",
+        value: `${Math.max(0, Math.round(Number(row?.windowAvoidMarginPx) || 0))} px`,
+      },
+      {
+        label: "Foreground Window ID",
+        kind: "runtime",
+        value: toSentence(row?.foregroundWindowWindowId, "none"),
+      },
+      {
+        label: "Foreground Window Bounds",
+        kind: "runtime",
+        value: formatBounds(row?.foregroundWindowBounds),
+      },
+      {
+        label: "Foreground Window Revision",
+        kind: "runtime",
+        value: String(
+          Number.isFinite(Number(row?.foregroundWindowRevision))
+            ? Math.max(0, Math.round(Number(row.foregroundWindowRevision)))
+            : 0
+        ),
+      },
+      {
+        label: "Window Inspect State",
+        kind: "runtime",
+        value: toSentence(row?.windowInspectState, "idle"),
+      },
+      {
+        label: "Window Inspect Reason",
+        kind: "runtime",
+        value: normalizeReasonLabel(row?.windowInspectReason),
+      },
+      {
+        label: "Window Inspect Anchor Lane",
+        kind: "runtime",
+        value: toSentence(row?.windowInspectAnchorLane, "none"),
+      },
+      {
+        label: "Window Inspect Anchor Point",
+        kind: "runtime",
+        value: formatPoint(row?.windowInspectAnchorPoint),
+      },
+      {
+        label: "Window Inspect Dwell",
+        kind: "runtime",
+        value: formatDurationMs(row?.windowInspectDwellMs),
+      },
+      {
+        label: "Avoid Mask Bounds",
+        kind: "runtime",
+        value: formatBounds(row?.avoidMaskBounds),
+      },
+      {
+        label: "Window Avoid Fallback",
+        kind: "runtime",
+        value: normalizeReasonLabel(row?.windowAvoidFallback),
+      },
+      {
+        label: "Window Avoid Cooldown",
+        kind: "runtime",
+        value: String(windowAvoidCooldownEntries.length),
       }
     );
     for (const entry of activeAvoidedDisplays) {
       provenance.push({
         label: `Display ${entry.displayId}`,
+        kind: "runtime",
+        value: `${formatDurationMs(entry?.remainingMs)} remaining (expires ${formatEpochUtcMs(
+          entry?.expiresAtMs
+        )})`,
+      });
+    }
+    for (const entry of windowAvoidCooldownEntries) {
+      provenance.push({
+        label: `Window ${entry.windowId}`,
         kind: "runtime",
         value: `${formatDurationMs(entry?.remainingMs)} remaining (expires ${formatEpochUtcMs(
           entry?.expiresAtMs
@@ -1774,13 +1981,24 @@ function buildRowDetail({
       suggestedSteps.push(
         "Switch roaming to Desktop mode to activate monitor-avoidance policy."
       );
+    } else if (
+      row?.windowAvoidanceReason === "foreground_window_provider_unavailable" ||
+      row?.windowAvoidanceReason === "foreground_window_query_failed"
+    ) {
+      suggestedSteps.push(
+        "Keep a normal desktop window focused, then press Refresh Status to verify foreground-window provider recovery."
+      );
     } else if (row?.fallbackReason === "avoidance_exhausted_fallback") {
       suggestedSteps.push(
         "Wait for avoid timers to expire or manually reposition the pet, then press Refresh Status."
       );
+    } else if (row?.windowAvoidFallback === "foreground_window_no_free_area_fallback") {
+      suggestedSteps.push(
+        "Resize or move the focused window or wait for window cooldown expiry, then press Refresh Status."
+      );
     } else {
       suggestedSteps.push(
-        "Move the pet between monitors once, then press Refresh Status to verify avoid timers."
+        "Focus a desktop window and drag the pet off it once, then press Refresh Status to verify inspect/avoid signals."
       );
     }
   } else if (rowId === OBSERVABILITY_SUBJECT_IDS.paths) {

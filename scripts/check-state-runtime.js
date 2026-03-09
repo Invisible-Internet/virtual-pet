@@ -257,6 +257,29 @@ function testMusicStateRespectsHigherPriorityState() {
   assertEqual(snapshot.currentState, "Reading", "Music should not preempt higher-priority Reading");
 }
 
+function testMusicDanceDurationOverride() {
+  const clock = createClock(5950);
+  const runtime = createRuntime(clock);
+  runtime.start();
+
+  let snapshot = runtime.applyMusicState({
+    suggestedState: "MusicDance",
+    title: "Quick Burst",
+    artist: "Test Artist",
+    durationMs: 1200,
+    onCompleteStateId: "Idle",
+  });
+  assertEqual(snapshot.currentState, "MusicDance", "MusicDance override should become active");
+
+  clock.advance(1199);
+  snapshot = runtime.tick(clock.now());
+  assertEqual(snapshot.currentState, "MusicDance", "MusicDance should remain before override expiry");
+
+  clock.advance(1);
+  snapshot = runtime.tick(clock.now());
+  assertEqual(snapshot.currentState, "Idle", "MusicDance should resolve to Idle after override expiry");
+}
+
 function testFreshRssReadingState() {
   const clock = createClock(6000);
   const runtime = createRuntime(clock);
@@ -300,6 +323,7 @@ function run() {
   testMusicStateUnknownRouteFallback();
   testMusicStateWithoutArtistUsesTitle();
   testMusicStateRespectsHigherPriorityState();
+  testMusicDanceDurationOverride();
   testFreshRssReadingState();
   console.log("[state-runtime] checks passed");
 }
