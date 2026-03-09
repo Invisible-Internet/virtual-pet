@@ -127,18 +127,43 @@ Historical v1 deliverables keep their original status wording and are not retrof
 - `accepted` is the only terminal state for future post-v1 deliverables.
 
 ### Current Workflow Snapshot
-- Current Deliverable: `14a-deliberate-roam-policy-and-monitor-avoidance`
-- Workflow State: `specifying`
-- Current Status: `specifying`
-- Last Completed Deliverable: `13d-online-reflection-and-runtime-sync`
-- Next Detailed Target: `14a-deliberate-roam-policy-and-monitor-avoidance`
-- Next Queued Target: `14ab-active-window-avoidance`
+- Current Deliverable: `none`
+- Workflow State: `idle`
+- Current Status: `accepted`
+- Last Completed Deliverable: `14a-deliberate-roam-policy-and-monitor-avoidance`
+- Next Detailed Target: `14ab-active-window-avoidance`
+- Next Queued Target: `14b-event-driven-watch-behavior`
 - Current Gate State:
-  - `Spec Gate`: `passed` (`2026-03-08`)
-  - `Build Gate`: `not_started`
-  - `Acceptance Gate`: `not_started`
+  - `Spec Gate`: `not_started` (next deliverable not active yet)
+  - `Build Gate`: `not_started` (next deliverable not active yet)
+  - `Acceptance Gate`: `not_started` (next deliverable not active yet)
 - Current Session Shipped Outcome:
-  - `no visible app change` (`14ab` future-work rough-in added; roadmap/tracker sequencing updated after `14a`)
+  - `visible app/runtime change delivered and accepted` (`14a` deliberate roam policy + monitor avoidance closed)
+- Closed `14a` implementation outcome:
+  - implemented deterministic roam policy helper:
+    - `roam-policy.js` with pacing windows (`initial`, `rest`, `retry`)
+    - bounded monitor-avoidance memory keyed by display id with expiry
+    - deterministic fallback (`avoidance_exhausted_fallback`) and re-entry (`avoidance_expired_reentry`) reasoning
+  - wired `main.js` roam flow:
+    - pacing-aware roam scheduling via policy helper
+    - desktop roam destination sampling filtered by active avoided displays
+    - deterministic exhausted fallback so roam never stalls when all displays are avoided
+    - manual drag/fling cross-monitor corrections now record avoid entries in desktop roam mode
+  - added status/diagnostics visibility:
+    - new `Behavior Runtime` row/detail in `shell-observability.js` + `inventory-shell-renderer.js`
+    - exposes decision/pacing/fallback/re-entry reasons, avoided displays with remaining time, and last manual correction provenance
+  - deterministic coverage and acceptance wiring:
+    - new `scripts/check-roam-policy.js`
+    - `package.json` check lanes include roam-policy syntax/contract checks
+    - acceptance row `D14a-deliberate-roam-monitor-avoidance`
+  - verification run passed:
+    - `npm run check:syntax`
+    - `npm run check:contracts`
+    - `npm run check:acceptance` -> `27/27`
+  - gate outcome:
+    - `Spec Gate` passed on `2026-03-08`
+    - `Build Gate` passed on `2026-03-08`
+    - `Acceptance Gate` passed on `2026-03-08` (operator-confirmed happy/failure/recovery checks)
 - Historical Note:
   - D01-D10 are complete historical v1 records.
   - Detailed v1 session history lives in `docs/plan/archive/00-progress-tracker-v1-history.md`.
@@ -577,8 +602,8 @@ Historical v1 deliverables keep their original status wording and are not retrof
   - `13b-persona-snapshot-synthesis-and-provenance` is accepted and closed (`Spec/Build/Acceptance Gates passed`; Acceptance on `2026-03-07`).
   - `13c-persona-aware-offline-dialog-and-proactive-behavior` is accepted and closed (`Spec/Build/Acceptance Gates passed`; Acceptance on `2026-03-08`).
   - `13d-online-reflection-and-runtime-sync` is accepted and closed (`Spec/Build/Acceptance Gates passed`; Acceptance on `2026-03-08`).
-  - `14a-deliberate-roam-policy-and-monitor-avoidance` is active in `specifying` (`Spec Gate` passed on `2026-03-08`; Build/Acceptance not started).
-  - `14ab-active-window-avoidance` is queued as immediate follow-on after `14a` with narrowed scope:
+  - `14a-deliberate-roam-policy-and-monitor-avoidance` is accepted and closed (`Spec/Build/Acceptance Gates` passed on `2026-03-08`).
+  - `14ab-active-window-avoidance` is the next detailed target and remains queued until activated, with narrowed scope:
     - active foreground window only
     - rectangular avoid mask + margin
     - deterministic fallback when no free roam area

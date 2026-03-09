@@ -1,7 +1,7 @@
 ﻿# Deliverable 14a: Deliberate Roam Policy and Monitor Avoidance
 
 **Deliverable ID:** `14a-deliberate-roam-policy-and-monitor-avoidance`  
-**Status:** `specifying`  
+**Status:** `accepted`  
 **Owner:** `Mic + Codex`  
 **Last Updated:** `2026-03-08`  
 **Depends On:** `13d-online-reflection-and-runtime-sync`  
@@ -84,17 +84,17 @@ When the operator manually pushes the pet from one monitor to another, the pet k
 - [ ] Recovery clears avoidance and restores normal eligibility.
 
 ## Acceptance Evidence Checklist (Mandatory)
-- [ ] `Behavior Runtime`/roam diagnostics detail capture showing active monitor avoidance.
-- [ ] Capture showing exhausted-fallback reason while roam remains active.
-- [ ] Capture showing recovered state (`Avoided Displays: none`).
-- [ ] Automated row `D14a-deliberate-roam-monitor-avoidance` passed.
+- [x] `Behavior Runtime`/roam diagnostics detail capture showing active monitor avoidance.
+- [x] Capture showing exhausted-fallback reason while roam remains active.
+- [x] Capture showing recovered state (`Avoided Displays: none`).
+- [x] Automated row `D14a-deliberate-roam-monitor-avoidance` passed.
 
 ## Public Interfaces / Touchpoints
 - `main.js` roam policy and monitor-selection logic.
 - `inventory-shell-renderer.js` roam diagnostics presentation (if detail is surfaced in shell).
 - `shell-observability.js` behavior/roam detail payload (if status surface is used).
-- New helper module (planned): `roam-policy.js` for deterministic pacing/avoidance logic.
-- Deterministic checks (planned):
+- New helper module: `roam-policy.js` for deterministic pacing/avoidance logic.
+- Deterministic checks:
   - `scripts/check-roam-policy.js`
   - acceptance row in `scripts/run-acceptance-matrix.js`.
 
@@ -106,30 +106,54 @@ When the operator manually pushes the pet from one monitor to another, the pet k
 - Deterministic check script(s) and acceptance row pass.
 
 ## Implementation Slice (Mandatory)
-- Spec-only session; implementation not started.
-- First planned vertical slice:
-  - add pure deterministic roam policy helper for pacing + monitor avoidance memory
-  - wire policy into `chooseRoamDestination`/roam decision loop
-  - expose minimal runtime diagnostics for avoidance state and decision reasons
-  - add deterministic check + acceptance matrix row
+- First vertical slice shipped:
+  - added deterministic roam policy helper:
+    - `roam-policy.js`
+    - deterministic pacing windows (`initial`, `rest`, `retry`)
+    - bounded monitor-avoidance memory keyed by display id with expiry
+    - explicit fallback (`avoidance_exhausted_fallback`) and re-entry (`avoidance_expired_reentry`) reasoning
+  - wired policy into runtime roam flow in `main.js`:
+    - pacing-driven decision scheduling
+    - desktop roam display sampling filtered by active avoid entries
+    - deterministic exhausted fallback to prevent roam stall when all displays are avoided
+    - manual drag/fling cross-monitor correction now records avoid entries in desktop roam mode
+  - exposed runtime diagnostics in `Status`:
+    - new `Behavior Runtime` row/detail in `shell-observability.js` + `inventory-shell-renderer.js`
+    - surfaced decision reason, pacing reason/delay, fallback/re-entry reason, avoided displays with remaining time, and last manual correction provenance
+  - deterministic coverage + acceptance wiring:
+    - new `scripts/check-roam-policy.js`
+    - acceptance row `D14a-deliberate-roam-monitor-avoidance`
+    - check lanes updated in `package.json` (`check:syntax`, `check:contracts`)
+  - verification run passed:
+    - `npm run check:syntax`
+    - `npm run check:contracts`
+    - `npm run check:acceptance` -> `27/27`
 
 ## Visible App Outcome
-- No visible app/runtime change in this session (`spec-only`).
-- `14a` contracts are now locked so implementation can start after this spec handoff.
+- Visible app/runtime change delivered and accepted:
+  - desktop roam now respects bounded monitor-avoidance memory after manual cross-monitor correction
+  - `Status -> Behavior Runtime` now shows explicit roam-policy diagnostics for avoidance/fallback/re-entry
 
 ## Acceptance Notes
 - `2026-03-08`: Deliverable created from template and spec contract locked.
-- `2026-03-08`: `Spec Gate` passed; implementation intentionally not started.
+- `2026-03-08`: `Spec Gate` passed.
+- `2026-03-08`: First implementation slice shipped and verified (`Build Gate` passed).
+- `2026-03-08`: Operator confirmed happy-path and failure/recovery checks passed.
+- `2026-03-08`: `Acceptance Gate` passed and deliverable closed.
 
 ## Iteration Log
 - `2026-03-08`: Locked first-slice `14a` scope to deterministic roam pacing + bounded monitor-avoidance memory + explicit roam diagnostics.
+- `2026-03-08`: Implemented first `14a` slice with policy helper wiring, behavior-runtime diagnostics, and deterministic `D14a` acceptance row.
+- `2026-03-08`: Operator acceptance evidence confirmed for active avoidance, exhausted fallback, and recovery.
 
 ## Gate Status
 - `Spec Gate`: `passed` (`2026-03-08`)
-- `Build Gate`: `not_started`
-- `Acceptance Gate`: `not_started`
-- `Overall`: `specifying`
+- `Build Gate`: `passed` (`2026-03-08`)
+- `Acceptance Gate`: `passed` (`2026-03-08`)
+- `Overall`: `accepted`
 
 ## Change Log
 - `2026-03-08`: File created from the post-v1 deliverable template.
-- `2026-03-08`: Spec contract finalized; implementation deferred until post-spec session.
+- `2026-03-08`: Spec contract finalized.
+- `2026-03-08`: First implementation slice shipped (roam policy runtime + diagnostics + deterministic acceptance coverage).
+- `2026-03-08`: Operator acceptance evidence logged; deliverable status moved to `accepted`.

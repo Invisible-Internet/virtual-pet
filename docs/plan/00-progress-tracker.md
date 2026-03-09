@@ -33,16 +33,16 @@ Historical v1 deliverables keep their original wording and remain archived histo
   - operator-visible demo passes and evidence is logged
 
 ## Current Deliverable
-- Current Deliverable: `14a-deliberate-roam-policy-and-monitor-avoidance`
-- Workflow State: `specifying`
-- Current Status: `specifying`
-- Last Completed Deliverable: `13d-online-reflection-and-runtime-sync`
-- Next Detailed Target: `14a-deliberate-roam-policy-and-monitor-avoidance`
-- Next Queued Target: `14ab-active-window-avoidance`
+- Current Deliverable: `none`
+- Workflow State: `idle`
+- Current Status: `accepted`
+- Last Completed Deliverable: `14a-deliberate-roam-policy-and-monitor-avoidance`
+- Next Detailed Target: `14ab-active-window-avoidance`
+- Next Queued Target: `14b-event-driven-watch-behavior`
 - Current Gate State:
-  - `Spec Gate`: `passed` (`2026-03-08`)
-  - `Build Gate`: `not_started`
-  - `Acceptance Gate`: `not_started`
+  - `Spec Gate`: `not_started` (next deliverable not active yet)
+  - `Build Gate`: `not_started` (next deliverable not active yet)
+  - `Acceptance Gate`: `not_started` (next deliverable not active yet)
 
 ## Post-v1 Family Rough-In
 Locked family order:
@@ -66,8 +66,8 @@ Planning state:
 - `13b-persona-snapshot-synthesis-and-provenance` is accepted and closed (`Spec/Build/Acceptance Gates passed`; Acceptance on `2026-03-07`).
 - `13c-persona-aware-offline-dialog-and-proactive-behavior` is accepted and closed (`Spec/Build/Acceptance Gates passed`; Acceptance on `2026-03-08`).
 - `13d-online-reflection-and-runtime-sync` is accepted and closed (`Spec/Build/Acceptance Gates passed`; Acceptance on `2026-03-08`).
-- `14a-deliberate-roam-policy-and-monitor-avoidance` is active in `specifying` (`Spec Gate` passed on `2026-03-08`; `Build/Acceptance` not started).
-- `14ab-active-window-avoidance` is queued as immediate follow-on after `14a` (foreground-window-only scope, fallback-first).
+- `14a-deliberate-roam-policy-and-monitor-avoidance` is accepted and closed (`Spec/Build/Acceptance Gates` passed on `2026-03-08`).
+- `14ab-active-window-avoidance` is now the next detailed target and remains queued until activated (`foreground-window-only scope, fallback-first`).
 - Families `13` through `15` now follow the cohesive `12c`-`15c` sequence in rough-in, with family-14 control/animation policy decisions locked.
 - Full family notes live in [`11-15-post-v1-roadmap-rough-in.md`](./11-15-post-v1-roadmap-rough-in.md).
 
@@ -80,14 +80,53 @@ Planning state:
 6. Pass `Spec Gate` before implementation begins.
 
 ## Next 3 Actions
-1. Implement first `14a` vertical slice: deterministic roam pacing + bounded monitor-avoidance memory in `main.js` via a dedicated policy helper.
-2. Add `14a` roam diagnostics visibility so operators can see active avoids, fallback reason, and re-entry eligibility.
-3. After `14a` acceptance, activate `14ab-active-window-avoidance` and pass its `Spec Gate` before beginning `14b`.
+1. Activate `14ab-active-window-avoidance` as the current deliverable and move it from `queued` to `specifying`.
+2. Finalize/polish `14ab` spec contract and pass `Spec Gate`.
+3. Implement first `14ab` vertical slice only after `Spec Gate` is passed.
 
 ## Blockers
 - None currently.
 
 ## Last Session Summary
+- Closed `14a-deliberate-roam-policy-and-monitor-avoidance` as `accepted` after operator confirmation:
+  - operator confirmed happy-path and failure/recovery checks passed on live run
+  - evidence confirmed:
+    - active avoided-display entry after manual cross-monitor correction
+    - explicit exhausted fallback reason while roam remained active
+    - recovery state after avoidance expiry
+  - gate outcome:
+    - `Spec Gate`: `passed` (`2026-03-08`)
+    - `Build Gate`: `passed` (`2026-03-08`)
+    - `Acceptance Gate`: `passed` (`2026-03-08`)
+  - workflow advanced to `Current Deliverable: none`, with `14ab` as next detailed target.
+  - shipped outcome note: `visible app/runtime change delivered and accepted` (deliberate roam policy + monitor avoidance is closed).
+- Implemented first `14a-deliberate-roam-policy-and-monitor-avoidance` slice and passed `Build Gate`:
+  - added deterministic roam policy helper:
+    - `roam-policy.js`
+    - pacing windows (`initial`, `rest`, `retry`)
+    - bounded monitor-avoidance memory with display-id keyed expiry
+    - deterministic fallback (`avoidance_exhausted_fallback`) and re-entry (`avoidance_expired_reentry`) reasons
+  - wired policy into `main.js` roam flow:
+    - pacing-driven roam decision scheduling
+    - desktop display sampling filtered by active avoid entries
+    - fallback to eligible displays when all displays are temporarily avoided
+    - manual drag/fling cross-monitor correction now records avoid entries in desktop roam mode
+  - added `Status` diagnostics surface for `14a`:
+    - new `Behavior Runtime` row/detail in `shell-observability.js` and `inventory-shell-renderer.js`
+    - exposes decision/pacing/fallback/re-entry reasons, active avoided displays with remaining time, and last manual correction provenance
+  - deterministic coverage + acceptance wiring:
+    - new `scripts/check-roam-policy.js`
+    - new acceptance row `D14a-deliberate-roam-monitor-avoidance`
+    - `package.json` check lanes updated to include `14a` contract checks
+  - verification run passed:
+    - `npm run check:syntax`
+    - `npm run check:contracts`
+    - `npm run check:acceptance` -> `27/27 automated checks passed`
+  - gate outcome:
+    - `Spec Gate`: `passed` (`2026-03-08`)
+    - `Build Gate`: `passed` (`2026-03-08`)
+    - `Acceptance Gate`: `not_started`
+  - shipped outcome note: `visible app/runtime change delivered` (desktop roam now has bounded monitor-avoidance policy + behavior-runtime diagnostics).
 - Rough-in added for post-`14a` follow-on `14ab-active-window-avoidance`:
   - created [`14ab-active-window-avoidance.md`](./14ab-active-window-avoidance.md) as a queued deliverable after `14a`
   - locked narrowed scope for first implementation pass:

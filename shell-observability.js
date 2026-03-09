@@ -23,6 +23,7 @@ const OBSERVABILITY_SUBJECT_IDS = Object.freeze({
   bridge: "bridge",
   provider: "provider",
   memory: "memory",
+  behavior: "behavior",
   canonicalFiles: "canonicalFiles",
   paths: "paths",
   validation: "validation",
@@ -648,6 +649,103 @@ function buildMemoryRow({ settingsSummary, memorySnapshot }) {
   };
 }
 
+function normalizeBehaviorAvoidedDisplays(entries = []) {
+  if (!Array.isArray(entries)) return [];
+  return entries
+    .map((entry) => {
+      const displayId = toOptionalString(entry?.displayId, null);
+      if (!displayId) return null;
+      const expiresAtMs = Number.isFinite(Number(entry?.expiresAtMs))
+        ? Math.max(0, Math.round(Number(entry.expiresAtMs)))
+        : 0;
+      const remainingMs = Number.isFinite(Number(entry?.remainingMs))
+        ? Math.max(0, Math.round(Number(entry.remainingMs)))
+        : 0;
+      return {
+        displayId,
+        expiresAtMs,
+        remainingMs,
+        sourceReason: toOptionalString(entry?.sourceReason, "manual_correction"),
+      };
+    })
+    .filter(Boolean)
+    .sort((left, right) => left.expiresAtMs - right.expiresAtMs);
+}
+
+function normalizeBehaviorManualCorrection(entry) {
+  if (!entry || typeof entry !== "object") return null;
+  const fromDisplayId = toOptionalString(entry.fromDisplayId, null);
+  const toDisplayId = toOptionalString(entry.toDisplayId, null);
+  const recordedAtMs = Number.isFinite(Number(entry.recordedAtMs))
+    ? Math.max(0, Math.round(Number(entry.recordedAtMs)))
+    : 0;
+  if (!fromDisplayId && !toDisplayId && recordedAtMs <= 0) return null;
+  return {
+    fromDisplayId,
+    toDisplayId,
+    recordedAtMs,
+  };
+}
+
+function buildBehaviorRow({ settingsSummary, behaviorSnapshot = null }) {
+  const roamMode =
+    toOptionalString(behaviorSnapshot?.roamMode, null) ||
+    toOptionalString(settingsSummary?.roaming?.mode, "desktop") ||
+    "desktop";
+  const activeAvoidedDisplays = normalizeBehaviorAvoidedDisplays(
+    behaviorSnapshot?.activeAvoidedDisplays
+  );
+  const decisionReason =
+    toOptionalString(behaviorSnapshot?.decisionReason, "none") || "none";
+  const fallbackReason =
+    toOptionalString(behaviorSnapshot?.fallbackReason, "none") || "none";
+  const reentryReason =
+    toOptionalString(behaviorSnapshot?.reentryReason, "none") || "none";
+  const pacingReason =
+    toOptionalString(behaviorSnapshot?.pacingReason, "none") || "none";
+  const pacingDelayMs = Number.isFinite(Number(behaviorSnapshot?.pacingDelayMs))
+    ? Math.max(0, Math.round(Number(behaviorSnapshot.pacingDelayMs)))
+    : 0;
+  const nextDecisionAtMs = Number.isFinite(Number(behaviorSnapshot?.nextDecisionAtMs))
+    ? Math.max(0, Math.round(Number(behaviorSnapshot.nextDecisionAtMs)))
+    : 0;
+  const monitorAvoidMs = Number.isFinite(Number(behaviorSnapshot?.monitorAvoidMs))
+    ? Math.max(0, Math.round(Number(behaviorSnapshot.monitorAvoidMs)))
+    : 0;
+  const row = {
+    state: OBSERVABILITY_ROW_STATES.healthy,
+    reason: "roam_policy_active",
+    roamMode,
+    roamPhase: toOptionalString(behaviorSnapshot?.roamPhase, "idle"),
+    decisionReason,
+    fallbackReason,
+    reentryReason,
+    pacingReason,
+    pacingDelayMs,
+    monitorAvoidMs,
+    nextDecisionAtMs,
+    hasQueuedDestination: Boolean(behaviorSnapshot?.hasQueuedDestination),
+    activeAvoidedDisplays,
+    avoidCount: activeAvoidedDisplays.length,
+    lastManualCorrection: normalizeBehaviorManualCorrection(
+      behaviorSnapshot?.lastManualCorrection
+    ),
+  };
+
+  if (roamMode !== "desktop") {
+    row.state = OBSERVABILITY_ROW_STATES.disabled;
+    row.reason = "roam_mode_not_desktop";
+    return row;
+  }
+  if (fallbackReason !== "none") {
+    row.state = OBSERVABILITY_ROW_STATES.degraded;
+    row.reason = fallbackReason;
+    return row;
+  }
+  row.reason = decisionReason && decisionReason !== "none" ? decisionReason : "roam_policy_active";
+  return row;
+}
+
 function deriveRuntimeState(rows, capabilitySnapshotState = null) {
   const normalizedCapabilityState = mapCapabilityState(capabilitySnapshotState);
   if (
@@ -674,6 +772,7 @@ function deriveRuntimeState(rows, capabilitySnapshotState = null) {
 function buildObservabilitySnapshot({
   capabilitySnapshot = null,
   openclawCapabilityState = null,
+  behaviorSnapshot = null,
   memorySnapshot = null,
   settingsSummary = {},
   settingsSourceMap = {},
@@ -697,6 +796,10 @@ function buildObservabilitySnapshot({
   const memory = buildMemoryRow({
     settingsSummary,
     memorySnapshot,
+  });
+  const behavior = buildBehaviorRow({
+    settingsSummary,
+    behaviorSnapshot,
   });
   const localWorkspace = buildWorkspaceFileHealth(
     resolvedPaths?.localRoot || settingsSummary?.paths?.localWorkspaceRoot || null,
@@ -728,6 +831,7 @@ function buildObservabilitySnapshot({
     bridge,
     provider,
     memory,
+    behavior,
     canonicalFiles,
     paths,
     validation,
@@ -870,6 +974,7 @@ function resolveObservabilitySubjectId(subjectId, rows) {
     normalized === OBSERVABILITY_SUBJECT_IDS.bridge ||
     normalized === OBSERVABILITY_SUBJECT_IDS.provider ||
     normalized === OBSERVABILITY_SUBJECT_IDS.memory ||
+    normalized === OBSERVABILITY_SUBJECT_IDS.behavior ||
     normalized === OBSERVABILITY_SUBJECT_IDS.paths ||
     normalized === OBSERVABILITY_SUBJECT_IDS.validation
   ) {
@@ -1576,6 +1681,107 @@ function buildRowDetail({
           value: String(Math.round(Number(lastPersonaExport.ts))),
         });
       }
+    }
+  } else if (rowId === OBSERVABILITY_SUBJECT_IDS.behavior) {
+    label = "Behavior Runtime";
+    headline = `Roam behavior policy is ${normalizeStateLabel(state)}.`;
+    impact = "Behavior policy controls roam pacing and temporary monitor-avoidance memory.";
+    const activeAvoidedDisplays = Array.isArray(row?.activeAvoidedDisplays)
+      ? row.activeAvoidedDisplays
+      : [];
+    provenance.push(
+      {
+        label: "Roam Mode",
+        kind: "runtime",
+        value: toSentence(row?.roamMode, "desktop"),
+      },
+      {
+        label: "Roam Phase",
+        kind: "runtime",
+        value: toSentence(row?.roamPhase, "idle"),
+      },
+      {
+        label: "Decision Reason",
+        kind: "runtime",
+        value: normalizeReasonLabel(row?.decisionReason),
+      },
+      {
+        label: "Pacing Reason",
+        kind: "runtime",
+        value: normalizeReasonLabel(row?.pacingReason),
+      },
+      {
+        label: "Pacing Delay",
+        kind: "runtime",
+        value: formatDurationMs(row?.pacingDelayMs),
+      },
+      {
+        label: "Monitor Avoid Window",
+        kind: "runtime",
+        value: formatDurationMs(row?.monitorAvoidMs),
+      },
+      {
+        label: "Fallback Reason",
+        kind: "runtime",
+        value: normalizeReasonLabel(row?.fallbackReason),
+      },
+      {
+        label: "Re-entry Reason",
+        kind: "runtime",
+        value: normalizeReasonLabel(row?.reentryReason),
+      },
+      {
+        label: "Avoided Displays",
+        kind: "runtime",
+        value: String(activeAvoidedDisplays.length),
+      },
+      {
+        label: "Next Decision At",
+        kind: "runtime",
+        value: formatEpochUtcMs(row?.nextDecisionAtMs),
+      }
+    );
+    for (const entry of activeAvoidedDisplays) {
+      provenance.push({
+        label: `Display ${entry.displayId}`,
+        kind: "runtime",
+        value: `${formatDurationMs(entry?.remainingMs)} remaining (expires ${formatEpochUtcMs(
+          entry?.expiresAtMs
+        )})`,
+      });
+    }
+    if (row?.lastManualCorrection && typeof row.lastManualCorrection === "object") {
+      provenance.push(
+        {
+          label: "Last Manual From",
+          kind: "runtime",
+          value: toSentence(row.lastManualCorrection.fromDisplayId, "unknown"),
+        },
+        {
+          label: "Last Manual To",
+          kind: "runtime",
+          value: toSentence(row.lastManualCorrection.toDisplayId, "unknown"),
+        },
+        {
+          label: "Last Manual At",
+          kind: "runtime",
+          value: formatEpochUtcMs(row.lastManualCorrection.recordedAtMs),
+        }
+      );
+    }
+    suggestedSteps.length = 0;
+    if (state === OBSERVABILITY_ROW_STATES.disabled) {
+      suggestedSteps.push(
+        "Switch roaming to Desktop mode to activate monitor-avoidance policy."
+      );
+    } else if (row?.fallbackReason === "avoidance_exhausted_fallback") {
+      suggestedSteps.push(
+        "Wait for avoid timers to expire or manually reposition the pet, then press Refresh Status."
+      );
+    } else {
+      suggestedSteps.push(
+        "Move the pet between monitors once, then press Refresh Status to verify avoid timers."
+      );
     }
   } else if (rowId === OBSERVABILITY_SUBJECT_IDS.paths) {
     label = "Paths / Sources";

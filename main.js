@@ -104,6 +104,17 @@ const {
   applyDragClampHysteresis,
 } = require("./main-clamp");
 const {
+  DEFAULT_MONITOR_AVOID_MS,
+  ROAM_POLICY_DECISION_REASONS,
+  applyRoamPacingDecision,
+  buildRoamPolicySnapshot,
+  createInitialRoamPolicyState,
+  markRoamPolicyDecision,
+  planDesktopRoamSampling,
+  recordManualDisplayAvoidance,
+  resolveRoamPacingDelay,
+} = require("./roam-policy");
+const {
   DEFAULT_OBSERVABILITY_SUBJECT_ID,
   OBSERVABILITY_DETAIL_ACTION_IDS,
   SHELL_WINDOW_TABS,
@@ -435,6 +446,11 @@ const roamState = {
   lastStepMs: 0,
   nextDecisionAtMs: 0,
 };
+const roamPolicyState = createInitialRoamPolicyState({
+  nowMs: Date.now(),
+  monitorAvoidMs: DEFAULT_MONITOR_AVOID_MS,
+});
+let manualCorrectionStartDisplayId = null;
 
 const PET_LAYOUT = computePetLayout(BASE_LAYOUT);
 const WINDOW_SIZE = PET_LAYOUT.windowSize;
@@ -1026,6 +1042,9 @@ function cancelFling(reason = "cancelled") {
     });
     if (reason === "belowStopSpeed") {
       maybeExitZoneRoamAfterManualMove("manual_fling_exit_zone");
+      maybeRecordManualMonitorAvoidance("manual_fling_monitor_correction");
+    } else {
+      manualCorrectionStartDisplayId = null;
     }
   }
 }
@@ -2479,7 +2498,23 @@ async function runOpenClawPairingProbe() {
   return probe;
 }
 
+function buildCurrentBehaviorRuntimeSnapshot(nowMs = Date.now()) {
+  const safeNow = Math.max(0, Math.round(Number(nowMs) || 0));
+  const roamMode = latestShellState?.roaming?.mode || ROAMING_MODES.desktop;
+  const snapshot = buildRoamPolicySnapshot(roamPolicyState, {
+    roamMode,
+    nowMs: safeNow || Date.now(),
+  });
+  return {
+    ...snapshot,
+    roamPhase: typeof roamState.phase === "string" ? roamState.phase : "idle",
+    nextDecisionAtMs: Math.max(0, Math.round(Number(roamState.nextDecisionAtMs) || 0)),
+    hasQueuedDestination: Boolean(roamState.queuedDestination),
+  };
+}
+
 function buildCurrentObservabilitySnapshot() {
+  const nowMs = Date.now();
   const capabilitySnapshot =
     latestCapabilitySnapshot ||
     (capabilityRegistry && typeof capabilityRegistry.getSnapshot === "function"
@@ -2494,6 +2529,7 @@ function buildCurrentObservabilitySnapshot() {
   const snapshot = buildObservabilitySnapshot({
     capabilitySnapshot,
     openclawCapabilityState,
+    behaviorSnapshot: buildCurrentBehaviorRuntimeSnapshot(nowMs),
     memorySnapshot:
       latestMemorySnapshot ||
       (memoryPipeline && typeof memoryPipeline.getSnapshot === "function"
@@ -2506,7 +2542,7 @@ function buildCurrentObservabilitySnapshot() {
     validationErrors: runtimeSettingsValidationErrors,
     resolvedPaths: runtimeSettingsResolvedPaths,
     trayAvailable: Boolean(shellTray),
-    ts: Date.now(),
+    ts: nowMs,
   });
   const pairingSnapshot = getOpenClawPairingSnapshot();
   if (
@@ -3344,12 +3380,17 @@ function getBoundsUnion(boundsList) {
 }
 
 function getDesktopRoamLayout() {
-  const areas = screen
+  const displayAreas = screen
     .getAllDisplays()
-    .map((display) => summarizeBounds(getClampArea(display)))
-    .filter((bounds) => bounds.width > 0 && bounds.height > 0);
-  if (areas.length > 0) {
+    .map((display) => ({
+      displayId: display.id,
+      bounds: summarizeBounds(getClampArea(display)),
+    }))
+    .filter((entry) => entry.bounds.width > 0 && entry.bounds.height > 0);
+  if (displayAreas.length > 0) {
+    const areas = displayAreas.map((entry) => entry.bounds);
     return {
+      displayAreas,
       areas,
       bounds: getBoundsUnion(areas),
     };
@@ -3358,6 +3399,12 @@ function getDesktopRoamLayout() {
   const fallbackDisplay = screen.getPrimaryDisplay();
   const fallbackBounds = summarizeBounds(getClampArea(fallbackDisplay));
   return {
+    displayAreas: [
+      {
+        displayId: fallbackDisplay?.id,
+        bounds: fallbackBounds,
+      },
+    ],
     areas: [fallbackBounds],
     bounds: fallbackBounds,
   };
@@ -3494,6 +3541,34 @@ function maybeExitZoneRoamAfterManualMove(reason = "manual_zone_escape") {
   return true;
 }
 
+function getCurrentPetDisplayId() {
+  if (!win || win.isDestroyed()) return null;
+  const display = getWindowDisplay(win, getPetWindowSize());
+  const displayId = Number(display?.id);
+  if (!Number.isFinite(displayId)) return null;
+  return Math.round(displayId);
+}
+
+function maybeRecordManualMonitorAvoidance(reason = "manual_monitor_correction") {
+  const nowMs = Date.now();
+  const roamMode = latestShellState?.roaming?.mode || ROAMING_MODES.desktop;
+  const fromDisplayId = manualCorrectionStartDisplayId;
+  const toDisplayId = getCurrentPetDisplayId();
+  manualCorrectionStartDisplayId = null;
+  if (roamMode !== ROAMING_MODES.desktop) {
+    return null;
+  }
+  if (!Number.isFinite(Number(fromDisplayId)) || !Number.isFinite(Number(toDisplayId))) {
+    return null;
+  }
+  return recordManualDisplayAvoidance(roamPolicyState, {
+    fromDisplayId,
+    toDisplayId,
+    nowMs,
+    sourceReason: reason,
+  });
+}
+
 function chooseRoamDestination(nowMs = Date.now(), options = {}) {
   if (!win || win.isDestroyed()) return null;
   const [currentWinX, currentWinY] = win.getPosition();
@@ -3507,6 +3582,13 @@ function chooseRoamDestination(nowMs = Date.now(), options = {}) {
       ? options.zoneRect
       : latestShellState?.roaming?.zoneRect || null;
   const desktopRoamLayout = roamMode === ROAMING_MODES.desktop ? getDesktopRoamLayout() : null;
+  const desktopSamplingPlan =
+    roamMode === ROAMING_MODES.desktop
+      ? planDesktopRoamSampling(roamPolicyState, {
+          displayAreas: desktopRoamLayout?.displayAreas || [],
+          nowMs,
+        })
+      : null;
   const roamBounds =
     options.roamBounds ||
     desktopRoamLayout?.bounds ||
@@ -3514,7 +3596,7 @@ function chooseRoamDestination(nowMs = Date.now(), options = {}) {
   const samplingAreas =
     Array.isArray(options.samplingAreas) && options.samplingAreas.length > 0
       ? options.samplingAreas
-      : desktopRoamLayout?.areas || [roamBounds];
+      : desktopSamplingPlan?.samplingAreas || desktopRoamLayout?.areas || [roamBounds];
   const petBounds = options.petBounds || getRoamPetBounds();
   const minDistancePx = Number.isFinite(Number(options.minDistancePx))
     ? Math.max(0, Math.round(Number(options.minDistancePx)))
@@ -3652,12 +3734,47 @@ function enterAmbientRestState(reason = "roam_rest", stateId = pickAmbientRestSt
   });
 }
 
-function scheduleRoamDecision(reason = "roam_schedule", delayMs = null, force = false) {
+function scheduleRoamDecision(
+  reason = "roam_schedule",
+  delayMs = null,
+  force = false,
+  pacingPhase = "rest"
+) {
   const nowMs = Date.now();
   const [winX, winY] = win && !win.isDestroyed() ? win.getPosition() : [0, 0];
   if (!force && roamState.nextDecisionAtMs > nowMs && roamState.phase !== "moving") {
     return latestStateSnapshot;
   }
+  const numericDelayMs = Number(delayMs);
+  const hasExplicitDelay = Number.isFinite(numericDelayMs);
+  const pacingDecision = hasExplicitDelay
+    ? {
+        phase: "rest",
+        reason: ROAM_POLICY_DECISION_REASONS.pacingExternalDelay,
+        delayMs: Math.max(0, Math.round(numericDelayMs)),
+        minMs: Math.max(0, Math.round(numericDelayMs)),
+        maxMs: Math.max(0, Math.round(numericDelayMs)),
+      }
+    : resolveRoamPacingDelay({
+        phase: pacingPhase,
+        randomUnit: Math.random(),
+        windows: {
+          initial: {
+            minMs: ROAM_INITIAL_DELAY_MIN_MS,
+            maxMs: ROAM_INITIAL_DELAY_MAX_MS,
+          },
+          rest: {
+            minMs: ROAM_REST_MIN_MS,
+            maxMs: ROAM_REST_MAX_MS,
+          },
+          retry: {
+            minMs: ROAM_REST_MIN_MS,
+            maxMs: ROAM_REST_MAX_MS,
+          },
+        },
+      });
+  applyRoamPacingDecision(roamPolicyState, pacingDecision, nowMs);
+
   roamState.phase = "rest";
   roamState.destination = null;
   roamState.queuedDestination = null;
@@ -3669,13 +3786,7 @@ function scheduleRoamDecision(reason = "roam_schedule", delayMs = null, force = 
   roamState.x = winX;
   roamState.y = winY;
   roamState.lastStepMs = nowMs;
-  roamState.nextDecisionAtMs =
-    nowMs +
-    Math.round(
-      Number.isFinite(delayMs)
-        ? delayMs
-        : randomBetween(ROAM_REST_MIN_MS, ROAM_REST_MAX_MS)
-    );
+  roamState.nextDecisionAtMs = nowMs + Math.max(0, Math.round(pacingDecision.delayMs));
   if (latestStateSnapshot?.currentState === "Roam") {
     enterAmbientRestState(reason);
   }
@@ -3683,11 +3794,7 @@ function scheduleRoamDecision(reason = "roam_schedule", delayMs = null, force = 
 }
 
 function scheduleInitialRoamDecision(reason = "roam_initial_schedule", force = false) {
-  return scheduleRoamDecision(
-    reason,
-    randomBetween(ROAM_INITIAL_DELAY_MIN_MS, ROAM_INITIAL_DELAY_MAX_MS),
-    force
-  );
+  return scheduleRoamDecision(reason, null, force, "initial");
 }
 
 function beginRoamLeg(nowMs = Date.now()) {
@@ -3705,7 +3812,8 @@ function beginRoamLeg(nowMs = Date.now()) {
       (queuedDestination ? ROAM_ARRIVAL_THRESHOLD_PX : ROAM_TARGET_MIN_DISTANCE_PX)
   ) {
     roamState.queuedDestination = null;
-    scheduleRoamDecision("roam_leg_retry", randomBetween(ROAM_REST_MIN_MS, ROAM_REST_MAX_MS), true);
+    markRoamPolicyDecision(roamPolicyState, ROAM_POLICY_DECISION_REASONS.roamLegRetry, nowMs);
+    scheduleRoamDecision("roam_leg_retry", null, true, "retry");
     enterAmbientRestState("roam_leg_retry");
     return latestStateSnapshot;
   }
@@ -3741,6 +3849,7 @@ function beginRoamLeg(nowMs = Date.now()) {
   roamState.y = winY;
   roamState.lastStepMs = nowMs;
   roamState.nextDecisionAtMs = 0;
+  markRoamPolicyDecision(roamPolicyState, ROAM_POLICY_DECISION_REASONS.roamLegStarted, nowMs);
   return stateRuntime.activateState("Roam", {
     source: "shell",
     reason: "roam_leg_start",
@@ -3760,7 +3869,7 @@ function beginRoamLeg(nowMs = Date.now()) {
 function finishRoamLeg(reason = "roam_leg_complete", nowMs = Date.now()) {
   const queuedDestination = roamState.queuedDestination ? { ...roamState.queuedDestination } : null;
   const [winX, winY] = win && !win.isDestroyed() ? win.getPosition() : [0, 0];
-  scheduleRoamDecision(reason, randomBetween(ROAM_REST_MIN_MS, ROAM_REST_MAX_MS), true);
+  scheduleRoamDecision(reason, null, true, "rest");
   if (queuedDestination) {
     roamState.queuedDestination = queuedDestination;
     roamState.clip = queuedDestination.preferRun ? "Run" : "Walk";
@@ -8276,6 +8385,7 @@ ipcMain.on("pet:beginDrag", () => {
 
   cancelFling("grabbed");
   clearDragSamples();
+  manualCorrectionStartDisplayId = getCurrentPetDisplayId();
 
   const cursor = screen.getCursorScreenPoint();
   const [winX, winY] = win.getPosition();
@@ -8327,6 +8437,7 @@ ipcMain.on("pet:endDrag", () => {
   maybeExitZoneRoamAfterManualMove("manual_drag_exit_zone");
   maybeStartFlingFromSamples();
   if (!flingState.active) {
+    maybeRecordManualMonitorAvoidance("manual_drag_monitor_correction");
     emitMotionState({
       velocityOverride: { vx: 0, vy: 0 },
       collided: { x: false, y: false },

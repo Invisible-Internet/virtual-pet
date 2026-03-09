@@ -161,6 +161,13 @@ const CASES = Object.freeze([
     script: "scripts/check-online-reflection-runtime.js",
   },
   {
+    id: "D14a-deliberate-roam-monitor-avoidance",
+    deliverable: "14a-deliberate-roam-policy-and-monitor-avoidance",
+    scenario:
+      "Desktop roam pacing and bounded monitor-avoidance memory remain deterministic with explicit fallback and re-entry reasons.",
+    script: "scripts/check-roam-policy.js",
+  },
+  {
     id: "Layout-assets",
     deliverable: "core-renderer-assets",
     scenario: "Layout bounds and required sprite assets remain internally consistent.",

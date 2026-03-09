@@ -1,8 +1,8 @@
 # D08 Acceptance Smoke Report
 
-- Generated: 2026-03-08T21:25:41.089Z
+- Generated: 2026-03-08T23:21:39.706Z
 - Runner: Codex automated smoke
-- Summary: 26/26 automated checks passed
+- Summary: 27/27 automated checks passed
 
 | ID | Deliverable | Status | Command | Evidence |
 | --- | --- | --- | --- | --- |
@@ -32,6 +32,7 @@
 [proactive-policy] checks passed
 [persona-offline-proactive] checks passed` |
 | D13d-online-reflection-runtime-sync | 13d-online-reflection-and-runtime-sync | passed | `node scripts/check-online-reflection-runtime.js` | `[online-reflection-runtime] checks passed` |
+| D14a-deliberate-roam-monitor-avoidance | 14a-deliberate-roam-policy-and-monitor-avoidance | passed | `node scripts/check-roam-policy.js` | `[roam-policy] checks passed` |
 | Layout-assets | core-renderer-assets | passed | `node scripts/check-layout.js` | `layout checks passed` |
 | Sprite-assets | core-renderer-assets | passed | `node scripts/check-assets.js` | `[assets] girl: manifest OK (7 states)
 [assets] checks passed` |

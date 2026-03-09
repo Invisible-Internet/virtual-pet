@@ -18,6 +18,7 @@ const OBSERVABILITY_SUBJECT_IDS = Object.freeze({
   bridge: "bridge",
   provider: "provider",
   memory: "memory",
+  behavior: "behavior",
   canonicalFiles: "canonicalFiles",
   paths: "paths",
   validation: "validation",
@@ -998,6 +999,7 @@ function subjectExistsInSnapshot(snapshot, subjectId) {
   if (subjectId === OBSERVABILITY_SUBJECT_IDS.bridge) return Boolean(rows.bridge);
   if (subjectId === OBSERVABILITY_SUBJECT_IDS.provider) return Boolean(rows.provider);
   if (subjectId === OBSERVABILITY_SUBJECT_IDS.memory) return Boolean(rows.memory);
+  if (subjectId === OBSERVABILITY_SUBJECT_IDS.behavior) return Boolean(rows.behavior);
   if (subjectId === OBSERVABILITY_SUBJECT_IDS.paths) return Boolean(rows.paths);
   if (subjectId === OBSERVABILITY_SUBJECT_IDS.validation) return Boolean(rows.validation);
   if (subjectId === OBSERVABILITY_SUBJECT_IDS.canonicalFiles) return Boolean(rows.canonicalFiles);
@@ -1037,6 +1039,7 @@ function pickDefaultObservabilitySubject(snapshot) {
     OBSERVABILITY_SUBJECT_IDS.bridge,
     OBSERVABILITY_SUBJECT_IDS.provider,
     OBSERVABILITY_SUBJECT_IDS.memory,
+    OBSERVABILITY_SUBJECT_IDS.behavior,
     OBSERVABILITY_SUBJECT_IDS.paths,
     OBSERVABILITY_SUBJECT_IDS.validation,
   ]) {
@@ -1295,6 +1298,29 @@ function renderObservability() {
         {
           subjectId: OBSERVABILITY_SUBJECT_IDS.memory,
           selected: isSubjectSelected(OBSERVABILITY_SUBJECT_IDS.memory),
+        }
+      ),
+      buildSettingsCard(
+        "Behavior Runtime",
+        rows.behavior || {},
+        [
+          { label: "Roam Mode", value: formatText(rows.behavior?.roamMode, "desktop") },
+          { label: "Decision", value: formatText(rows.behavior?.decisionReason, "none") },
+          {
+            label: "Avoided Displays",
+            value:
+              Array.isArray(rows.behavior?.activeAvoidedDisplays) &&
+              rows.behavior.activeAvoidedDisplays.length > 0
+                ? rows.behavior.activeAvoidedDisplays
+                    .map((entry) => `${entry.displayId} (${Math.ceil(Math.max(0, Number(entry.remainingMs) || 0) / 1000)}s)`)
+                    .join(", ")
+                : "none",
+          },
+          { label: "Fallback", value: formatText(rows.behavior?.fallbackReason, "none") },
+        ],
+        {
+          subjectId: OBSERVABILITY_SUBJECT_IDS.behavior,
+          selected: isSubjectSelected(OBSERVABILITY_SUBJECT_IDS.behavior),
         }
       ),
     ].join("");

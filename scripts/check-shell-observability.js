@@ -43,6 +43,30 @@ function run() {
       state: "healthy",
       reason: "httpConfigured",
     },
+    behaviorSnapshot: {
+      roamMode: "desktop",
+      roamPhase: "rest",
+      decisionReason: "desktop_avoidance_active",
+      pacingReason: "pacing_rest_window",
+      pacingDelayMs: 3200,
+      fallbackReason: "none",
+      reentryReason: "none",
+      monitorAvoidMs: 45000,
+      nextDecisionAtMs: 1700000002200,
+      activeAvoidedDisplays: [
+        {
+          displayId: "1001",
+          remainingMs: 18000,
+          expiresAtMs: 1700000019000,
+          sourceReason: "manual_drag_monitor_correction",
+        },
+      ],
+      lastManualCorrection: {
+        fromDisplayId: "1001",
+        toDisplayId: "1002",
+        recordedAtMs: 1700000001400,
+      },
+    },
     memorySnapshot: {
       requestedAdapterMode: "obsidian",
       activeAdapterMode: "obsidian",
@@ -161,6 +185,12 @@ function run() {
   assertEqual(healthy.overview.runtimeState, "healthy", "healthy snapshot runtime state mismatch");
   assertEqual(healthy.rows.bridge.state, "healthy", "bridge row should be healthy");
   assertEqual(healthy.rows.memory.state, "healthy", "memory row should be healthy");
+  assertEqual(healthy.rows.behavior.state, "healthy", "behavior row should be healthy");
+  assertEqual(
+    healthy.rows.behavior.avoidCount,
+    1,
+    "behavior row should include one active avoided display"
+  );
   assertEqual(
     healthy.rows.memory.lastOfflineRecall?.recallType,
     "identity_name",
@@ -223,6 +253,24 @@ function run() {
     ),
     "memory detail should include proactive countdown provenance"
   );
+  const behaviorDetail = buildObservabilityDetail({
+    snapshot: healthy,
+    subjectId: "behavior",
+    settingsSourceMap: {},
+  });
+  assert(
+    behaviorDetail.provenance.some(
+      (entry) =>
+        entry.label === "Decision Reason" && entry.value === "desktop avoidance active"
+    ),
+    "behavior detail should include decision reason provenance"
+  );
+  assert(
+    behaviorDetail.provenance.some(
+      (entry) => entry.label === "Display 1001"
+    ),
+    "behavior detail should include avoided display provenance"
+  );
 
   const personaSnapshotDegraded = buildObservabilitySnapshot({
     capabilitySnapshot: {
@@ -232,6 +280,18 @@ function run() {
     openclawCapabilityState: {
       state: "healthy",
       reason: "requestSuccess",
+    },
+    behaviorSnapshot: {
+      roamMode: "desktop",
+      roamPhase: "rest",
+      decisionReason: "desktop_nominal",
+      pacingReason: "pacing_rest_window",
+      pacingDelayMs: 2800,
+      fallbackReason: "none",
+      reentryReason: "none",
+      monitorAvoidMs: 45000,
+      nextDecisionAtMs: 1700000003000,
+      activeAvoidedDisplays: [],
     },
     memorySnapshot: {
       requestedAdapterMode: "obsidian",
@@ -302,6 +362,31 @@ function run() {
       state: "failed",
       reason: "startupError",
     },
+    behaviorSnapshot: {
+      roamMode: "desktop",
+      roamPhase: "rest",
+      decisionReason: "avoidance_exhausted_fallback",
+      pacingReason: "pacing_retry_window",
+      pacingDelayMs: 4200,
+      fallbackReason: "avoidance_exhausted_fallback",
+      reentryReason: "none",
+      monitorAvoidMs: 45000,
+      nextDecisionAtMs: 1700000004200,
+      activeAvoidedDisplays: [
+        {
+          displayId: "1001",
+          remainingMs: 2000,
+          expiresAtMs: 1700000005000,
+          sourceReason: "manual_drag_monitor_correction",
+        },
+        {
+          displayId: "1002",
+          remainingMs: 2100,
+          expiresAtMs: 1700000005100,
+          sourceReason: "manual_fling_monitor_correction",
+        },
+      ],
+    },
     memorySnapshot: {
       requestedAdapterMode: "obsidian",
       activeAdapterMode: "local",
@@ -348,6 +433,16 @@ function run() {
   assertEqual(degraded.rows.provider.state, "degraded", "provider row should degrade when bridge fails");
   assertEqual(degraded.rows.memory.state, "degraded", "memory fallback should degrade");
   assertEqual(
+    degraded.rows.behavior.state,
+    "degraded",
+    "behavior row should degrade when fallback is active"
+  );
+  assertEqual(
+    degraded.rows.behavior.reason,
+    "avoidance_exhausted_fallback",
+    "behavior degraded reason should surface fallback"
+  );
+  assertEqual(
     degraded.rows.validation.state,
     "degraded",
     "validation warnings should degrade the validation row"
@@ -366,6 +461,18 @@ function run() {
     openclawCapabilityState: {
       state: "healthy",
       reason: "requestSuccess",
+    },
+    behaviorSnapshot: {
+      roamMode: "zone",
+      roamPhase: "idle",
+      decisionReason: "none",
+      pacingReason: "none",
+      pacingDelayMs: 0,
+      fallbackReason: "none",
+      reentryReason: "none",
+      monitorAvoidMs: 45000,
+      nextDecisionAtMs: 0,
+      activeAvoidedDisplays: [],
     },
     memorySnapshot: {
       requestedAdapterMode: "obsidian",
@@ -409,6 +516,11 @@ function run() {
   });
   assertEqual(disabled.rows.bridge.state, "disabled", "bridge row should disable when openclaw is disabled");
   assertEqual(disabled.rows.bridge.mode, "offline", "disabled bridge should always report offline mode");
+  assertEqual(
+    disabled.rows.behavior.state,
+    "disabled",
+    "behavior row should disable outside desktop roam mode"
+  );
 
   assertEqual(
     resolveShellWindowTabForAction("open-inventory", SHELL_WINDOW_TABS.status),
