@@ -31,8 +31,9 @@ Planning status:
 - `13b-persona-snapshot-synthesis-and-provenance` is accepted and closed (`Spec/Build/Acceptance Gates passed`).
 - `13c-persona-aware-offline-dialog-and-proactive-behavior` is accepted and closed (`Spec/Build/Acceptance Gates passed`).
 - `13d-online-reflection-and-runtime-sync` is accepted and closed (`Spec/Build/Acceptance Gates passed`).
-- `14a-deliberate-roam-policy-and-monitor-avoidance` is now active in `specifying` (`Spec Gate` passed on `2026-03-08`; `Build/Acceptance` not started).
-- `14ab-active-window-avoidance` is queued as the immediate follow-on after `14a` with narrowed foreground-window-only scope.
+- `14a-deliberate-roam-policy-and-monitor-avoidance` is accepted and closed (`Spec/Build/Acceptance Gates` passed on `2026-03-08`).
+- `14ab-active-window-avoidance` is active in `specifying` (`Spec Gate` passed on `2026-03-08`; `Build/Acceptance` not started).
+- `14b-event-driven-watch-behavior` remains queued and now inherits explicit playful-watch handoff from `14ab` (edge inspect -> media watch behaviors); queued draft lives in `docs/plan/14b-event-driven-watch-behavior.md`.
 - Families `13` through `15` now use one cohesive execution sequence (`12c` through `15c`) with locked control-model decisions for family `14`.
 - All future work follows the post-v1 workflow in [`00-development-workflow.md`](./00-development-workflow.md).
 
@@ -49,7 +50,7 @@ Planning status:
 | `11` | Observability / Setup / Provenance | Make the current OpenClaw, model, memory, and fallback setup visible and understandable inside the app. | `11a`/`11b`/`11c`/`11d` accepted and closed |
 | `12` | Conversation / Bridge | Make pet chat feel like real OpenClaw conversation, not narrow status/introspection. | `12a`/`12b`/`12c`/`12d`/`12e` accepted and closed |
 | `13` | Memory / Persona Continuity | Make online and offline feel like the same pet with recall and stable personality. | `13a`/`13b`/`13c`/`13d` accepted and closed |
-| `14` | Embodiment / Autonomy | Make the pet move and react more deliberately, unobtrusively, and believably. | `14a` active in `specifying`; `14ab` queued next |
+| `14` | Embodiment / Autonomy | Make the pet move and react more deliberately, unobtrusively, and believably. | `14ab` active in `specifying`; `14b` queued next |
 | `15` | Extension Showcase | Prove the extension system with a real add-on and a polished end-to-end flow. | Rough only |
 
 ## Cohesive Post-12b Execution Sequence (`12c`-`15c`)
@@ -368,19 +369,30 @@ Improve roam behavior so the pet:
 
 ### `14ab` Tightened First-Slice Focus
 - active foreground window only
-- rectangular avoid mask + margin
-- deterministic fallback when no free roam area
+- bounded playful edge-inspect behavior (`WatchMode` posture + edge anchors)
+- hard avoid only after manual drag-off correction (window-keyed cooldown memory)
+- focused-window resize/move recalculation for inspect anchor + avoid bounds
+- rectangular avoid mask + margin (enforced only in hard-avoid mode)
+- deterministic fallback when no free roam area in hard-avoid mode
 - explicit observability/degraded reasons
-- only after stability, add playful `window-edge inspect` states
 
 ### `14ab` Rough Intent
-Add a narrow window-aware roam layer so the pet avoids the currently focused work window on a monitor without stalling movement, while exposing deterministic reason codes when detection is unavailable or no free roam area remains.
+Add a narrow window-aware roam layer so the pet can inspect a focused window non-intrusively by default, and only enter prolonged hard-avoid mode after explicit manual drag-off correction, with deterministic fallback and reason codes.
+
+### `14b` Tightened First-Slice Focus
+- promote playful inspect into media-aware watch behaviors:
+  - bottom-edge watch anchor while video playback is active (back-turned screen-facing illusion)
+  - edge-walk pacing near playback window
+  - bounded run-and-bounce interaction at window boundary
+- tie behavior selection to deterministic `events + time` inputs (no direct AI stat writes).
+- formalize utility->FSM->micro-BT decision trace for watch/inspect/roam arbitration.
+- keep all new runtime states behind sprite-sheet validation gates.
 
 ### `14b` Rough Intent
-Expand event-driven embodiment so media playback can drive more than music states:
-- watching movies
-- watching YouTube
-- passive co-viewing behaviors
+Expand event-driven embodiment so detected playback can drive playful, window-aware co-viewing behavior:
+- watching movies/videos from local media sessions (for example browser video, Netflix app, VLC, WMP when surfaced by Windows media session APIs)
+- moving to deterministic bottom-edge watch anchors of active playback window
+- alternating among inspect/walk/perch/bounce watch micro-behaviors without constant roaming
 
 ### `14c` Rough Intent
 Add direct pet interactions:
@@ -400,6 +412,18 @@ Add a reversible mouse-pointer tag game:
 - Pointer proximity / touch interaction handling
 - Renderer reaction hooks and state overlays
 - Short-term aversion or environment-memory policy
+
+### Family 14 Behavior Inputs (Current vs Planned)
+- Available now (already in runtime):
+  - foreground-window bounds identity and refresh (`14ab` scope)
+  - manual drag/fling correction signals
+  - Windows local media session probe (`isPlaying`, `sourceAppLabel`, provider)
+  - ambient state/runtime gates (`dialog hold`, roam phase, current state)
+- Not yet a behavior-authoritative stat today:
+  - `curiosity` exists in offline persona dialog style shaping, not movement authority
+  - `boredom` stat is not yet implemented
+- Planned next:
+  - introduce deterministic family-14 behavior stats (including boredom/restlessness and attention drive) under the locked `events + time` authority model
 
 ### Rough Future Acceptance Scenarios
 - Drag or fling the pet off a work monitor and confirm it avoids returning there for a bounded period.
@@ -487,7 +511,8 @@ These are roadmap placeholders, not final contracts.
 - Behavior stat snapshot contract (`events + time` deterministic updates).
 - Behavior decision trace contract (winner + suppressed candidates + gate reasons).
 - Utility->FSM state selection contract plus per-state micro-BT sequencing.
-- Foreground-window bounds provider contract and avoid-mask clipping semantics (queued `14ab`, Windows-first).
+- Foreground-window inspect/avoid contract (`14ab`, active) with manual drag-off hard-avoid memory and resize/move recalculation.
+- Media-to-window watch contract (`14b`, queued): playback detection -> bottom-edge watch anchors + edge-watch micro-behaviors.
 - Required bespoke sprite-sheet validation policy for every new family-14 state.
 
 ### Planned for Family 15
@@ -500,7 +525,7 @@ These are roadmap placeholders, not final contracts.
 2. Read [`00-progress-tracker.md`](./00-progress-tracker.md).
 3. Read [`10-local-brain-and-personality-feasibility.md`](./10-local-brain-and-personality-feasibility.md).
 4. Use this roadmap rough-in to confirm the locked family order and assumptions.
-5. Resume from tracker/AGENTS (`14a` is the active deliverable unless reprioritized).
+5. Resume from tracker/AGENTS (`14ab` is the active deliverable unless reprioritized).
 6. Do not start coding on any slice until that slice passes `Spec Gate`.
 
 ## Test And Demo Anchors To Preserve
@@ -550,8 +575,9 @@ These are the minimum user-visible anchors we should remember when detailed plan
 - `12c-guarded-openclaw-pet-command-lane` is accepted and closed.
 - `12d` and `12e` are accepted and closed after `12c` acceptance.
 - `13a` through `13d` are accepted and closed.
-- `14a-deliberate-roam-policy-and-monitor-avoidance` is the current detailed target (`specifying`, `Spec Gate` passed).
-- `14ab-active-window-avoidance` is the next queued target after `14a`.
+- `14a-deliberate-roam-policy-and-monitor-avoidance` is accepted and closed.
+- `14ab-active-window-avoidance` is the current detailed target (`specifying`, `Spec Gate` passed).
+- `14b-event-driven-watch-behavior` is the next queued target after `14ab`, with playful watch behavior expansion.
 - Family `14` driver model is locked: utility scoring + FSM + per-state micro BT.
 - Family `14` art policy is locked: all new family-14 states require bespoke directional sheets.
 - `12` through `15` remain roadmap placeholders until slice-level deliverable files pass `Spec Gate`.

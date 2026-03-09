@@ -33,16 +33,16 @@ Historical v1 deliverables keep their original wording and remain archived histo
   - operator-visible demo passes and evidence is logged
 
 ## Current Deliverable
-- Current Deliverable: `none`
-- Workflow State: `idle`
-- Current Status: `accepted`
+- Current Deliverable: `14ab-active-window-avoidance`
+- Workflow State: `specifying`
+- Current Status: `specifying`
 - Last Completed Deliverable: `14a-deliberate-roam-policy-and-monitor-avoidance`
 - Next Detailed Target: `14ab-active-window-avoidance`
 - Next Queued Target: `14b-event-driven-watch-behavior`
 - Current Gate State:
-  - `Spec Gate`: `not_started` (next deliverable not active yet)
-  - `Build Gate`: `not_started` (next deliverable not active yet)
-  - `Acceptance Gate`: `not_started` (next deliverable not active yet)
+  - `Spec Gate`: `passed` (`2026-03-08`)
+  - `Build Gate`: `not_started`
+  - `Acceptance Gate`: `not_started`
 
 ## Post-v1 Family Rough-In
 Locked family order:
@@ -67,7 +67,8 @@ Planning state:
 - `13c-persona-aware-offline-dialog-and-proactive-behavior` is accepted and closed (`Spec/Build/Acceptance Gates passed`; Acceptance on `2026-03-08`).
 - `13d-online-reflection-and-runtime-sync` is accepted and closed (`Spec/Build/Acceptance Gates passed`; Acceptance on `2026-03-08`).
 - `14a-deliberate-roam-policy-and-monitor-avoidance` is accepted and closed (`Spec/Build/Acceptance Gates` passed on `2026-03-08`).
-- `14ab-active-window-avoidance` is now the next detailed target and remains queued until activated (`foreground-window-only scope, fallback-first`).
+- `14ab-active-window-avoidance` is now active in `specifying` (`Spec Gate` passed on `2026-03-08`; `Build/Acceptance` not started).
+- `14b-event-driven-watch-behavior` now has a queued planning draft in `docs/plan/14b-event-driven-watch-behavior.md` (not active; `Spec Gate` not started).
 - Families `13` through `15` now follow the cohesive `12c`-`15c` sequence in rough-in, with family-14 control/animation policy decisions locked.
 - Full family notes live in [`11-15-post-v1-roadmap-rough-in.md`](./11-15-post-v1-roadmap-rough-in.md).
 
@@ -80,14 +81,74 @@ Planning state:
 6. Pass `Spec Gate` before implementation begins.
 
 ## Next 3 Actions
-1. Activate `14ab-active-window-avoidance` as the current deliverable and move it from `queued` to `specifying`.
-2. Finalize/polish `14ab` spec contract and pass `Spec Gate`.
-3. Implement first `14ab` vertical slice only after `Spec Gate` is passed.
+1. Implement first `14ab` vertical slice with locked hard-rule: active-window hard avoid activates only after manual drag-off correction.
+2. Add deterministic coverage for `14ab` contracts (`foreground-window-runtime` checks, `roam-policy` clipping/inspect/avoid-memory expansion, acceptance row).
+3. After `14ab` acceptance, activate queued `14b` draft and pass `Spec Gate` for media-aware playful watch behavior with bottom-edge-only watch anchoring.
 
 ## Blockers
 - None currently.
 
 ## Last Session Summary
+- Iterated active `14ab` watch posture contract to support back-turned screen-facing animation:
+  - locked `WatchMode` inspect anchors to the active window bottom edge only
+  - allowed bounded on-window overlap only within a near-bottom band (`WINDOW_WATCH_BOTTOM_BAND_PX` + inset target)
+  - locked deterministic anchor order (`bottom_center` -> `bottom_right_quarter` -> `bottom_left_quarter`)
+  - disallowed top/side fallback anchors for inspect in this slice
+  - updated demo/test/evidence scripts and observability fields (`Window Inspect Anchor Lane`, `Window Inspect Anchor Point`)
+  - aligned queued `14b` draft and roadmap language to bottom-edge watch anchor policy
+  - gate outcome unchanged:
+    - `Spec Gate`: `passed` (`2026-03-08`)
+    - `Build Gate`: `not_started`
+    - `Acceptance Gate`: `not_started`
+  - shipped outcome note: `no visible app change` (spec-only iteration).
+- Iterated `14ab` spec to lock operator preference:
+  - active-window hard avoid now explicitly requires manual drag-off correction (`avoid_active` never starts automatically on focus alone)
+  - focused-window default behavior remains bounded edge inspect/perimeter behavior
+  - resize/move recalculation requirement remains explicit (bounds revision + mask/anchor refresh)
+  - added `14ab -> 14b` handoff section with runtime signals already available (`foreground-window`, `local media sensor`, ambient state gates)
+  - gate outcome unchanged:
+    - `Spec Gate`: `passed` (`2026-03-08`)
+    - `Build Gate`: `not_started`
+    - `Acceptance Gate`: `not_started`
+  - shipped outcome note: `no visible app change` (spec-only iteration).
+- Added queued draft for next slice `14b-event-driven-watch-behavior`:
+  - created [`14b-event-driven-watch-behavior.md`](./14b-event-driven-watch-behavior.md)
+  - captured playful-watch contract around:
+    - media playback detection -> focused window watch target
+    - bottom-edge-only watch anchor policy + deterministic bottom-edge anchor order
+    - playful watch lanes (`perch`, `edge patrol`, `run+bounce`)
+  - deliverable remains queued (`Spec/Build/Acceptance Gates not started`)
+  - shipped outcome note: `no visible app change` (planning draft only).
+- Iterated active `14ab-active-window-avoidance` spec from operator feedback:
+  - moved `window-edge inspect` behavior from deferred/out-of-scope into planned first-slice scope
+  - locked hybrid policy:
+    - bounded edge-inspect behavior for active foreground window
+    - prolonged strict avoid only after explicit manual drag-off correction
+  - locked explicit resize/move recalculation contract:
+    - foreground bounds refresh at decision boundaries and throttled during active roam legs
+    - diagnostics include foreground bounds revision/mask updates
+  - refreshed `14ab` acceptance/demo contract for:
+    - inspect state visibility
+    - resize-driven avoid-area recomputation
+    - manual window-avoid cooldown evidence
+  - gate outcome remains:
+    - `Spec Gate`: `passed` (`2026-03-08`)
+    - `Build Gate`: `not_started`
+    - `Acceptance Gate`: `not_started`
+  - shipped outcome note: `no visible app change` (spec-only iteration; implementation intentionally deferred).
+- Opened `14ab-active-window-avoidance` as the active deliverable and passed `Spec Gate`:
+  - promoted [`14ab-active-window-avoidance.md`](./14ab-active-window-avoidance.md) from queued rough-in to active `specifying`
+  - locked first-slice spec decisions for:
+    - activation boundary (`Windows + desktop roam` only)
+    - foreground candidate eligibility filtering
+    - avoid-mask geometry (`24px` margin + clipped rectangle subtraction)
+    - deterministic no-free-area fallback (`foreground_window_no_free_area_fallback`)
+    - explicit behavior-runtime observability fields + reason taxonomy
+  - gate outcome:
+    - `Spec Gate`: `passed` (`2026-03-08`)
+    - `Build Gate`: `not_started`
+    - `Acceptance Gate`: `not_started`
+  - shipped outcome note: `no visible app change` (spec-only session; implementation intentionally deferred until after spec lock).
 - Closed `14a-deliberate-roam-policy-and-monitor-avoidance` as `accepted` after operator confirmation:
   - operator confirmed happy-path and failure/recovery checks passed on live run
   - evidence confirmed:

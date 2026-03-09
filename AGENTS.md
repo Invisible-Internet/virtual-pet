@@ -127,18 +127,42 @@ Historical v1 deliverables keep their original status wording and are not retrof
 - `accepted` is the only terminal state for future post-v1 deliverables.
 
 ### Current Workflow Snapshot
-- Current Deliverable: `none`
-- Workflow State: `idle`
-- Current Status: `accepted`
+- Current Deliverable: `14ab-active-window-avoidance`
+- Workflow State: `specifying`
+- Current Status: `specifying`
 - Last Completed Deliverable: `14a-deliberate-roam-policy-and-monitor-avoidance`
 - Next Detailed Target: `14ab-active-window-avoidance`
 - Next Queued Target: `14b-event-driven-watch-behavior`
 - Current Gate State:
-  - `Spec Gate`: `not_started` (next deliverable not active yet)
-  - `Build Gate`: `not_started` (next deliverable not active yet)
-  - `Acceptance Gate`: `not_started` (next deliverable not active yet)
+  - `Spec Gate`: `passed` (`2026-03-08`)
+  - `Build Gate`: `not_started`
+  - `Acceptance Gate`: `not_started`
 - Current Session Shipped Outcome:
-  - `visible app/runtime change delivered and accepted` (`14a` deliberate roam policy + monitor avoidance closed)
+  - `no visible app change` (`14ab` spec iterated to lock bottom-edge WatchMode anchoring + queued `14b` anchor policy aligned)
+- Active `14ab` spec outcome:
+  - spec lock finalized in `docs/plan/14ab-active-window-avoidance.md`:
+    - activation boundary locked (`Windows + desktop roam` only)
+    - foreground candidate eligibility filtering locked
+    - bounded edge-inspect behavior moved into first-slice scope with bottom-edge-only WatchMode anchoring
+    - bounded near-bottom on-window overlap contract locked for back-turned viewing illusion
+    - hard avoid explicitly gated by manual drag-off correction only
+    - focused-window resize/move recalculation contract locked (decision-boundary + throttled in-leg refresh)
+    - user-signaled manual window-avoid cooldown memory locked (prolonged avoid after drag-off correction)
+    - strict avoid-mask fallback locked (`foreground_window_no_free_area_fallback`)
+    - behavior-runtime observability fields and reason taxonomy expanded/locked
+    - explicit `14ab -> 14b` handoff contract added for media-aware watch expansion
+  - deliverable promoted from `queued` to active `specifying`
+  - gate outcome:
+    - `Spec Gate` passed on `2026-03-08`
+    - `Build Gate` not started
+    - `Acceptance Gate` not started
+- Queued `14b` planning outcome:
+  - created `docs/plan/14b-event-driven-watch-behavior.md` draft
+  - locked queued rough contract for:
+    - playback-triggered focused-window watch target
+    - bottom-edge-only watch anchors with deterministic order
+    - playful watch behaviors (`window_perch_watch`, `window_edge_patrol`, `window_run_bounce`)
+  - gate state remains queued (`Spec/Build/Acceptance` not started)
 - Closed `14a` implementation outcome:
   - implemented deterministic roam policy helper:
     - `roam-policy.js` with pacing windows (`initial`, `rest`, `retry`)
@@ -603,12 +627,15 @@ Historical v1 deliverables keep their original status wording and are not retrof
   - `13c-persona-aware-offline-dialog-and-proactive-behavior` is accepted and closed (`Spec/Build/Acceptance Gates passed`; Acceptance on `2026-03-08`).
   - `13d-online-reflection-and-runtime-sync` is accepted and closed (`Spec/Build/Acceptance Gates passed`; Acceptance on `2026-03-08`).
   - `14a-deliberate-roam-policy-and-monitor-avoidance` is accepted and closed (`Spec/Build/Acceptance Gates` passed on `2026-03-08`).
-  - `14ab-active-window-avoidance` is the next detailed target and remains queued until activated, with narrowed scope:
+  - `14ab-active-window-avoidance` is active in `specifying` (`Spec Gate` passed on `2026-03-08`; `Build/Acceptance` not started), with locked first-slice scope:
     - active foreground window only
+    - bounded `window-edge inspect` behavior with bottom-edge-only WatchMode anchors
     - rectangular avoid mask + margin
+    - focused-window resize/move recalculation
+    - manual drag-off recorded prolonged window avoid cooldown (hard avoid only after this signal)
     - deterministic fallback when no free roam area
     - explicit observability/degraded reasons
-    - defer playful `window-edge inspect` states until stability is proven
+  - `14b-event-driven-watch-behavior` has a queued planning draft (`docs/plan/14b-event-driven-watch-behavior.md`) for media-aware playful window watch behaviors.
   - Families `13` through `15` now use the cohesive `12c` through `15c` sequence in rough-in.
   - Family `14` decisions are locked for downstream slices:
     - `Utility scoring -> FSM arbitration -> per-state micro BT`
